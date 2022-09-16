@@ -1,0 +1,24 @@
+# permissions for end users to edit designateapis.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: designateapi-editor-role
+rules:
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateapis
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateapis/status
+  verbs:
+  - get
