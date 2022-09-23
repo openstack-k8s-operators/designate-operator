@@ -1,8 +1,21 @@
 # designate-operator
-// TODO(user): Add simple overview of use/purpose
+A Kubernetes Operator built using the [Operator Framework](https://github.com/operator-framework)
+for Go. The Operator provides a way to easily install and manage an OpenStack
+Designate installation on Kubernetes. This Operator was developed using
+[RDO](https://www.rdoproject.org/) containers for openStack.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+Designate is an Open Source DNS-as-a-Service implementation and a part of the
+OpenStack ecosystem of services for running clouds. Designate is an OpenStack
+service that allows users and operators to manage DNS records, names and
+zones via a REST API and can configure existing DNS name servers to contain
+those records. Designate can also be configured by an operator to integrate
+with both the OpenStack Network Service (Neutron) and the Compute Service
+(Nova) so that records are automatically created when floating IPs and compute
+instances are created respectively, and uses the OpenStack Identity Service
+(Keystone) for user management. Since there are a multitude of software
+implementations of the DNS name server, Designate has a pluggable backend that
+can be configured to manage many of them, most notably BIND9 and PowerDNS.
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
