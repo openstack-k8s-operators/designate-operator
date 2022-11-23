@@ -7,6 +7,7 @@
 *.dylib
 bin
 testbin/*
+!/templates/designateapi/bin
 
 # Test binary, build with `go test -c`
 *.test
@@ -31,3 +32,12 @@ config/manager/kustomization.yaml
 
 # Common CI tools repository
 CI_TOOLS_REPO
+
+# Ansible related
+secrets_file.enc
+/install_yamls_setup/hosts
+
+# generated workspace file
+go.work
+go.work.sum
+

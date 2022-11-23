@@ -2,5 +2,26 @@ apiVersion: designate.openstack.org/v1beta1
 kind: DesignateAPI
 metadata:
   name: designateapi-sample
+  namespace: openstack
 spec:
   # TODO(user): Add fields here
+  serviceUser: designate
+  databaseInstance: openstack
+  databaseUser: designate
+  debug:
+    dbSync: false
+    service: false
+  preserveJobs: false
+  containerImage: quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo
+  replicas: 1
+  secret: osp-secret
+  # passwordSelector: a map of passwords types to keys names within the secret - not implemented yet.
+  nodeSelector: {}
+  customServiceConfig: |
+    [DEFAULT]
+    debug: true
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "1.0"
+
