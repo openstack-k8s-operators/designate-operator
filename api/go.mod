@@ -1,4 +1,4 @@
-module github.com/openstack-k8s-operators/octavia-operator/api
+module github.com/openstack-k8s-operators/designate-operator/api
 
 go 1.18
 
