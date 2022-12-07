@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	// logf "sigs.k8s.io/controller-runtime/pkg/log"
 	// "sigs.k8s.io/controller-runtime/pkg/log/zap"
-
 	// designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	//+kubebuilder:scaffold:imports
 )
