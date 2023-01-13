@@ -70,10 +70,6 @@ spec:
                   an init container is used, it runs and the actual action pod gets
                   started with sleep infinity
                 properties:
-                  bootstrap:
-                    default: false
-                    description: Bootstrap enable debug
-                    type: boolean
                   dbSync:
                     default: false
                     description: DBSync enable debug
@@ -97,28 +93,22 @@ spec:
                 description: NodeSelector to target subset of worker nodes running
                   this service
                 type: object
-              ovnConnectionConfigMap:
-                description: ovn-connection configmap which holds NBConnection and
-                  SBConnection string
-                type: string
               passwordSelectors:
+                default:
+                  database: DesignateDatabasePassword
+                  service: DesignatePassword
                 description: PasswordSelectors - Selectors to identify the DB and
-                  AdminUser password from the Secret
+                  ServiceUser password from the Secret
                 properties:
-                  admin:
-                    default: DesignatePassword
-                    description: Database - Selector to get the designate service
-                      password from the Secret
-                    type: string
                   database:
                     default: DesignateDatabasePassword
-                    description: 'Database - Selector to get the designate database
+                    description: 'Database - Selector to get the octavia Database
                       user password from the Secret TODO: not used, need change in
                       mariadb-operator'
                     type: string
-                  novaadmin:
-                    default: NovaPassword
-                    description: Database - Selector to get the nova service password
+                  service:
+                    default: DesignatePassword
+                    description: Service - Selector to get the service user password
                       from the Secret
                     type: string
                 type: object
@@ -163,13 +153,16 @@ spec:
                 type: object
               secret:
                 description: Secret containing OpenStack password information for
-                  designate DesignatePassword NovaPassword
+                  designate DesignateDatabasePassword AdminPassword
                 type: string
               serviceUser:
                 default: designate
-                description: ServiceUser - optional username used for this service
-                  to register in designate
+                description: ServiceUser - optional service username
                 type: string
+            required:
+            - containerImage
+            - databaseInstance
+            - secret
             type: object
           status:
             description: DesignateAPIStatus defines the observed state of DesignateAPI
