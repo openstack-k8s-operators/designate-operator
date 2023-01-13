@@ -49,7 +49,7 @@ endif
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.24.1
+ENVTEST_K8S_VERSION = 1.24.2
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -59,7 +59,6 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 # Setting SHELL to bash allows bash commands to be executed by recipes.
-# This is a requirement for 'setup-envtest.sh' in the test target.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
@@ -99,12 +98,13 @@ fmt: ## Run go fmt against code.
 	go fmt ./...
 
 .PHONY: vet
-vet: ## Run go vet against code.
+vet: gowork ## Run go vet against code.
 	go vet ./...
+	go vet ./api/...
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... ./api/... -coverprofile cover.out
 
 ##@ Build
 
@@ -167,18 +167,17 @@ KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/k
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	rm -f $(LOCALBIN)/kustomize || true
-	curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN)
+	test -s $(LOCALBIN)/kustomize || { curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN); }
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
-	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+	test -s $(LOCALBIN)/controller-gen || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
 
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
 $(ENVTEST): $(LOCALBIN)
-	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
 .PHONY: bundle
 bundle: manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
@@ -236,36 +235,53 @@ catalog-build: opm ## Build a catalog image.
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
+
 # CI tools repo for running tests
 CI_TOOLS_REPO := https://github.com/openstack-k8s-operators/openstack-k8s-operators-ci
 CI_TOOLS_REPO_DIR = $(shell pwd)/CI_TOOLS_REPO
 .PHONY: get-ci-tools
 get-ci-tools:
 	if [ -d  "$(CI_TOOLS_REPO_DIR)" ]; then \
-	        echo "Ci tools exists"; \
-	        pushd "$(CI_TOOLS_REPO_DIR)"; \
-	        git pull --rebase; \
-	        popd; \
+		echo "Ci tools exists"; \
+		pushd "$(CI_TOOLS_REPO_DIR)"; \
+		git pull --rebase; \
+		popd; \
 	else \
-	        git clone $(CI_TOOLS_REPO) "$(CI_TOOLS_REPO_DIR)"; \
+		git clone $(CI_TOOLS_REPO) "$(CI_TOOLS_REPO_DIR)"; \
 	fi
 
 # Run go fmt against code
 gofmt: get-ci-tools
-	$(CI_TOOLS_REPO_DIR)/test-runner/gofmt.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/gofmt.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/gofmt.sh ./api
 
 # Run go vet against code
 govet: get-ci-tools
-	$(CI_TOOLS_REPO_DIR)/test-runner/govet.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/govet.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/govet.sh ./api
 
 # Run go test against code
 gotest: get-ci-tools
-	$(CI_TOOLS_REPO_DIR)/test-runner/gotest.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/gotest.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/gotest.sh ./api
 
 # Run golangci-lint test against code
 golangci: get-ci-tools
-	$(CI_TOOLS_REPO_DIR)/test-runner/golangci.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/golangci.sh
+	GOWORK=off $(CI_TOOLS_REPO_DIR)/test-runner/golangci.sh ./api
 
 # Run go lint against code
 golint: get-ci-tools
-	PATH=$(GOBIN):$(PATH); $(CI_TOOLS_REPO_DIR)/test-runner/golint.sh
+	GOWORK=off PATH=$(GOBIN):$(PATH); $(CI_TOOLS_REPO_DIR)/test-runner/golint.sh
+	GOWORK=off PATH=$(GOBIN):$(PATH); $(CI_TOOLS_REPO_DIR)/test-runner/golint.sh ./api
+
+.PHONY: gowork
+gowork: ## Generate go.work file to support our multi module repository
+	test -f go.work || go work init
+	go work use .
+	go work use ./api
+
+.PHONY: operator-lint
+operator-lint: gowork ## Runs operator-lint
+	GOBIN=$(LOCALBIN) go install github.com/gibizer/operator-lint@v0.1.0
+	go vet -vettool=$(LOCALBIN)/operator-lint ./... ./api/...

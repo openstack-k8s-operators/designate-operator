@@ -1,0 +1,23 @@
+{
+    "command": "/usr/local/bin/container-scripts/bootstrap.sh",
+    "config_files": [
+        {
+            "source": "/var/lib/config-data/merged/designate.conf",
+            "dest": "/etc/designate/designate.conf",
+            "owner": "designate",
+            "perm": "0600"
+        }
+    ],
+    "permissions": [
+        {
+            "path": "/var/log/designate",
+            "owner": "designate:designate",
+            "recurse": true
+        },
+        {
+            "path": "/run/designate",
+            "owner": "designate:designate",
+            "recurse": true
+        }
+    ]
+}

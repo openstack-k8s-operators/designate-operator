@@ -24,14 +24,20 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	routev1 "github.com/openshift/api/route/v1"
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
+	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
+	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/controllers"
 	//+kubebuilder:scaffold:imports
 )
@@ -43,8 +49,10 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	utilruntime.Must(designatev1beta1.AddToScheme(scheme))
+	utilruntime.Must(mariadbv1.AddToScheme(scheme))
+	utilruntime.Must(keystonev1.AddToScheme(scheme))
+	utilruntime.Must(routev1.AddToScheme(scheme))
+	utilruntime.Must(designatev1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -59,6 +67,7 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	opts := zap.Options{
 		Development: true,
+		TimeEncoder: zapcore.ISO8601TimeEncoder,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -71,7 +80,7 @@ func main() {
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "f9497e05.openstack.org",
+		LeaderElectionID:       "98809e87.openstack.org",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -89,11 +98,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.DesignateAPIReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+	cfg, err := config.GetConfig()
+	if err != nil {
+		setupLog.Error(err, "")
+		os.Exit(1)
+	}
+	kclient, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.designateAPIReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Kclient: kclient,
+		Log:     ctrl.Log.WithName("controllers").WithName("designateAPI"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "DesignateAPI")
+		setupLog.Error(err, "unable to create controller", "controller", "designateAPI")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
