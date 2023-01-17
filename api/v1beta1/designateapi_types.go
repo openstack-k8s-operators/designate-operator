@@ -21,7 +21,6 @@ import (
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/endpoint"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -34,14 +33,6 @@ const (
 	DeploymentHash = "deployment"
 )
 
-// Hash - struct to add hashes to status
-type Hash struct {
-	// Name of hash referencing the parameter
-	Name string `json:"name,omitempty"`
-	// Hash
-	Hash string `json:"hash,omitempty"`
-}
-
 // DesignateAPISpec defines the desired state of DesignateAPI
 type DesignateAPISpec struct {
 	// +kubebuilder:validation:Optional
@@ -53,7 +44,7 @@ type DesignateAPISpec struct {
 	// MariaDB instance name
 	// Right now required by the maridb-operator to get the credentials from the instance to create the DB
 	// Might not be required in future
-	DatabaseInstance string `json:"databaseInstance,omitempty"`
+	DatabaseInstance string `json:"databaseInstance"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
@@ -61,7 +52,7 @@ type DesignateAPISpec struct {
 	// TODO: -> implement needs work in mariadb-operator, right now only designate
 	DatabaseUser string `json:"databaseUser"`
 
-	ContainerImage string `json:"containerImage,omitempty"`
+	ContainerImage string `json:"containerImage"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
@@ -72,7 +63,7 @@ type DesignateAPISpec struct {
 
 	// +kubebuilder:validation:Required
 	// Secret containing OpenStack password information for designate DesignatePassword NovaPassword
-	Secret string `json:"secret,omitempty"`
+	Secret string `json:"secret"`
 
 	// +kubebuilder:validation:Optional
 	// PasswordSelectors - Selectors to identify the DB and AdminUser password from the Secret
@@ -109,10 +100,6 @@ type DesignateAPISpec struct {
 	// Resources - Compute Resources required by this service (Limits/Requests).
 	// https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// +kubebuilder:validation:Required
-	// ovn-connection configmap which holds NBConnection and SBConnection string
-	OVNConnectionConfigMap string `json:"ovnConnectionConfigMap,omitempty"`
 }
 
 // PasswordSelector to identify the DB and AdminUser password from the Secret
@@ -125,11 +112,7 @@ type PasswordSelector struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="DesignatePassword"
 	// Database - Selector to get the designate service password from the Secret
-	Service string `json:"admin,omitempty"`
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default="NovaPassword"
-	// Database - Selector to get the nova service password from the Secret
-	NovaService string `json:"novaadmin,omitempty"`
+	Service string `json:"service,omitempty"`
 }
 
 // DesignateAPIDebug defines the observed state of DesignateAPIDebug
@@ -138,10 +121,6 @@ type DesignateAPIDebug struct {
 	// +kubebuilder:default=false
 	// DBSync enable debug
 	DBSync bool `json:"dbSync,omitempty"`
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=false
-	// Bootstrap enable debug
-	Bootstrap bool `json:"bootstrap,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
 	// Service enable debug
@@ -210,5 +189,6 @@ func (instance DesignateAPI) IsReady() bool {
 	// the service is registered in keystone
 	// AND
 	// there is at least a single pod to serve the designate API service
-	return instance.Status.ServiceID != "" && instance.Status.ReadyCount >= 1
+	return instance.Status.Conditions.IsTrue(condition.ExposeServiceReadyCondition) &&
+		instance.Status.Conditions.IsTrue(condition.DeploymentReadyCondition)
 }
