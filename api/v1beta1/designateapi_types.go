@@ -33,12 +33,12 @@ const (
 	DeploymentHash = "deployment"
 )
 
+// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
 // DesignateAPISpec defines the desired state of DesignateAPI
 type DesignateAPISpec struct {
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=designate
-	// ServiceUser - optional username used for this service to register in designate
-	ServiceUser string `json:"serviceUser"`
+  // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+  // Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Required
 	// MariaDB instance name
@@ -52,6 +52,13 @@ type DesignateAPISpec struct {
 	// TODO: -> implement needs work in mariadb-operator, right now only designate
 	DatabaseUser string `json:"databaseUser"`
 
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=designate
+	// ServiceUser - optional username used for this service to register in designate
+	ServiceUser string `json:"serviceUser"`
+
+  // +kubebuilder:validation:Required
+  // Designate Container Image URL
 	ContainerImage string `json:"containerImage"`
 
 	// +kubebuilder:validation:Optional
@@ -62,10 +69,11 @@ type DesignateAPISpec struct {
 	Replicas int32 `json:"replicas"`
 
 	// +kubebuilder:validation:Required
-	// Secret containing OpenStack password information for designate DesignatePassword NovaPassword
+	// Secret containing OpenStack password information for designate DesignateDatabasePassword, AdminPassword
 	Secret string `json:"secret"`
 
 	// +kubebuilder:validation:Optional
+  // +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
 	// PasswordSelectors - Selectors to identify the DB and AdminUser password from the Secret
 	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
 
@@ -185,10 +193,6 @@ func (instance DesignateAPI) GetEndpoint(endpointType endpoint.Endpoint) (string
 
 // IsReady - returns true if service is ready to server requests
 func (instance DesignateAPI) IsReady() bool {
-	// Ready when:
-	// the service is registered in keystone
-	// AND
-	// there is at least a single pod to serve the designate API service
 	return instance.Status.Conditions.IsTrue(condition.ExposeServiceReadyCondition) &&
 		instance.Status.Conditions.IsTrue(condition.DeploymentReadyCondition)
 }

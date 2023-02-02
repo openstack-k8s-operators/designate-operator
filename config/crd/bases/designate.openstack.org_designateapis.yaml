@@ -45,6 +45,7 @@ spec:
             description: DesignateAPISpec defines the desired state of DesignateAPI
             properties:
               containerImage:
+                description: Designate Container Image URL
                 type: string
               customServiceConfig:
                 default: '# add your customization here'
@@ -94,6 +95,9 @@ spec:
                   this service
                 type: object
               passwordSelectors:
+                default:
+                  database: DesignateDatabasePassword
+                  service: DesignatePassword
                 description: PasswordSelectors - Selectors to identify the DB and
                   AdminUser password from the Secret
                 properties:
@@ -150,7 +154,7 @@ spec:
                 type: object
               secret:
                 description: Secret containing OpenStack password information for
-                  designate DesignatePassword NovaPassword
+                  designate DesignateDatabasePassword, AdminPassword
                 type: string
               serviceUser:
                 default: designate
