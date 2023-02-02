@@ -37,7 +37,7 @@ SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
 # Merge all templates from config CM
 for dir in /var/lib/config-data/default; do
-  merge_config_dir ${dir}
+    merge_config_dir ${dir}
 done
 
 # set secrets in the config-data
