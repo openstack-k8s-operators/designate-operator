@@ -24,8 +24,6 @@ import (
 
 	"github.com/go-logr/logr"
 	routev1 "github.com/openshift/api/route/v1"
-	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
-	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
@@ -40,6 +38,8 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	"github.com/openstack-k8s-operators/lib-common/modules/database"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
+	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
