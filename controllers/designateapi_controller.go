@@ -316,9 +316,10 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	//
 	// run designate db sync
 	//
-	r.Log.Info("Reconciling Service init - rundbSync")
+	r.Log.Info("Reconciling Service init - rundbSync1")
 	dbSyncHash := instance.Status.Hash[designatev1.DbSyncHash]
 	jobDef := designate.DbSyncJob(instance, serviceLabels)
+	r.Log.Info(fmt.Sprintf("Reconciling Service init - rundbSync2 - %s", serviceLabels))
 	dbSyncjob := job.NewJob(
 		jobDef,
 		designatev1.DbSyncHash,
@@ -330,6 +331,7 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		ctx,
 		helper,
 	)
+	r.Log.Info(fmt.Sprintf("Reconciling Service init - rundbSync3 - err:%s", err))
 	r.Log.Info("Reconciling Service init - check dbSync result")
 	if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
