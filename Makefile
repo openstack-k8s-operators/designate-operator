@@ -113,6 +113,7 @@ build: generate fmt vet ## Build manager binary.
 	go build -o bin/manager main.go
 
 .PHONY: run
+run: export OPERATOR_TEMPLATES=./templates/
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
