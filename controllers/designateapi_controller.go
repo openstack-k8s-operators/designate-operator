@@ -324,7 +324,7 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		jobDef,
 		designatev1.DbSyncHash,
 		instance.Spec.PreserveJobs,
-		5,
+		time.Duration(5)*time.Second,
 		dbSyncHash,
 	)
 	ctrlResult, err = dbSyncjob.DoJob(
@@ -386,6 +386,7 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		designate.ServiceName,
 		serviceLabels,
 		designatePorts,
+		time.Duration(5)*time.Second,
 	)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -438,7 +439,7 @@ func (r *DesignateAPIReconciler) registerInKeystone(
 		Secret:             instance.Spec.Secret,
 		PasswordSelector:   instance.Spec.PasswordSelectors.Service,
 	}
-	ksSvc := keystonev1.NewKeystoneService(ksSvcSpec, instance.Namespace, serviceLabels, 10)
+	ksSvc := keystonev1.NewKeystoneService(ksSvcSpec, instance.Namespace, serviceLabels, time.Duration(10)*time.Second)
 	ctrlResult, err := ksSvc.CreateOrPatch(ctx, helper)
 	if err != nil {
 		return ctrlResult, err
@@ -468,7 +469,7 @@ func (r *DesignateAPIReconciler) registerInKeystone(
 		instance.Namespace,
 		ksEndptSpec,
 		serviceLabels,
-		10)
+		time.Duration(10)*time.Second)
 	ctrlResult, err = ksEndpt.CreateOrPatch(ctx, helper)
 	if err != nil {
 		return ctrlResult, err
@@ -520,7 +521,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 				condition.RequestedReason,
 				condition.SeverityInfo,
 				condition.InputReadyWaitingMessage))
-			return ctrl.Result{RequeueAfter: time.Second * 10}, fmt.Errorf("OpenStack secret %s not found", instance.Spec.Secret)
+			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, fmt.Errorf("OpenStack secret %s not found", instance.Spec.Secret)
 		}
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.InputReadyCondition,
@@ -613,7 +614,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	// Define a new Deployment object
 	depl := deployment.NewDeployment(
 		designate.Deployment(instance, inputHash, serviceLabels),
-		5,
+		time.Duration(5)*time.Second,
 	)
 
 	ctrlResult, err = depl.CreateOrPatch(ctx, helper)
