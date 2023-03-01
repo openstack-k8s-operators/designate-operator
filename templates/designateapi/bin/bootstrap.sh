@@ -15,6 +15,5 @@
 # under the License.
 set -ex
 
-OPTS="--config-file /etc/designate/designate.conf"
-designate-manage database ${OPTS} upgrade head
+designate-manage database upgrade head
 exit 0

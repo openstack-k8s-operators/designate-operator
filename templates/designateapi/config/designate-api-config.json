@@ -18,6 +18,12 @@
             "dest": "/etc/httpd/conf/httpd.conf",
             "owner": "root",
             "perm": "0644"
+        },
+        {
+            "source": "/var/lib/config-data/merged/logging.conf",
+            "dest": "/etc/designate/logging.conf",
+            "owner": "root",
+            "perm": "0644"
         }
     ],
     "permissions": [

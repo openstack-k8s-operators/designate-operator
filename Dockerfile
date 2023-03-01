@@ -1,7 +1,7 @@
-# Build the manager binary
-ARG GOLANG_BUILDER=golang:1.18
+ARG GOLANG_BUILDER=docker.io/golang:1.18
 ARG OPERATOR_BASE_IMAGE=gcr.io/distroless/static:nonroot
 
+# Build the manager binary
 FROM $GOLANG_BUILDER AS builder
 
 #Arguments required by OSBS build system
@@ -57,7 +57,6 @@ LABEL com.redhat.component="${IMAGE_COMPONENT}" \
 
 ENV USER_UID=$USER_ID \
     OPERATOR_TEMPLATES=/usr/share/designate-operator/templates/
-
 WORKDIR /
 
 # Install operator binary to WORKDIR

@@ -33,14 +33,18 @@ SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 . ${SCRIPTPATH}/common.sh --source-only
 
 # Copy default service config from container image as base
-cp -a ${SVC_CFG} ${SVC_CFG_MERGED}
+# cp -a ${SVC_CFG} ${SVC_CFG_MERGED}
 
 # Merge all templates from config CM
-for dir in /var/lib/config-data/default
-do
+for dir in /var/lib/config-data/default; do
   merge_config_dir ${dir}
 done
 
-# set secrets
+# set secrets in the config-data
 crudini --set ${SVC_CFG_MERGED} database connection mysql+pymysql://${DBUSER}:${DBPASSWORD}@${DBHOST}/${DB}
+crudini --set ${SVC_CFG_MERGED} storage:sqlalchemy connection mysql+pymysql://root:${DBPASSWORD}@${DBHOST}/${DB}?charset=utf8
 crudini --set ${SVC_CFG_MERGED} keystone_authtoken password $PASSWORD
+
+# NOTE:dkehn - REMOVED because Kolla_set & start copy eveyrthing.
+# I'm doing this to get the designate.conf w/all the tags with values.
+cp -a ${SVC_CFG_MERGED} ${SVC_CFG}
