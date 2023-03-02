@@ -259,13 +259,11 @@ func (r *DesignateAPIReconciler) reconcileInit(
 			"dbName": instance.Spec.DatabaseInstance,
 		},
 	)
-	r.Log.Info("Reconciling Service init - DB patch")
 	// create or patch the DB
 	ctrlResult, err := db.CreateOrPatchDB(
 		ctx,
 		helper,
 	)
-	r.Log.Info("Reconciling Service init - set condition")
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DBReadyCondition,
@@ -275,7 +273,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	r.Log.Info("Reconciling Service init - set cond 2")
 	if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DBReadyCondition,
@@ -286,7 +283,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	}
 
 	// wait for the DB to be setup
-	r.Log.Info("Reconciling Service init - wait for db to setup")
 	ctrlResult, err = db.WaitForDBCreated(ctx, helper)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -297,7 +293,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 			err.Error()))
 		return ctrlResult, err
 	}
-	r.Log.Info("Reconciling Service init - check ctrlResult")
 	if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DBReadyCondition,
@@ -306,7 +301,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 			condition.DBReadyRunningMessage))
 		return ctrlResult, nil
 	}
-	r.Log.Info("Reconciling Service init - update Status.DatabaseHostname")
 	// update Status.DatabaseHostname, used to bootstrap/config the service
 	instance.Status.DatabaseHostname = db.GetDatabaseHostname()
 	instance.Status.Conditions.MarkTrue(condition.DBReadyCondition, condition.DBReadyMessage)
@@ -316,10 +310,9 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	//
 	// run designate db sync
 	//
-	r.Log.Info("Reconciling Service init - rundbSync1")
+	r.Log.Info("Reconciled Service Init - run designate dbsync")
 	dbSyncHash := instance.Status.Hash[designatev1.DbSyncHash]
 	jobDef := designate.DbSyncJob(instance, serviceLabels)
-	r.Log.Info(fmt.Sprintf("Reconciling Service init - rundbSync2 - %s", serviceLabels))
 	dbSyncjob := job.NewJob(
 		jobDef,
 		designatev1.DbSyncHash,
@@ -331,8 +324,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		ctx,
 		helper,
 	)
-	r.Log.Info(fmt.Sprintf("Reconciling Service init - rundbSync3 - err:%s", err))
-	r.Log.Info("Reconciling Service init - check dbSync result")
 	if (ctrlResult != ctrl.Result{}) {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DBSyncReadyCondition,
@@ -356,8 +347,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	instance.Status.Conditions.MarkTrue(condition.DBSyncReadyCondition, condition.DBSyncReadyMessage)
 
 	// run designate db sync - end
-	r.Log.Info("Reconciling Service init - run dbSync end")
-
 	ctrlResult, err = r.registerInKeystone(ctx, instance, helper, serviceLabels)
 	if err != nil {
 		r.Log.Error(err, "registerInKeystone call failed", "ctrlResult",
@@ -367,7 +356,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	//
 	// expose the service (create service, route and return the created endpoint URLs)
 	//
-	r.Log.Info("Reconciling Service init - expose the service return endpts")
 	var designatePorts = map[endpoint.Endpoint]endpoint.Data{
 		endpoint.EndpointAdmin: endpoint.Data{
 			Port: designate.DesignateAdminPort,
@@ -410,7 +398,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	// Update instance status with service endpoint url from route host information
 	//
 	// TODO: need to support https default here
-	r.Log.Info("Reconciling Service init - update instance status with serv endpt")
 	if instance.Status.APIEndpoints == nil {
 		instance.Status.APIEndpoints = map[string]string{}
 	}
