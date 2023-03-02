@@ -5,9 +5,8 @@
 *.dll
 *.so
 *.dylib
-bin
+/bin
 testbin/*
-!/templates/designateapi/bin
 
 # Test binary, build with `go test -c`
 *.test
