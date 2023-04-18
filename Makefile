@@ -104,16 +104,14 @@ vet: gowork ## Run go vet against code.
 	go vet ./api/...
 
 .PHONY: tidy
-tidy: fmt
-	go mod tidy; \
-	pushd "$(LOCALBIN)/../api"; \
-	go mod tidy; \
-	popd
+tidy: ## Run go mod tidy on every mod file in the repo
+	go mod tidy
+	cd ./api && go mod tidy
 
 .PHONY: golangci-lint
 golangci-lint:
 	test -s $(LOCALBIN)/golangci-lint || curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.51.2
-	$(LOCALBIN)/golangci-lint run --fix
+	$(LOCALBIN)/golangci-lint run --fix --timeout=5m
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
@@ -294,6 +292,7 @@ gowork: ## Generate go.work file to support our multi module repository
 	test -f go.work || go work init
 	go work use .
 	go work use ./api
+	go work sync
 
 .PHONY: operator-lint
 operator-lint: gowork ## Runs operator-lint

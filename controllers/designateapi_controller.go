@@ -357,13 +357,13 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	// expose the service (create service, route and return the created endpoint URLs)
 	//
 	var designatePorts = map[endpoint.Endpoint]endpoint.Data{
-		endpoint.EndpointAdmin: endpoint.Data{
+		endpoint.EndpointAdmin: {
 			Port: designate.DesignateAdminPort,
 		},
-		endpoint.EndpointPublic: endpoint.Data{
+		endpoint.EndpointPublic: {
 			Port: designate.DesignatePublicPort,
 		},
-		endpoint.EndpointInternal: endpoint.Data{
+		endpoint.EndpointInternal: {
 			Port: designate.DesignateInternalPort,
 		},
 	}
