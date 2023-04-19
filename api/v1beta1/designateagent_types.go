@@ -54,7 +54,7 @@ type DesignateAgentSpec struct {
 
 	// +kubebuilder:validation:Required
 	// Secret containing OpenStack password information for designate DesignateDatabasePassword, AdminPassword
-	Secret string `json:"secret,omitempty"`
+	Secret string `json:"secret"`
 
 	// +kubebuilder:validation:Optional
 	// Secret containing RabbitMq transport URL
