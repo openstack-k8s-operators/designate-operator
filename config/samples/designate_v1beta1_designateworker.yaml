@@ -1,17 +1,17 @@
 apiVersion: designate.openstack.org/v1beta1
-kind: DesignateAPI
+kind: DesignateWorker
 metadata:
-  name: designate-api
+  name: designate-worker
 spec:
   # TODO(user): Add fields here
   databaseInstance: openstack
   databaseUser: designate
   serviceUser: designate
-  containerImage: quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo
+  containerImage: quay.io/tripleowallabycentos9/openstack-designate-worker:current-tripleo
   enable: true
-  serviceDescription: "Designate api service"
-  serviceName: designate-api
-  service_type: designate_api
+  serviceDescription: "Designate worker service"
+  serviceName: designate-worker
+  service_type: designate_worker
   replicas: 1
   secret: osp-secret
   customServiceConfig: |

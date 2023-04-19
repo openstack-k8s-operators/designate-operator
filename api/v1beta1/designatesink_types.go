@@ -26,8 +26,8 @@ import (
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// DesignateAPISpec defines the desired state of DesignateAPI
-type DesignateAPISpec struct {
+// DesignateSinkSpec defines the desired state of DesignateSink
+type DesignateSinkSpec struct {
   // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
   // Important: Run "make" to regenerate code after modifying this file
 
@@ -44,12 +44,18 @@ type DesignateAPISpec struct {
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Maximum=32
 	// +kubebuilder:validation:Minimum=0
-	// Replicas of designate API to run
+	// Replicas of designate Sink to run
 	Replicas int32 `json:"replicas"`
 
 	// +kubebuilder:validation:Optional
-	// DatabaseHostname - Designate Database Hostname
+	// DatabaseHostname - Cinder Database Hostname
 	DatabaseHostname string `json:"databaseHostname,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// MariaDB instance name
+	// Right now required by the maridb-operator to get the credentials from the instance to create the DB
+	// Might not be required in future
+	DatabaseInstance string `json:"databaseInstance"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
@@ -59,7 +65,7 @@ type DesignateAPISpec struct {
 
 	// +kubebuilder:validation:Required
 	// Secret containing OpenStack password information for designate DesignateDatabasePassword, AdminPassword
-	Secret string `json:"secret"`
+	Secret string `json:"secret,omitempty"`
 
 	// +kubebuilder:validation:Optional
   // +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
@@ -69,11 +75,11 @@ type DesignateAPISpec struct {
 	// +kubebuilder:validation:Optional
 	// NodeSelector to target subset of worker nodes running this service
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
-	// actual action pod gets started with sleep infinity
-	Debug DesignateServiceDebug `json:"debug,omitempty"`
+	
+   // +kubebuilder:validation:Optional                                                                                       
+    // Debug - enable debug for different deploy stages. If an init container is used, it runs and the                        
+    // actual action pod gets started with sleep infinity                                                                     
+    Debug DesignateServiceDebug `json:"debug,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
@@ -111,19 +117,19 @@ type DesignateAPIDebug struct {
 	Service bool `json:"service,omitempty"`
 }
 
-// DesignateAPIStatus defines the observed state of DesignateAPI
-type DesignateAPIStatus struct {
+// DesignateSinkStatus defines the observed state of DesignateSinkSink
+type DesignateSinkStatus struct {
+	// ReadyCount of designate central instances
+	ReadyCount int32 `json:"readyCount,omitempty"`
+
 	// Map of hashes to track e.g. job status
 	Hash map[string]string `json:"hash,omitempty"`
-
-	// API endpoint
-	APIEndpoints map[string]string `json:"apiEndpoint,omitempty"`
 
 	// Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
 
-	// ReadyCount of designate API instances
-	ReadyCount int32 `json:"readyCount,omitempty"`
+	// Designate Database Hostname
+	DatabaseHostname string `json:"databaseHostname,omitempty"`
 
 	// ServiceID - the ID of the registered service in keystone
 	ServiceID string `json:"serviceID,omitempty"`
@@ -134,26 +140,26 @@ type DesignateAPIStatus struct {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
-// DesignateAPI is the Schema for the designateapis API
-type DesignateAPI struct {
+// DesignateSink is the Schema for the designatecentrals
+type DesignateSink struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DesignateAPISpec   `json:"spec,omitempty"`
-	Status DesignateAPIStatus `json:"status,omitempty"`
+	Spec   DesignateSinkSpec   `json:"spec,omitempty"`
+	Status DesignateSinkStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// DesignateAPIList contains a list of DesignateAPI
-type DesignateAPIList struct {
+// DesignateSinkList contains a list of DesignateSink
+type DesignateSinkList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []DesignateAPI `json:"items"`
+	Items           []DesignateSink `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&DesignateAPI{}, &DesignateAPIList{})
+	SchemeBuilder.Register(&DesignateSink{}, &DesignateSinkList{})
 }
 
 // IsReady - returns true if service is ready to serve requests

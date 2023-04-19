@@ -1,17 +1,17 @@
 apiVersion: designate.openstack.org/v1beta1
-kind: DesignateAPI
+kind: DesignateProducer
 metadata:
-  name: designate-api
+  name: designate-producer
 spec:
   # TODO(user): Add fields here
   databaseInstance: openstack
   databaseUser: designate
   serviceUser: designate
-  containerImage: quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo
+  containerImage: quay.io/tripleowallabycentos9/openstack-designate-producer:current-tripleo
   enable: true
-  serviceDescription: "Designate api service"
-  serviceName: designate-api
-  service_type: designate_api
+  serviceDescription: "Designate producer service"
+  serviceName: designate-producer
+  service_type: designate_producer
   replicas: 1
   secret: osp-secret
   customServiceConfig: |

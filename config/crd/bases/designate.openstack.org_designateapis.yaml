@@ -55,10 +55,8 @@ spec:
                   added to to /etc/<service>/<service>.conf.d directory as custom.conf
                   file.
                 type: string
-              databaseInstance:
-                description: MariaDB instance name Right now required by the maridb-operator
-                  to get the credentials from the instance to create the DB Might
-                  not be required in future
+              databaseHostname:
+                description: DatabaseHostname - Designate Database Hostname
                 type: string
               databaseUser:
                 default: designate
@@ -71,13 +69,14 @@ spec:
                   an init container is used, it runs and the actual action pod gets
                   started with sleep infinity
                 properties:
-                  dbSync:
+                  initContainer:
                     default: false
-                    description: DBSync enable debug
+                    description: initContainer enable debug (waits until /tmp/stop-init-container
+                      disappears)
                     type: boolean
                   service:
                     default: false
-                    description: Service enable debug
+                    description: service enable debug
                     type: boolean
                 type: object
               defaultConfigOverwrite:
@@ -109,8 +108,8 @@ spec:
                     type: string
                   service:
                     default: DesignatePassword
-                    description: Database - Selector to get the designate service
-                      password from the Secret
+                    description: Service - Selector to get the designate service password
+                      from the Secret
                     type: string
                 type: object
               preserveJobs:
@@ -133,7 +132,8 @@ spec:
                     description: "Claims lists the names of resources, defined in
                       spec.resourceClaims, that are used by this container. \n This
                       is an alpha field and requires enabling the DynamicResourceAllocation
-                      feature gate. \n This field is immutable."
+                      feature gate. \n This field is immutable. It can only be set
+                      for containers."
                     items:
                       description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                       properties:
@@ -183,7 +183,6 @@ spec:
                 type: string
             required:
             - containerImage
-            - databaseInstance
             - secret
             type: object
           status:
@@ -237,9 +236,6 @@ spec:
                   - type
                   type: object
                 type: array
-              databaseHostname:
-                description: Designate Database Hostname
-                type: string
               hash:
                 additionalProperties:
                   type: string

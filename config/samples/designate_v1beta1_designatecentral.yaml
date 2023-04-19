@@ -1,0 +1,21 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: DesignateCentral
+metadata:
+  name: designate-central
+spec:
+  databaseInstance: openstack
+  databaseUser: designate
+  serviceUser: designate
+  containerImage: quay.io/tripleowallabycentos9/openstack-designate-central:current-triple
+  enable: true
+  serviceDescription: "Designate Central service"
+  serviceName: designate-central
+  serviceType: desigante-central
+  secret: osp-secret
+  customServiceConfig: |
+    [DEFAULT]
+    debug = true
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "1.0"

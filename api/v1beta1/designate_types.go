@@ -24,10 +24,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// DbSyncHash hash
+	DbSyncHash = "dbsync"
+
+	// DeploymentHash hash used to detect changes
+	DeploymentHash = "deployment"
+)
+
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// DesignateAPISpec defines the desired state of DesignateAPI
-type DesignateAPISpec struct {
+// DesignateSpec defines the desired state of Designate
+type DesignateSpec struct {
   // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
   // Important: Run "make" to regenerate code after modifying this file
 
@@ -36,20 +44,15 @@ type DesignateAPISpec struct {
 	// ServiceUser - optional username used for this service to register in designate
 	ServiceUser string `json:"serviceUser"`
 
-	// +kubebuilder:validation:Required
-	// Designate Container Image URL
-	ContainerImage string `json:"containerImage"`
-
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=1
-	// +kubebuilder:validation:Maximum=32
-	// +kubebuilder:validation:Minimum=0
-	// Replicas of designate API to run
-	Replicas int32 `json:"replicas"`
-
-	// +kubebuilder:validation:Optional
-	// DatabaseHostname - Designate Database Hostname
+	// DatabaseHostname - Cinder Database Hostname
 	DatabaseHostname string `json:"databaseHostname,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// MariaDB instance name
+	// Right now required by the maridb-operator to get the credentials from the instance to create the DB
+	// Might not be required in future
+	DatabaseInstance string `json:"databaseInstance"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
@@ -57,12 +60,18 @@ type DesignateAPISpec struct {
 	// TODO: -> implement needs work in mariadb-operator, right now only designate
 	DatabaseUser string `json:"databaseUser"`
 
+    // +kubebuilder:validation:Required                                                                                       
+    // +kubebuilder:default=rabbitmq                                                                                          
+    // RabbitMQ instance name                                                                                                 
+    // Needed to request a transportURL that is created and used in Cinder                                                    
+    RabbitMqClusterName string `json:"rabbitMqClusterName"`
+
 	// +kubebuilder:validation:Required
 	// Secret containing OpenStack password information for designate DesignateDatabasePassword, AdminPassword
 	Secret string `json:"secret"`
 
 	// +kubebuilder:validation:Optional
-  // +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
+	// +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
 	// PasswordSelectors - Selectors to identify the DB and AdminUser password from the Secret
 	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
 
@@ -73,7 +82,7 @@ type DesignateAPISpec struct {
 	// +kubebuilder:validation:Optional
 	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
 	// actual action pod gets started with sleep infinity
-	Debug DesignateServiceDebug `json:"debug,omitempty"`
+	Debug DesignateDebug `json:"debug,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
@@ -97,33 +106,54 @@ type DesignateAPISpec struct {
 	// Resources - Compute Resources required by this service (Limits/Requests).
 	// https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// DesiganteAPI - Spec definition for the API service of this Designate deployment
+    DesiganteAPI DesignateAPISpec `json:"designateAPI"`
+
+	// +kubebuilder:validation:Required
+	// DesiganteCentral - Spec definition for the Central service of this Designate deployment
+    DesignateCentral DesignateCentralSpec `json:"designateCentral"`
+
+	// +kubebuilder:validation:Required
+	// DesiganteSink - Spec definition for the Sink service of this Designate deployment
+    DesiganteSink DesignateSinkSpec `json:"designateSink"`
+
+	// +kubebuilder:validation:Required
+	// DesiganteWorker - Spec definition for the Worker service of this Designate deployment
+    DesigsanteWorker DesignateWorkerSpec `json:"designateWorker"`
+
+	// +kubebuilder:validation:Required
+	// DesiganteMdns - Spec definition for the Mdns service of this Designate deployment
+    CinderMdns DesignateMdnsSpec `json:"designateMdns"`
+
+	// +kubebuilder:validation:Required
+	// DesiganteProducer - Spec definition for the Producer service of this Designate deployment
+    DesignateProducer DesignateProducerSpec `json:"designateProducer"`
+
+	// +kubebuilder:validation:Optional
+	// NodeSelector to target subset of worker nodes running this service. Setting
+	// NodeSelector here acts as a default value and can be overridden by service
+	// specific NodeSelector Settings.
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 }
 
-// DesignateAPIDebug defines the observed state of DesignateAPIDebug
-type DesignateAPIDebug struct {
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=false
-	// DBSync enable debug
-	DBSync bool `json:"dbSync,omitempty"`
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=false
-	// Service enable debug
-	Service bool `json:"service,omitempty"`
-}
+// DesignateStatus defines the observed state of Designate
+type DesignateStatus struct {
+	// ReadyCount of designate  instances
+	ReadyCount int32 `json:"readyCount,omitempty"`
 
-// DesignateAPIStatus defines the observed state of DesignateAPI
-type DesignateAPIStatus struct {
 	// Map of hashes to track e.g. job status
 	Hash map[string]string `json:"hash,omitempty"`
 
-	// API endpoint
-	APIEndpoints map[string]string `json:"apiEndpoint,omitempty"`
+	//  endpoint
+	Endpoints map[string]string `json:"apiEndpoint,omitempty"`
 
 	// Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
 
-	// ReadyCount of designate API instances
-	ReadyCount int32 `json:"readyCount,omitempty"`
+	// Designate Database Hostname
+	DatabaseHostname string `json:"databaseHostname,omitempty"`
 
 	// ServiceID - the ID of the registered service in keystone
 	ServiceID string `json:"serviceID,omitempty"`
@@ -134,29 +164,38 @@ type DesignateAPIStatus struct {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
-// DesignateAPI is the Schema for the designateapis API
-type DesignateAPI struct {
+// Designate is the Schema for the designateapis 
+type Designate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DesignateAPISpec   `json:"spec,omitempty"`
-	Status DesignateAPIStatus `json:"status,omitempty"`
+	Spec   DesignateSpec   `json:"spec,omitempty"`
+	Status DesignateStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// DesignateAPIList contains a list of DesignateAPI
-type DesignateAPIList struct {
+// DesignateList contains a list of Designate
+type DesignateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []DesignateAPI `json:"items"`
+	Items           []Designate `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&DesignateAPI{}, &DesignateAPIList{})
+	SchemeBuilder.Register(&Designate{}, &DesignateList{})
 }
 
-// IsReady - returns true if service is ready to serve requests
-func (instance CinderAPI) IsReady() bool {
-	return instance.Status.ReadyCount == instance.Spec.Replicas
+// GetEndpoint - returns OpenStack endpoint url for type
+func (instance Designate) GetEndpoint(endpointType endpoint.Endpoint) (string, error) {
+	if url, found := instance.Status.Endpoints[string(endpointType)]; found {
+		return url, nil
+	}
+	return "", fmt.Errorf("%s endpoint not found", string(endpointType))
+}
+
+// IsReady - returns true if service is ready to server requests
+func (instance Designate) IsReady() bool {
+	return instance.Status.Conditions.IsTrue(condition.ExposeServiceReadyCondition) &&
+		instance.Status.Conditions.IsTrue(condition.DeploymentReadyCondition)
 }
