@@ -26,8 +26,8 @@ import (
 
 // DesignateWorkerSpec defines the desired state of DesignateWorker
 type DesignateWorkerSpec struct {
-  // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-  // Important: Run "make" to regenerate code after modifying this file
+	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
@@ -48,6 +48,11 @@ type DesignateWorkerSpec struct {
 	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Cinder Database Hostname
 	DatabaseHostname string `json:"databaseHostname,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
+	// actual action pod gets started with sleep infinity
+	Debug DesignateServiceDebug `json:"debug,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
@@ -82,6 +87,14 @@ type DesignateWorkerSpec struct {
 	// Resources - Compute Resources required by this service (Limits/Requests).
 	// https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// DesignateWorkerDebug defines the observed state of DesignateSinkDebug
+type DesignateWorkerDebug struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=false
+	// DBSync enable debug
+	DBSync bool `json:"dbSync,omitempty"`
 }
 
 // DesignateWorkerStatus defines the observed state of DesignateWorker
@@ -130,6 +143,6 @@ func init() {
 }
 
 // IsReady - returns true if service is ready to serve requests
-func (instance CinderAPI) IsReady() bool {
+func (instance DesignateWorker) IsReady() bool {
 	return instance.Status.ReadyCount == instance.Spec.Replicas
 }

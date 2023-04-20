@@ -19,7 +19,9 @@ package v1beta1
 import (
 	"fmt"
 
+	//"github.com/go-kit/kit/endpoint"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/endpoint"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,8 +38,8 @@ const (
 
 // DesignateSpec defines the desired state of Designate
 type DesignateSpec struct {
-  // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-  // Important: Run "make" to regenerate code after modifying this file
+	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
@@ -60,11 +62,11 @@ type DesignateSpec struct {
 	// TODO: -> implement needs work in mariadb-operator, right now only designate
 	DatabaseUser string `json:"databaseUser"`
 
-    // +kubebuilder:validation:Required                                                                                       
-    // +kubebuilder:default=rabbitmq                                                                                          
-    // RabbitMQ instance name                                                                                                 
-    // Needed to request a transportURL that is created and used in Cinder                                                    
-    RabbitMqClusterName string `json:"rabbitMqClusterName"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:default=rabbitmq
+	// RabbitMQ instance name
+	// Needed to request a transportURL that is created and used in Cinder
+	RabbitMqClusterName string `json:"rabbitMqClusterName"`
 
 	// +kubebuilder:validation:Required
 	// Secret containing OpenStack password information for designate DesignateDatabasePassword, AdminPassword
@@ -109,33 +111,27 @@ type DesignateSpec struct {
 
 	// +kubebuilder:validation:Required
 	// DesiganteAPI - Spec definition for the API service of this Designate deployment
-    DesiganteAPI DesignateAPISpec `json:"designateAPI"`
+	DesiganteAPI DesignateAPISpec `json:"designateAPI"`
 
 	// +kubebuilder:validation:Required
 	// DesiganteCentral - Spec definition for the Central service of this Designate deployment
-    DesignateCentral DesignateCentralSpec `json:"designateCentral"`
+	DesignateCentral DesignateCentralSpec `json:"designateCentral"`
 
 	// +kubebuilder:validation:Required
-	// DesiganteSink - Spec definition for the Sink service of this Designate deployment
-    DesiganteSink DesignateSinkSpec `json:"designateSink"`
+	// DesignateSink - Spec definition for the Sink service of this Designate deployment
+	DesignateSink DesignateSinkSpec `json:"designateSink"`
 
 	// +kubebuilder:validation:Required
-	// DesiganteWorker - Spec definition for the Worker service of this Designate deployment
-    DesigsanteWorker DesignateWorkerSpec `json:"designateWorker"`
+	// DesignateWorker - Spec definition for the Worker service of this Designate deployment
+	DesignateWorker DesignateWorkerSpec `json:"designateWorker"`
 
 	// +kubebuilder:validation:Required
-	// DesiganteMdns - Spec definition for the Mdns service of this Designate deployment
-    CinderMdns DesignateMdnsSpec `json:"designateMdns"`
+	// DesignateMdns - Spec definition for the Mdns service of this Designate deployment
+	DesignateMdns DesignateMdnsSpec `json:"designateMdns"`
 
 	// +kubebuilder:validation:Required
 	// DesiganteProducer - Spec definition for the Producer service of this Designate deployment
-    DesignateProducer DesignateProducerSpec `json:"designateProducer"`
-
-	// +kubebuilder:validation:Optional
-	// NodeSelector to target subset of worker nodes running this service. Setting
-	// NodeSelector here acts as a default value and can be overridden by service
-	// specific NodeSelector Settings.
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	DesignateProducer DesignateProducerSpec `json:"designateProducer"`
 }
 
 // DesignateStatus defines the observed state of Designate
@@ -164,7 +160,7 @@ type DesignateStatus struct {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
-// Designate is the Schema for the designateapis 
+// Designate is the Schema for the designateapis
 type Designate struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

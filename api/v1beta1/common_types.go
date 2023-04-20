@@ -16,8 +16,6 @@ limitations under the License.
 
 package v1beta1
 
-import "github.com/openstack-k8s-operators/lib-common/modules/common/endpoint"
-
 // PasswordSelector to identify the DB and AdminUser password from the Secret
 type PasswordSelector struct {
 	// +kubebuilder:validation:Optional
@@ -51,9 +49,14 @@ type DesignateServiceDebug struct {
 	// +kubebuilder:default=false
 	// initContainer enable debug (waits until /tmp/stop-init-container disappears)
 	InitContainer bool `json:"initContainer"`
+
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
 	// service enable debug
 	Service bool `json:"service"`
-}
 
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=false
+	// dbsync enable debug
+	DbSync bool `json:"dbsync"`
+}

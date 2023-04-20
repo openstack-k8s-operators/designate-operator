@@ -17,8 +17,6 @@ limitations under the License.
 package v1beta1
 
 import (
-	"fmt"
-
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,8 +26,8 @@ import (
 
 // DesignateSinkSpec defines the desired state of DesignateSink
 type DesignateSinkSpec struct {
-  // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-  // Important: Run "make" to regenerate code after modifying this file
+	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
@@ -68,18 +66,18 @@ type DesignateSinkSpec struct {
 	Secret string `json:"secret,omitempty"`
 
 	// +kubebuilder:validation:Optional
-  // +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
+	// +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
 	// PasswordSelectors - Selectors to identify the DB and AdminUser password from the Secret
 	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// NodeSelector to target subset of worker nodes running this service
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	
-   // +kubebuilder:validation:Optional                                                                                       
-    // Debug - enable debug for different deploy stages. If an init container is used, it runs and the                        
-    // actual action pod gets started with sleep infinity                                                                     
-    Debug DesignateServiceDebug `json:"debug,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
+	// actual action pod gets started with sleep infinity
+	Debug DesignateServiceDebug `json:"debug,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
@@ -105,8 +103,8 @@ type DesignateSinkSpec struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// DesignateAPIDebug defines the observed state of DesignateAPIDebug
-type DesignateAPIDebug struct {
+// DesignateSinkDebug defines the observed state of DesignateSinkDebug
+type DesignateSinkDebug struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=false
 	// DBSync enable debug
@@ -163,6 +161,6 @@ func init() {
 }
 
 // IsReady - returns true if service is ready to serve requests
-func (instance CinderAPI) IsReady() bool {
+func (instance DesignateSink) IsReady() bool {
 	return instance.Status.ReadyCount == instance.Spec.Replicas
 }

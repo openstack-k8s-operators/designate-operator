@@ -1,4 +1,4 @@
- /*
+/*
 Copyright 2022.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +26,8 @@ import (
 
 // DesignateMdnsSpec defines the desired state of DesignateMdns
 type DesignateMdnsSpec struct {
-  // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-  // Important: Run "make" to regenerate code after modifying this file
+	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
@@ -135,6 +135,6 @@ func init() {
 }
 
 // IsReady - returns true if service is ready to serve requests
-func (instance CinderAPI) IsReady() bool {
+func (instance DesignateMdns) IsReady() bool {
 	return instance.Status.ReadyCount == instance.Spec.Replicas
 }

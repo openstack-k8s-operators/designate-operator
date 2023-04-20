@@ -41,7 +41,7 @@ func DbSyncJob(
 	volumes := getVolumes(instance.Name)
 
 	args := []string{"-c"}
-	if instance.Spec.Debug.DBSync {
+	if instance.Spec.Debug.DbSync {
 		args = append(args, common.DebugCommand)
 	} else {
 		args = append(args, DBSyncCommand)

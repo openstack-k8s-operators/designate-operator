@@ -69,6 +69,10 @@ spec:
                   an init container is used, it runs and the actual action pod gets
                   started with sleep infinity
                 properties:
+                  dbsync:
+                    default: false
+                    description: dbsync enable debug
+                    type: boolean
                   initContainer:
                     default: false
                     description: initContainer enable debug (waits until /tmp/stop-init-container
@@ -236,6 +240,9 @@ spec:
                   - type
                   type: object
                 type: array
+              databaseHostname:
+                description: DatabaseHostname -
+                type: string
               hash:
                 additionalProperties:
                   type: string

@@ -17,8 +17,6 @@ limitations under the License.
 package v1beta1
 
 import (
-	"fmt"
-
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,8 +26,8 @@ import (
 
 // DesignateAPISpec defines the desired state of DesignateAPI
 type DesignateAPISpec struct {
-  // INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-  // Important: Run "make" to regenerate code after modifying this file
+	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
@@ -62,7 +60,7 @@ type DesignateAPISpec struct {
 	Secret string `json:"secret"`
 
 	// +kubebuilder:validation:Optional
-  // +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
+	// +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
 	// PasswordSelectors - Selectors to identify the DB and AdminUser password from the Secret
 	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
 
@@ -127,6 +125,9 @@ type DesignateAPIStatus struct {
 
 	// ServiceID - the ID of the registered service in keystone
 	ServiceID string `json:"serviceID,omitempty"`
+
+	// DatabaseHostname -
+	DatabaseHostname string `json:"databaseHostname,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -157,6 +158,6 @@ func init() {
 }
 
 // IsReady - returns true if service is ready to serve requests
-func (instance CinderAPI) IsReady() bool {
+func (instance DesignateAPI) IsReady() bool {
 	return instance.Status.ReadyCount == instance.Spec.Replicas
 }

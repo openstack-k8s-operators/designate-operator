@@ -256,7 +256,7 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		instance.Spec.DatabaseUser,
 		instance.Spec.Secret,
 		map[string]string{
-			"dbName": instance.Spec.DatabaseInstance,
+			"dbName": instance.Spec.DatabaseHostname,
 		},
 	)
 	// create or patch the DB

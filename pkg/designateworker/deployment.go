@@ -136,19 +136,21 @@ func Deployment(
 		},
 	}
 	// Question -> dkehn do we need this if its already defined above?
-	initContainerDetails := designate.WorkerDetails{
-		ContainerImage:       instance.Spec.ContainerImage,
-		DatabaseHost:         instance.Spec.DatabaseHostname,
-		DatabaseUser:         instance.Spec.DatabaseUser,
-		DatabaseName:         designate.DatabaseName,
-		OSPSecret:            instance.Spec.Secret,
-		TransportURLSecret:   instance.Spec.TransportURLSecret,
-		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
-		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		VolumeMounts:         designate.GetAllVolumeMounts(),
-		Debug:                instance.Spec.Debug.InitContainer,
-	}
-	deployment.Spec.Template.Spec.InitContainers = deisgnate.InitContainer(initContainerDetails)
+	/*
+		initContainerDetails := designate.WorkerDetails{
+			ContainerImage:       instance.Spec.ContainerImage,
+			DatabaseHost:         instance.Spec.DatabaseHostname,
+			DatabaseUser:         instance.Spec.DatabaseUser,
+			DatabaseName:         designate.DatabaseName,
+			OSPSecret:            instance.Spec.Secret,
+			TransportURLSecret:   instance.Spec.TransportURLSecret,
+			DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
+			UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
+			VolumeMounts:         designate.GetAllVolumeMounts(),
+			Debug:                instance.Spec.Debug.InitContainer,
+		}
+		deployment.Spec.Template.Spec.InitContainers = deisgnate.InitContainer(initContainerDetails)
+	*/
 
 	// TODO: Clean up this hack
 	// Add custom config for the Worker Service
