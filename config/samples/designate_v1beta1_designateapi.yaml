@@ -7,7 +7,7 @@ spec:
   databaseInstance: openstack
   databaseUser: designate
   serviceUser: designate
-  containerImage: quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo
+  containerImage: quay.io/podified-antelope-centos9/openstack-designate-api:current-podified
   replicas: 1
   secret: osp-secret
   debug:
