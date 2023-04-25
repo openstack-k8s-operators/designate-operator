@@ -1,0 +1,6 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+spec:
+  secret: osp-secret

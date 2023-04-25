@@ -16,6 +16,10 @@ limitations under the License.
 package designate
 
 const (
+	// ServiceNameV3 -
+	ServiceNameV3 = "designatev3"
+	// ServiceTypeV3 -
+	ServiceTypeV3 = "network-dns-v3"
 	// ServiceName -
 	ServiceName = "designate"
 	// ServiceType -
@@ -33,7 +37,5 @@ const (
 	DesignateInternalPort int32 = 9611
 
 	// KollaDbSyncConfig -
-	KollaDbSyncConfig = "/var/lib/config-data/merged/designate-api-db-sync.json"
-	// KollaConfig -
-	KollaConfig = "/var/lib/config-data/merged/designate-api-config.json"
+	KollaDbSyncConfig = "/var/lib/config-data/merged/db-sync-config.json"
 )

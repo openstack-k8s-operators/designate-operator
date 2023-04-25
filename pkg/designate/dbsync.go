@@ -16,9 +16,8 @@ limitations under the License.
 package designate
 
 import (
-	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
-
-	"github.com/openstack-k8s-operators/lib-common/modules/common"
+	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
+	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +31,7 @@ const (
 
 // DbSyncJob func
 func DbSyncJob(
-	instance *designatev1.DesignateAPI,
+	instance *designatev1beta1.Designate,
 	labels map[string]string,
 ) *batchv1.Job {
 	runAsUser := int64(0)
@@ -70,7 +69,7 @@ func DbSyncJob(
 								"/bin/bash",
 							},
 							Args:  args,
-							Image: instance.Spec.ContainerImage,
+							Image: instance.Spec.DesignateAPI.ContainerImage,
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &runAsUser,
 							},
@@ -85,7 +84,7 @@ func DbSyncJob(
 	}
 
 	initContainerDetails := APIDetails{
-		ContainerImage:       instance.Spec.ContainerImage,
+		ContainerImage:       instance.Spec.DesignateAPI.ContainerImage,
 		DatabaseHost:         instance.Status.DatabaseHostname,
 		DatabaseUser:         instance.Spec.DatabaseUser,
 		DatabaseName:         DatabaseName,
@@ -94,7 +93,7 @@ func DbSyncJob(
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
 		VolumeMounts:         initVolumeMounts,
 	}
-	job.Spec.Template.Spec.InitContainers = initContainer(initContainerDetails)
+	job.Spec.Template.Spec.InitContainers = InitContainer(initContainerDetails)
 
 	return job
 }

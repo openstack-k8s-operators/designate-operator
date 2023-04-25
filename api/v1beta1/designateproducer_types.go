@@ -24,8 +24,8 @@ import (
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// DesignateAPISpec defines the desired state of DesignateAPI
-type DesignateAPISpec struct {
+// DesignateProducerSpec defines the desired state of DesignateProducer
+type DesignateProducerSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -42,7 +42,7 @@ type DesignateAPISpec struct {
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Maximum=32
 	// +kubebuilder:validation:Minimum=0
-	// Replicas of designate API to run
+	// Replicas of designate Producer to run
 	Replicas int32 `json:"replicas"`
 
 	// +kubebuilder:validation:Optional
@@ -57,7 +57,7 @@ type DesignateAPISpec struct {
 
 	// +kubebuilder:validation:Required
 	// Secret containing OpenStack password information for designate DesignateDatabasePassword, AdminPassword
-	Secret string `json:"secret"`
+	Secret string `json:"secret,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// Secret containing RabbitMq transport URL
@@ -78,15 +78,9 @@ type DesignateAPISpec struct {
 	Debug DesignateServiceDebug `json:"debug,omitempty"`
 
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=false
-	// PreserveJobs - do not delete jobs after they finished e.g. to check logs
-	PreserveJobs bool `json:"preserveJobs,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default="# add your customization here"
 	// CustomServiceConfig - customize the service config using this parameter to change service defaults,
 	// or overwrite rendered information using raw OpenStack config format. The content gets added to
-	// to /etc/<service>/<service>.conf.d directory as custom.conf file.
+	// to /etc/<service>/<service>.conf.d directory as a custom config file.
 	CustomServiceConfig string `json:"customServiceConfig,omitempty"`
 
 	// +kubebuilder:validation:Optional
@@ -105,65 +99,51 @@ type DesignateAPISpec struct {
 	// Resources - Compute Resources required by this service (Limits/Requests).
 	// https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// NetworkAttachments is a list of NetworkAttachment resource names to expose the services to the given network
-	NetworkAttachments []string `json:"networkAttachments,omitempty"`
 }
 
-// DesignateAPIStatus defines the observed state of DesignateAPI
-type DesignateAPIStatus struct {
+// DesignateProducerStatus defines the observed state of DesignateProducer
+type DesignateProducerStatus struct {
+	// ReadyCount of designate central instances
+	ReadyCount int32 `json:"readyCount,omitempty"`
+
 	// Map of hashes to track e.g. job status
 	Hash map[string]string `json:"hash,omitempty"`
-
-	// API endpoint
-	APIEndpoints map[string]map[string]string `json:"apiEndpoint,omitempty"`
 
 	// Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
 
-	// ReadyCount of designate API instances
-	ReadyCount int32 `json:"readyCount,omitempty"`
-
-	// ServiceIDs - the ID of the registered service in keystone
+	// ServiceIDs
 	ServiceIDs map[string]string `json:"serviceIDs,omitempty"`
-
-	// DatabaseHostname -
-	DatabaseHostname string `json:"databaseHostname,omitempty"`
-
-	// NetworkAttachments status of the deployment pods
-	NetworkAttachments map[string][]string `json:"networkAttachments,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="NetworkAttachments",type="string",JSONPath=".status.networkAttachments",description="NetworkAttachments"
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
-// DesignateAPI is the Schema for the designateapis API
-type DesignateAPI struct {
+// DesignateProducer is the Schema for the designatecentrals
+type DesignateProducer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DesignateAPISpec   `json:"spec,omitempty"`
-	Status DesignateAPIStatus `json:"status,omitempty"`
+	Spec   DesignateProducerSpec   `json:"spec,omitempty"`
+	Status DesignateProducerStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// DesignateAPIList contains a list of DesignateAPI
-type DesignateAPIList struct {
+// DesignateProducerList contains a list of DesignateProducer
+type DesignateProducerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []DesignateAPI `json:"items"`
+	Items           []DesignateProducer `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&DesignateAPI{}, &DesignateAPIList{})
+	SchemeBuilder.Register(&DesignateProducer{}, &DesignateProducerList{})
 }
 
 // IsReady - returns true if service is ready to serve requests
-func (instance DesignateAPI) IsReady() bool {
+func (instance DesignateProducer) IsReady() bool {
 	return instance.Status.ReadyCount == instance.Spec.Replicas
 }
