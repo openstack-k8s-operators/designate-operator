@@ -1,4 +1,10 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
+- designate_v1beta1_designate.yaml
 - designate_v1beta1_designateapi.yaml
+- designate_v1beta1_designatecentral.yaml
+- designate_v1beta1_designateproducer.yaml
+- designate_v1beta1_designateworker.yaml
+- designate_v1beta1_designatemdns.yaml
+- designate_v1beta1_designatesink.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

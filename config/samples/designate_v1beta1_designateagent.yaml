@@ -1,0 +1,21 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: DesignateAgent
+metadata:
+  name: designate-agent
+spec:
+  databaseInstance: openstack
+  databaseUser: designate
+  serviceUser: designate
+  containerImage: quay.io/tripleowallabycentos9/openstack-designate-agent:current-triple
+  enable: true
+  serviceDescription: "Designate Agent service"
+  serviceName: designate-agent
+  serviceType: designate-agent
+  secret: osp-secret
+  customServiceConfig: |
+    [DEFAULT]
+    debug = true
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "1.0"

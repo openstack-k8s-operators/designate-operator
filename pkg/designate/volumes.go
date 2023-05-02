@@ -19,7 +19,133 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// getVolumes - service volumes
+const (
+	scriptVolume       = "scripts"
+	configVolume       = "config-data"
+	mergedConfigVolume = "config-data-merged"
+	logVolume          = "logs"
+)
+
+// GetVolumes - returns the volumes used for the service deployment and for
+// any jobs needs access for the full service configuration
+func GetVolumes(scriptConfigMapName string, serviceConfigConfigMapName string) []corev1.Volume {
+	var scriptMode int32 = 0740
+	var configMode int32 = 0640
+
+	return []corev1.Volume{
+		{
+			Name: scriptVolume,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					DefaultMode: &scriptMode,
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: scriptConfigMapName,
+					},
+				},
+			},
+		},
+		{
+			Name: configVolume,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					DefaultMode: &configMode,
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: serviceConfigConfigMapName,
+					},
+				},
+			},
+		},
+		{
+			Name: mergedConfigVolume,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{Medium: ""},
+			},
+		},
+	}
+}
+
+// GetAllVolumeMounts - VolumeMounts providing access to both the raw input
+// configuration and the volume of the merged configuration
+func GetAllVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      scriptVolume,
+			MountPath: "/usr/local/bin/container-scripts",
+			ReadOnly:  true,
+		},
+		{
+			Name:      configVolume,
+			MountPath: "/var/lib/config-data/default",
+			ReadOnly:  true,
+		},
+		{
+			Name:      mergedConfigVolume,
+			MountPath: "/var/lib/config-data/merged",
+			ReadOnly:  false,
+		},
+	}
+}
+
+// GetServiceVolumeMounts - VolumeMounts to get access to the merged
+// configuration
+func GetServiceVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      scriptVolume,
+			MountPath: "/usr/local/bin/container-scripts",
+			ReadOnly:  true,
+		},
+		{
+			Name:      mergedConfigVolume,
+			MountPath: "/var/lib/config-data/merged",
+			ReadOnly:  false,
+		},
+	}
+}
+
+// GetOpenstackVolumeMounts - VolumeMounts use to inject config and scripts
+func GetOpenstackVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      configVolume,
+			MountPath: "/var/lib/openstack/config",
+			ReadOnly:  false,
+		},
+		{
+			Name:      logVolume,
+			MountPath: "/var/log/ndesignate",
+			ReadOnly:  false,
+		},
+	}
+}
+
+// GetOpenstackVolumes - returns the volumes used for the service deployment and for
+// any jobs needs access for the full service configuration
+func GetOpenstackVolumes(serviceConfigConfigMapName string) []corev1.Volume {
+	var configMode int32 = 0640
+	return []corev1.Volume{
+		{
+			Name: configVolume,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					DefaultMode: &configMode,
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: serviceConfigConfigMapName,
+					},
+				},
+			},
+		},
+		{
+			Name: logVolume,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{Medium: ""},
+			},
+		},
+	}
+}
+
+// #############################################################################
+// getVolumes
 func getVolumes(name string) []corev1.Volume {
 	var scriptsVolumeDefaultMode int32 = 0755
 	var config0640AccessMode int32 = 0640

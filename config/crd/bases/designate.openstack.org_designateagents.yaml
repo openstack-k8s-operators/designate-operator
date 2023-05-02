@@ -5,21 +5,17 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.2
   creationTimestamp: null
-  name: designateapis.designate.openstack.org
+  name: designateagents.designate.openstack.org
 spec:
   group: designate.openstack.org
   names:
-    kind: DesignateAPI
-    listKind: DesignateAPIList
-    plural: designateapis
-    singular: designateapi
+    kind: DesignateAgent
+    listKind: DesignateAgentList
+    plural: designateagents
+    singular: designateagent
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: NetworkAttachments
-      jsonPath: .status.networkAttachments
-      name: NetworkAttachments
-      type: string
     - description: Status
       jsonPath: .status.conditions[0].status
       name: Status
@@ -31,7 +27,7 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: DesignateAPI is the Schema for the designateapis API
+        description: DesignateAgent is the Schema for the designateagents
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -46,18 +42,17 @@ spec:
           metadata:
             type: object
           spec:
-            description: DesignateAPISpec defines the desired state of DesignateAPI
+            description: DesignateAgentSpec defines the desired state of DesignateAgent
             properties:
               containerImage:
                 description: Designate Container Image URL
                 type: string
               customServiceConfig:
-                default: '# add your customization here'
                 description: CustomServiceConfig - customize the service config using
                   this parameter to change service defaults, or overwrite rendered
                   information using raw OpenStack config format. The content gets
-                  added to to /etc/<service>/<service>.conf.d directory as custom.conf
-                  file.
+                  added to to /etc/<service>/<service>.conf.d directory as a custom
+                  config file.
                 type: string
               customServiceConfigSecrets:
                 description: CustomServiceConfigSecrets - customize the service config
@@ -99,12 +94,6 @@ spec:
                   to add additional files. Those get added to the service config dir
                   in /etc/<service> . TODO: -> implement'
                 type: object
-              networkAttachments:
-                description: NetworkAttachments is a list of NetworkAttachment resource
-                  names to expose the services to the given network
-                items:
-                  type: string
-                type: array
               nodeSelector:
                 additionalProperties:
                   type: string
@@ -130,14 +119,9 @@ spec:
                       from the Secret
                     type: string
                 type: object
-              preserveJobs:
-                default: false
-                description: PreserveJobs - do not delete jobs after they finished
-                  e.g. to check logs
-                type: boolean
               replicas:
                 default: 1
-                description: Replicas of designate API to run
+                description: Replicas of designate Agent to run
                 format: int32
                 maximum: 32
                 minimum: 0
@@ -204,18 +188,10 @@ spec:
                 type: string
             required:
             - containerImage
-            - secret
             type: object
           status:
-            description: DesignateAPIStatus defines the observed state of DesignateAPI
+            description: DesignateAgentStatus defines the observed state of DesignateAgent
             properties:
-              apiEndpoint:
-                additionalProperties:
-                  additionalProperties:
-                    type: string
-                  type: object
-                description: API endpoint
-                type: object
               conditions:
                 description: Conditions
                 items:
@@ -259,29 +235,19 @@ spec:
                   - type
                   type: object
                 type: array
-              databaseHostname:
-                description: DatabaseHostname -
-                type: string
               hash:
                 additionalProperties:
                   type: string
                 description: Map of hashes to track e.g. job status
                 type: object
-              networkAttachments:
-                additionalProperties:
-                  items:
-                    type: string
-                  type: array
-                description: NetworkAttachments status of the deployment pods
-                type: object
               readyCount:
-                description: ReadyCount of designate API instances
+                description: ReadyCount of designate agent instances
                 format: int32
                 type: integer
               serviceIDs:
                 additionalProperties:
                   type: string
-                description: ServiceIDs - the ID of the registered service in keystone
+                description: ServiceIDs
                 type: object
             type: object
         type: object

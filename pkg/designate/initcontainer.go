@@ -28,9 +28,12 @@ type APIDetails struct {
 	DatabaseUser         string
 	DatabaseName         string
 	OSPSecret            string
+	TransportURLSecret   string
 	DBPasswordSelector   string
 	UserPasswordSelector string
 	VolumeMounts         []corev1.VolumeMount
+	Privileged           bool
+	Debug                bool
 }
 
 const (
@@ -39,7 +42,7 @@ const (
 )
 
 // initContainer - init container for designate api pods
-func initContainer(init APIDetails) []corev1.Container {
+func InitContainer(init APIDetails) []corev1.Container {
 	runAsUser := int64(0)
 
 	args := []string{
