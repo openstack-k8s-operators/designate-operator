@@ -86,12 +86,12 @@ var (
 		{
 			"type": designate.ServiceTypeV3,
 			"name": designate.ServiceNameV3,
-			"desc": "Desigante V3 Service",
+			"desc": "Designate V3 Service",
 		},
 	}
 )
 
-//+kubebuilder:rbac:groups=designate.openstack.org,resources=desiganteapis,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete;watch

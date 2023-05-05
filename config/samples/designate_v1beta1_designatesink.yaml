@@ -4,20 +4,3 @@ metadata:
   name: designate-sink
 spec:
   # TODO(user): Add fields here
-  databaseInstance: openstack
-  databaseUser: designate
-  serviceUser: designate
-  containerImage: quay.io/tripleowallabycentos9/openstack-designate-sink:current-tripleo
-  enable: true
-  serviceDescription: "Designate sink service"
-  serviceName: designate-sink
-  service_type: designate_sink
-  replicas: 1
-  secret: osp-secret
-  customServiceConfig: |
-    [DEFAULT]
-    debug: true
-  resources:
-    requests:
-      memory: "500Mi"
-      cpu: "1.0"

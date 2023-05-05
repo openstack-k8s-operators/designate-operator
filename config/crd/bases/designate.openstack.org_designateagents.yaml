@@ -16,6 +16,10 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - description: NetworkAttachments
+      jsonPath: .status.networkAttachments
+      name: NetworkAttachments
+      type: string
     - description: Status
       jsonPath: .status.conditions[0].status
       name: Status
@@ -45,7 +49,8 @@ spec:
             description: DesignateAgentSpec defines the desired state of DesignateAgent
             properties:
               containerImage:
-                description: Designate Container Image URL
+                description: ContainerImage - Designate Container Image URL (will
+                  be set to environmental default if empty)
                 type: string
               customServiceConfig:
                 description: CustomServiceConfig - customize the service config using
@@ -90,22 +95,29 @@ spec:
                 additionalProperties:
                   type: string
                 description: 'ConfigOverwrite - interface to overwrite default config
-                  files like e.g. logging.conf or policy.json. But can also be used
-                  to add additional files. Those get added to the service config dir
-                  in /etc/<service> . TODO: -> implement'
+                  files like e.g. policy.json. But can also be used to add additional
+                  files. Those get added to the service config dir in /etc/<service>
+                  . TODO: -> implement'
                 type: object
+              networkAttachments:
+                description: NetworkAttachments is a list of NetworkAttachment resource
+                  names to expose the services to the given network
+                items:
+                  type: string
+                type: array
               nodeSelector:
                 additionalProperties:
                   type: string
                 description: NodeSelector to target subset of worker nodes running
-                  this service
+                  this service. Setting here overrides any global NodeSelector settings
+                  within the Designate CR.
                 type: object
               passwordSelectors:
                 default:
                   database: DesignateDatabasePassword
                   service: DesignatePassword
                 description: PasswordSelectors - Selectors to identify the DB and
-                  AdminUser password from the Secret
+                  ServiceUser password from the Secret
                 properties:
                   database:
                     default: DesignateDatabasePassword
@@ -121,10 +133,8 @@ spec:
                 type: object
               replicas:
                 default: 1
-                description: Replicas of designate Agent to run
+                description: Replicas - Designate Agent Replicas
                 format: int32
-                maximum: 32
-                minimum: 0
                 type: integer
               resources:
                 description: Resources - Compute Resources required by this service
@@ -176,7 +186,11 @@ spec:
                 type: object
               secret:
                 description: Secret containing OpenStack password information for
-                  designate DesignateDatabasePassword, AdminPassword
+                  DesignateDatabasePassword
+                type: string
+              serviceAccount:
+                description: ServiceAccount - service account name used internally
+                  to provide Designate services the default SA name
                 type: string
               serviceUser:
                 default: designate
@@ -188,6 +202,8 @@ spec:
                 type: string
             required:
             - containerImage
+            - secret
+            - serviceAccount
             type: object
           status:
             description: DesignateAgentStatus defines the observed state of DesignateAgent
@@ -240,15 +256,17 @@ spec:
                   type: string
                 description: Map of hashes to track e.g. job status
                 type: object
+              networkAttachments:
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                description: NetworkAttachments status of the deployment pods
+                type: object
               readyCount:
                 description: ReadyCount of designate agent instances
                 format: int32
                 type: integer
-              serviceIDs:
-                additionalProperties:
-                  type: string
-                description: ServiceIDs
-                type: object
             type: object
         type: object
     served: true

@@ -106,11 +106,11 @@ type DesignateSpec struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// +kubebuilder:validation:Required
-	// DesiganteAPI - Spec definition for the API service of this Designate deployment
+	// DesignateAPI - Spec definition for the API service of this Designate deployment
 	DesignateAPI DesignateAPISpec `json:"designateAPI"`
 
 	// +kubebuilder:validation:Required
-	// DesiganteCentral - Spec definition for the Central service of this Designate deployment
+	// DesignateCentral - Spec definition for the Central service of this Designate deployment
 	DesignateCentral DesignateCentralSpec `json:"designateCentral"`
 
 	// +kubebuilder:validation:Required
@@ -126,11 +126,11 @@ type DesignateSpec struct {
 	DesignateMdns DesignateMdnsSpec `json:"designateMdns"`
 
 	// +kubebuilder:validation:Required
-	// DesiganteProducer - Spec definition for the Producer service of this Designate deployment
+	// DesignateProducer - Spec definition for the Producer service of this Designate deployment
 	DesignateProducer DesignateProducerSpec `json:"designateProducer"`
 
 	// +kubebuilder:validation:Required
-	// DesiganteAgent- Spec definition for the Agent service of this Designate deployment
+	// DesignateAgent- Spec definition for the Agent service of this Designate deployment
 	DesignateAgent DesignateAgentSpec `json:"designateAgent"`
 }
 

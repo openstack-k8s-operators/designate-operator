@@ -4,20 +4,4 @@ metadata:
   name: designate-mdns
 spec:
   # TODO(user): Add fields here
-  databaseInstance: openstack
-  databaseUser: designate
-  serviceUser: designate
-  containerImage: quay.io/tripleowallabycentos9/openstack-designate-mdns:current-tripleo
-  enable: true
-  serviceDescription: "Designate mdns service"
-  serviceName: designate-mdns
-  service_type: designate_mdns
-  replicas: 1
-  secret: osp-secret
-  customServiceConfig: |
-    [DEFAULT]
-    debug: true
-  resources:
-    requests:
-      memory: "500Mi"
-      cpu: "1.0"
+ 
