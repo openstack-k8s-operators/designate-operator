@@ -16,6 +16,78 @@ limitations under the License.
 
 package v1beta1
 
+import (
+	corev1 "k8s.io/api/core/v1"
+)
+
+// DesignateTemplate defines common input parameters used by all Designate services
+type DesignateTemplate struct {
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=designate
+	// ServiceUser - optional username used for this service to register in designate
+	ServiceUser string `json:"serviceUser"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=designate
+	// DatabaseUser - optional username used for designate DB, defaults to designate
+	// TODO: -> implement needs work in mariadb-operator, right now only designate
+	DatabaseUser string `json:"databaseUser"`
+
+	// +kubebuilder:validation:Required
+	// Secret containing OpenStack password information for DesignateDatabasePassword
+	Secret string `json:"secret"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
+	// PasswordSelectors - Selectors to identify the DB and ServiceUser password from the Secret
+	PasswordSelectors PasswordSelector `json:"passwordSelectors"`
+}
+
+// DesignateServiceTemplate defines the input parameters that can be defined for a given
+// Designate service
+type DesignateServiceTemplate struct {
+	// +kubebuilder:validation:Required
+	// ContainerImage - Designate Container Image URL (will be set to environmental default if empty)
+	ContainerImage string `json:"containerImage"`
+
+	// +kubebuilder:validation:Optional
+	// NodeSelector to target subset of worker nodes running this service. Setting here overrides
+	// any global NodeSelector settings within the Designate CR.
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
+	// actual action pod gets started with sleep infinity
+	Debug DesignateServiceDebug `json:"debug,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// CustomServiceConfig - customize the service config using this parameter to change service defaults,
+	// or overwrite rendered information using raw OpenStack config format. The content gets added to
+	// to /etc/<service>/<service>.conf.d directory as a custom config file.
+	CustomServiceConfig string `json:"customServiceConfig,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// CustomServiceConfigSecrets - customize the service config using this parameter to specify Secrets
+	// that contain sensitive service config data. The content of each Secret gets added to the
+	// /etc/<service>/<service>.conf.d directory as a custom config file.
+	CustomServiceConfigSecrets []string `json:"customServiceConfigSecrets,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// ConfigOverwrite - interface to overwrite default config files like e.g. policy.json.
+	// But can also be used to add additional files. Those get added to the service config dir in /etc/<service> .
+	// TODO: -> implement
+	DefaultConfigOverwrite map[string]string `json:"defaultConfigOverwrite,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// Resources - Compute Resources required by this service (Limits/Requests).
+	// https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// NetworkAttachments is a list of NetworkAttachment resource names to expose the services to the given network
+	NetworkAttachments []string `json:"networkAttachments,omitempty"`
+}
+
 // PasswordSelector to identify the DB and AdminUser password from the Secret
 type PasswordSelector struct {
 	// +kubebuilder:validation:Optional

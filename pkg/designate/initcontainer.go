@@ -41,7 +41,7 @@ const (
 	InitContainerCommand = "/usr/local/bin/container-scripts/init.sh"
 )
 
-// initContainer - init container for designate api pods
+// InitContainer - init container for designate api pods
 func InitContainer(init APIDetails) []corev1.Container {
 	runAsUser := int64(0)
 

@@ -18,87 +18,41 @@ package v1beta1
 
 import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// DesignateMdnsTemplate defines the input parameters for the Designate Mdns service
+type DesignateMdnsTemplate struct {
+	// Common input parameters for the Designate Mdns service
+	DesignateServiceTemplate `json:",inline"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=1
+	// Replicas - Designate Mdns Replicas
+	Replicas int32 `json:"replicas"`
+}
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // DesignateMdnsSpec defines the desired state of DesignateMdns
 type DesignateMdnsSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Common input parameters for all Designate services
+	DesignateTemplate `json:",inline"`
+
+	// Input parameters for the Designate Scheduler service
+	DesignateMdnsTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=designate
-	// ServiceUser - optional username used for this service to register in designate
-	ServiceUser string `json:"serviceUser"`
-
-	// +kubebuilder:validation:Required
-	// Designate Container Image URL
-	ContainerImage string `json:"containerImage"`
-
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=1
-	// +kubebuilder:validation:Maximum=32
-	// +kubebuilder:validation:Minimum=0
-	// Replicas of designate Mdns to run
-	Replicas int32 `json:"replicas"`
-
-	// +kubebuilder:validation:Optional
-	// DatabaseHostname - Desigante Database Hostname
+	// DatabaseHostname - Designate Database Hostname
 	DatabaseHostname string `json:"databaseHostname,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=designate
-	// DatabaseUser - optional username used for designate DB, defaults to designate
-	// TODO: -> implement needs work in mariadb-operator, right now only designate
-	DatabaseUser string `json:"databaseUser"`
-
-	// +kubebuilder:validation:Required
-	// Secret containing OpenStack password information for designate DesignateDatabasePassword, AdminPassword
-	Secret string `json:"secret,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// Secret containing RabbitMq transport URL
 	TransportURLSecret string `json:"transportURLSecret,omitempty"`
 
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
-	// PasswordSelectors - Selectors to identify the DB and AdminUser password from the Secret
-	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// NodeSelector to target subset of worker nodes running this service
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
-	// actual action pod gets started with sleep infinity
-	Debug DesignateServiceDebug `json:"debug,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// CustomServiceConfig - customize the service config using this parameter to change service defaults,
-	// or overwrite rendered information using raw OpenStack config format. The content gets added to
-	// to /etc/<service>/<service>.conf.d directory as a custom config file.
-	CustomServiceConfig string `json:"customServiceConfig,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// CustomServiceConfigSecrets - customize the service config using this parameter to specify Secrets
-	// that contain sensitive service config data. The content of each Secret gets added to the
-	// /etc/<service>/<service>.conf.d directory as a custom config file.
-	CustomServiceConfigSecrets []string `json:"customServiceConfigSecrets,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// ConfigOverwrite - interface to overwrite default config files like e.g. logging.conf or policy.json.
-	// But can also be used to add additional files. Those get added to the service config dir in /etc/<service> .
-	// TODO: -> implement
-	DefaultConfigOverwrite map[string]string `json:"defaultConfigOverwrite,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// Resources - Compute Resources required by this service (Limits/Requests).
-	// https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +kubebuilder:validation:Required
+	// ServiceAccount - service account name used internally to provide Designate services the default SA name
+	ServiceAccount string `json:"serviceAccount"`
 }
 
 // DesignateMdnsStatus defines the observed state of DesignateMdns

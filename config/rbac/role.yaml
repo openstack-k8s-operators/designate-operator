@@ -75,18 +75,6 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
-  - desiganteapis
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - designate.openstack.org
-  resources:
   - designateapis
   verbs:
   - create
