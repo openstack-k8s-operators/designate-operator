@@ -98,7 +98,7 @@ func Deployment(
 					Labels:      labels,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: designate.ServiceAccount,
+					ServiceAccountName: instance.Spec.ServiceAccount,
 					Volumes: designate.GetOpenstackVolumes(
 						designate.GetServiceConfigConfigMapName(instance.Name),
 					),

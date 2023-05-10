@@ -24,8 +24,6 @@ const (
 	ServiceName = "designate"
 	// ServiceType -
 	ServiceType = "network-dns"
-	// ServiceAccount -
-	ServiceAccount = "designate-operator-designate"
 	// DatabaseName -
 	DatabaseName = "designate"
 

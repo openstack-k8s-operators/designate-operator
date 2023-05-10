@@ -214,3 +214,18 @@ func (instance Designate) IsReady() bool {
 		instance.Status.Conditions.IsTrue(DesignateProducerReadyCondition)
 
 }
+
+// RbacConditionsSet - set the conditions for the rbac object
+func (instance Designate) RbacConditionsSet(c *condition.Condition) {
+   instance.Status.Conditions.Set(c)
+}
+
+// RbacNamespace - return the namespace
+func (instance Designate) RbacNamespace() string {
+   return instance.Namespace
+}
+
+// RbacResourceName - return the name to be used for rbac objects (serviceaccount, role, rolebinding)
+func (instance Designate) RbacResourceName() string {
+   return "designate-" + instance.Name
+}
