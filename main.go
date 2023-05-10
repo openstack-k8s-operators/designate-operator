@@ -37,6 +37,7 @@ import (
 
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/controllers"
+	rabbitmqv1 "github.com/openstack-k8s-operators/infra-operator/apis/rabbitmq/v1beta1"
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	//+kubebuilder:scaffold:imports
@@ -53,6 +54,7 @@ func init() {
 	utilruntime.Must(keystonev1.AddToScheme(scheme))
 	utilruntime.Must(routev1.AddToScheme(scheme))
 	utilruntime.Must(designatev1.AddToScheme(scheme))
+	utilruntime.Must(rabbitmqv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -109,6 +111,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.DesignateReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Kclient: kclient,
+		Log:     ctrl.Log.WithName("controllers").WithName("Designate"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Designate")
+		os.Exit(1)
+	}
+
 	if err = (&controllers.DesignateAPIReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -118,6 +130,68 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateAPI")
 		os.Exit(1)
 	}
+	/*
+		if err = (&controllers.DesignateCentralReconciler{
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			Kclient: kclient,
+			Log:     ctrl.Log.WithName("controllers").WithName("DesignateCentral"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DesignateCentral")
+			os.Exit(1)
+		}
+
+		if err = (&controllers.DesignateSinkReconciler{
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			Kclient: kclient,
+			Log:     ctrl.Log.WithName("controllers").WithName("DesignateSink"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DesignateSink")
+			os.Exit(1)
+		}
+
+		if err = (&controllers.DesignateWorkReconciler{
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			Kclient: kclient,
+			Log:     ctrl.Log.WithName("controllers").WithName("DesignateWork"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DesignateWork")
+			os.Exit(1)
+		}
+
+		if err = (&controllers.DesignateMdnsReconciler{
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			Kclient: kclient,
+			Log:     ctrl.Log.WithName("controllers").WithName("DesignateMdns"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DesignateMdns")
+			os.Exit(1)
+		}
+
+		if err = (&controllers.DesignateProducerReconciler{
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			Kclient: kclient,
+			Log:     ctrl.Log.WithName("controllers").WithName("DesignateProducer"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DesignateProducer")
+			os.Exit(1)
+		}
+
+		if err = (&controllers.DesignateAgentReconciler{
+			Client:  mgr.GetClient(),
+			Scheme:  mgr.GetScheme(),
+			Kclient: kclient,
+			Log:     ctrl.Log.WithName("controllers").WithName("DesignateAgent"),
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "DesignateAgent")
+			os.Exit(1)
+		}
+	*/
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

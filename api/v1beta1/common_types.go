@@ -33,7 +33,7 @@ type DesignateTemplate struct {
 	// TODO: -> implement needs work in mariadb-operator, right now only designate
 	DatabaseUser string `json:"databaseUser"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// Secret containing OpenStack password information for DesignateDatabasePassword
 	Secret string `json:"secret"`
 

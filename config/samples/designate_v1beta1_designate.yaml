@@ -15,7 +15,6 @@ spec:
   designateAPI:
     replicas: 1
     containerImage: quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo
-    secret: osp-secret
   designateCentral:
     replicas: 1
     containerImage: quay.io/tripleowallabycentos9/openstack-designate-central:current-tripleo

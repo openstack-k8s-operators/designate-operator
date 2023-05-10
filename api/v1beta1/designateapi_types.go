@@ -48,7 +48,7 @@ type DesignateAPISpec struct {
 	// Secret containing RabbitMq transport URL
 	TransportURLSecret string `json:"transportURLSecret,omitempty"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// ServiceAccount - service account name used internally to provide Designate services the default SA name
 	ServiceAccount string `json:"serviceAccount"`
 }
