@@ -126,8 +126,7 @@ func Deployment(
 		},
 	}
 	deployment.Spec.Template.Spec.Volumes = designate.GetVolumes(
-		designate.GetOwningDesignateName(instance),
-		instance.Name)
+		designate.GetOwningDesignateName(instance))
 
 	// If possible two pods of the same service should not
 	// run on the same worker node. If this is not possible

@@ -523,6 +523,11 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	// - %-config configmap holding minimal designate config required to get the service up, user can add additional files to be added to the service
 	// - parameters which has passwords gets added from the OpenStack secret via the init container
 	//
+	r.Log.Info("pre generateConfigMap ....")
+	for i, _ := range configMapVars {
+		r.Log.Info(fmt.Sprintf("configMapVars: %s", i))
+	}
+
 	err = r.generateServiceConfigMaps(ctx, helper, instance, &configMapVars, serviceLabels)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -533,6 +538,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			err.Error()))
 		return ctrl.Result{}, err
 	}
+	r.Log.Info("post generateConfigMap ....")
 
 	//
 	// create hash over all the different input resources to identify if any those changed

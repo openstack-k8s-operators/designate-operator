@@ -15,5 +15,6 @@
 # under the License.
 set -ex
 
-designate-manage database upgrade head
+# designate-manage database upgrade head
+designate-manage database sync
 exit 0

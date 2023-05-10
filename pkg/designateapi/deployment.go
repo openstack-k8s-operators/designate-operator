@@ -25,7 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	//"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -42,38 +42,40 @@ func Deployment(
 ) *appsv1.Deployment {
 	runAsUser := int64(0)
 
-	livenessProbe := &corev1.Probe{
-		// TODO might need tuning
-		TimeoutSeconds:      5,
-		PeriodSeconds:       3,
-		InitialDelaySeconds: 5,
-	}
-	readinessProbe := &corev1.Probe{
-		// TODO might need tuning
-		TimeoutSeconds:      5,
-		PeriodSeconds:       5,
-		InitialDelaySeconds: 5,
-	}
+	/*
+		livenessProbe := &corev1.Probe{
+			// TODO might need tuning
+			TimeoutSeconds:      5,
+			PeriodSeconds:       3,
+			InitialDelaySeconds: 5,
+		}
+		readinessProbe := &corev1.Probe{
+			// TODO might need tuning
+			TimeoutSeconds:      5,
+			PeriodSeconds:       5,
+			InitialDelaySeconds: 5,
+		}
+	*/
 
 	args := []string{"-c"}
 	if instance.Spec.Debug.Service {
 		args = append(args, common.DebugCommand)
-		livenessProbe.Exec = &corev1.ExecAction{
-			Command: []string{
-				"/bin/true",
-			},
-		}
-		readinessProbe.Exec = livenessProbe.Exec
+		//livenessProbe.Exec = &corev1.ExecAction{
+		//	Command: []string{
+		//		"/bin/true",
+		//	},
+		//}
+		//readinessProbe.Exec = livenessProbe.Exec
 	} else {
 		args = append(args, ServiceCommand)
 		//
 		// https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 		//
-		livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-			Path: "/healthcheck",
-			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(designate.DesignatePublicPort)},
-		}
-		readinessProbe.HTTPGet = livenessProbe.HTTPGet
+		//livenessProbe.HTTPGet = &corev1.HTTPGetAction{
+		//Path: "/healthcheck",
+		//Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(designate.DesignatePublicPort)},
+		//}
+		//readinessProbe.HTTPGet = livenessProbe.HTTPGet
 	}
 
 	envVars := map[string]env.Setter{}
@@ -99,12 +101,12 @@ func Deployment(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.Spec.ServiceAccount,
-					Volumes: designate.GetOpenstackVolumes(
-						designate.GetServiceConfigConfigMapName(instance.Name),
-					),
 					Containers: []corev1.Container{
 						{
 							Name: designate.ServiceName + "-api",
+							//Command: []string{
+							//"/bin/sleep", "600000",
+							//},
 							Command: []string{
 								"/bin/bash",
 							},
@@ -113,11 +115,11 @@ func Deployment(
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &runAsUser,
 							},
-							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:   designate.GetAllVolumeMounts(),
-							Resources:      instance.Spec.Resources,
-							ReadinessProbe: readinessProbe,
-							LivenessProbe:  livenessProbe,
+							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts: designate.GetAllVolumeMounts(),
+							Resources:    instance.Spec.Resources,
+							//ReadinessProbe: readinessProbe,
+							//LivenessProbe:  livenessProbe,
 						},
 					},
 					NodeSelector: instance.Spec.NodeSelector,
@@ -126,8 +128,7 @@ func Deployment(
 		},
 	}
 	deployment.Spec.Template.Spec.Volumes = designate.GetVolumes(
-		designate.GetOwningDesignateName(instance),
-		instance.Name)
+		designate.GetOwningDesignateName(instance))
 
 	// If possible two pods of the same service should not
 	// run on the same worker node. If this is not possible
@@ -152,7 +153,7 @@ func Deployment(
 		TransportURLSecret:   instance.Spec.TransportURLSecret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		VolumeMounts:         designate.GetAllVolumeMounts(),
+		VolumeMounts:         designate.GetInitVolumeMounts(),
 		Debug:                instance.Spec.Debug.InitContainer,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)

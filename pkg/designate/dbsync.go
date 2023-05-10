@@ -26,7 +26,7 @@ import (
 
 const (
 	// DBSyncCommand -
-	DBSyncCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
+	DBSyncCommand = "/usr/local/bin/kolla_start"
 )
 
 // DbSyncJob func
