@@ -206,8 +206,8 @@ github.com/konsorten/go-windows-terminal-sequences v1.0.3/go.mod h1:T0+1ngSBFLxv
 github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515/go.mod h1:+0opPa2QZZtGFBFZlji/RkVcI2GknAs/DXo4wKdlNEc=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pretty v0.2.0/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
-github.com/kr/pretty v0.2.1 h1:Fmg33tUaq4/8ym9TJN1x7sLJnHVwhP33CNkpYV/7rwI=
 github.com/kr/pretty v0.2.1/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
+github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
@@ -238,12 +238,14 @@ github.com/openstack-k8s-operators/infra-operator/apis v0.0.0-20230420195930-f71
 github.com/openstack-k8s-operators/infra-operator/apis v0.0.0-20230420195930-f71e24e80596/go.mod h1:L6qvm+1R4HfEJO3Dn8ftTnDqP/QpSQzpNzd3+mapR/Y=
 github.com/openstack-k8s-operators/keystone-operator/api v0.0.0-20230208150008-87df8c2f32cb h1:2liBXr5C9LaAM1e/CQWNY7PRwDVnPp3df9Q8lvVv5BI=
 github.com/openstack-k8s-operators/keystone-operator/api v0.0.0-20230208150008-87df8c2f32cb/go.mod h1:gr1gxe+nRHt1UNzc7D5jTXN6auvufTzhqdVsubQsLDc=
-github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230425053514-21f91c966010 h1:wBdbDUd90qcecbpVCpyBsBVPz14aBDAzE77tL3/xtkE=
-github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230425053514-21f91c966010/go.mod h1:jDSW6narykfQyBtGTx6Kb6ZfTZgfzlyn/hF2zFs6sAs=
+github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230510145530-3c8e9179fb6e h1:svid3nTQbL4IoVwVmh56wroJXDjSnWTaKjNW1tlHxCY=
+github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230510145530-3c8e9179fb6e/go.mod h1:qO1YjgynYksN3GYFrIcrwvAwws22zCzYmn0kOYBn1/A=
 github.com/openstack-k8s-operators/lib-common/modules/database v0.0.0-20221201135101-4ec1006d9216 h1:0ibeJwfy8FAwWD4Uj/GYj3KOV1kkzMng3Omb8umJjr4=
 github.com/openstack-k8s-operators/lib-common/modules/database v0.0.0-20221201135101-4ec1006d9216/go.mod h1:rONM/XgvFs6putDIxRHNv9/CTGh2afAvJM5wRP2OywY=
 github.com/openstack-k8s-operators/lib-common/modules/openstack v0.0.0-20230208113903-f7b52e2a2ccb h1:J4/Q3K0zkdUwtTRcXaxvoMK+ZgggxVtNjzEvqBu/siQ=
 github.com/openstack-k8s-operators/lib-common/modules/openstack v0.0.0-20230208113903-f7b52e2a2ccb/go.mod h1:9tj29SmyP9izLIEKj5E44F7M7a82UwcPdIufc3MQpcY=
+github.com/openstack-k8s-operators/lib-common/modules/storage v0.0.0-20230516091855-e51abe875764 h1:xW9La4502jnzug7eKQpBpTnb9MJf+z+yxVNr2Tk2aks=
+github.com/openstack-k8s-operators/lib-common/modules/storage v0.0.0-20230516091855-e51abe875764/go.mod h1:gLzjST/ZueiY9Md6vEm+KC6ltBBSZWWg2s7zY1mHrEE=
 github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-20221128124656-71e59ad7384d h1:VPCf4ZO4k3zyE9xscKx5Q8dQNxzaIJMVRHORjCWvDZY=
 github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-20221128124656-71e59ad7384d/go.mod h1:HiEKXmDSJ6Gl+pN7kK5CX1sgOjrxybux4Ob5pdUim1M=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
@@ -280,6 +282,7 @@ github.com/prometheus/procfs v0.8.0 h1:ODq8ZFEaYeCaZOJlZZdJA2AbQR98dSHSM1KW/You5
 github.com/prometheus/procfs v0.8.0/go.mod h1:z7EfXMXOkbkqb9IINtpCn86r/to3BnA0uaxHdg830/4=
 github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
+github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrfsX/uA88=

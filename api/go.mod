@@ -3,24 +3,17 @@ module github.com/openstack-k8s-operators/designate-operator/api
 go 1.19
 
 require (
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230425053514-21f91c966010
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230510145530-3c8e9179fb6e
+	github.com/openstack-k8s-operators/lib-common/modules/storage v0.0.0-20230516091855-e51abe875764
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
 	sigs.k8s.io/controller-runtime v0.14.6
 )
 
 require (
-	github.com/onsi/ginkgo/v2 v2.9.2 // indirect
-	github.com/onsi/gomega v1.27.6 // indirect
-	github.com/stretchr/testify v1.8.1 // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
-)
-
-require (
 	github.com/go-logr/logr v1.2.4 // indirect; indirect // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect

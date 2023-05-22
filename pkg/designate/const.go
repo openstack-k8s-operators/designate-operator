@@ -16,25 +16,19 @@ limitations under the License.
 package designate
 
 const (
-	// ServiceNameV3 -
-	ServiceNameV3 = "designatev3"
-	// ServiceTypeV3 -
-	ServiceTypeV3 = "network-dns-v3"
+	// ServiceType -
+	ServiceType = "dns"
 	// ServiceName -
 	ServiceName = "designate"
-	// ServiceType -
-	ServiceType = "network-dns"
-	// ServiceAccount -
-	ServiceAccount = "designate-operator-designate"
 	// DatabaseName -
 	DatabaseName = "designate"
 
 	// DesignateAdminPort -
-	DesignateAdminPort int32 = 9611
+	DesignateAdminPort int32 = 9001
 	// DesignatePublicPort -
-	DesignatePublicPort int32 = 9611
+	DesignatePublicPort int32 = 9001
 	// DesignateInternalPort -
-	DesignateInternalPort int32 = 9611
+	DesignateInternalPort int32 = 9001
 
 	// KollaDbSyncConfig -
 	KollaDbSyncConfig = "/var/lib/config-data/merged/db-sync-config.json"

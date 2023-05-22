@@ -84,9 +84,9 @@ type DesignateAPIReconciler struct {
 var (
 	keystoneServices = []map[string]string{
 		{
-			"type": designate.ServiceTypeV3,
-			"name": designate.ServiceNameV3,
-			"desc": "Designate V3 Service",
+			"type": designate.ServiceType,
+			"name": designate.ServiceName,
+			"desc": "Designate Service",
 		},
 	}
 )
@@ -353,20 +353,20 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	// expose the service (create service, route and return the created endpoint URLs)
 	//
 
-	// V3
+	// Endpoint
 	publicEndpointData := endpoint.Data{
 		Port: designate.DesignatePublicPort,
-		Path: "/v3",
+		Path: "/",
 	}
 	internalEndpointData := endpoint.Data{
 		Port: designate.DesignateInternalPort,
-		Path: "/v3",
+		Path: "/",
 	}
 	data := map[endpoint.Endpoint]endpoint.Data{
 		endpoint.EndpointPublic:   publicEndpointData,
 		endpoint.EndpointInternal: internalEndpointData,
 	}
-	apiEndpointsV3, ctrlResult, err := endpoint.ExposeEndpoints(
+	apiEndpoints, ctrlResult, err := endpoint.ExposeEndpoints(
 		ctx,
 		helper,
 		designate.ServiceName,
@@ -399,8 +399,8 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		instance.Status.APIEndpoints = map[string]map[string]string{}
 	}
 
-	instance.Status.APIEndpoints[designate.ServiceNameV3] = apiEndpointsV3
-	// V3 - end
+	instance.Status.APIEndpoints[designate.ServiceName] = apiEndpoints
+	// Endpoint - end
 
 	instance.Status.Conditions.MarkTrue(condition.ExposeServiceReadyCondition, condition.ExposeServiceReadyMessage)
 

@@ -98,7 +98,7 @@ func Deployment(
 					Labels:      labels,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: designate.ServiceAccount,
+					ServiceAccountName: instance.Spec.ServiceAccount,
 					Volumes: designate.GetOpenstackVolumes(
 						designate.GetServiceConfigConfigMapName(instance.Name),
 					),
@@ -125,7 +125,8 @@ func Deployment(
 			},
 		},
 	}
-	deployment.Spec.Template.Spec.Volumes = designate.GetVolumes(designate.GetOwningDesignateName(instance), instance.Name)
+	deployment.Spec.Template.Spec.Volumes = designate.GetVolumes(
+		designate.GetOwningDesignateName(instance))
 
 	// If possible two pods of the same service should not
 	// run on the same worker node. If this is not possible
