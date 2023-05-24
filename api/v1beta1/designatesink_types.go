@@ -75,7 +75,7 @@ type DesignateSinkStatus struct {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
-// DesignateSink is the Schema for the designatecentrals
+// DesignateSink is the Schema for the designatesink
 type DesignateSink struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

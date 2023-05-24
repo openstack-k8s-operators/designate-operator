@@ -57,7 +57,7 @@ type DesignateMdnsSpec struct {
 
 // DesignateMdnsStatus defines the observed state of DesignateMdns
 type DesignateMdnsStatus struct {
-	// ReadyCount of designate central instances
+	// ReadyCount of designate MDNS instances
 	ReadyCount int32 `json:"readyCount,omitempty"`
 
 	// Map of hashes to track e.g. job status
@@ -75,7 +75,7 @@ type DesignateMdnsStatus struct {
 // +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
 // +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
-// DesignateMdns is the Schema for the designatecentrals
+// DesignateMdns is the Schema for the designatemdns
 type DesignateMdns struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

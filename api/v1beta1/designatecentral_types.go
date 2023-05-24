@@ -66,8 +66,8 @@ type DesignateCentralStatus struct {
 	// Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
 
-	// ServiceID - the ID of the registered service in keystone
-	ServiceID string `json:"serviceID,omitempty"`
+	// NetworkAttachments status of the deployment pods
+	NetworkAttachments map[string][]string `json:"networkAttachments,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -76,7 +76,7 @@ type DesignateCentralStatus struct {
 //+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
 //+kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
-// DesignateCentral is the Schema for the designatecentrals
+// DesignateCentral is the Schema for the designatecentral
 type DesignateCentral struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
