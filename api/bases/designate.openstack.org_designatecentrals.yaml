@@ -31,7 +31,7 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: DesignateCentral is the Schema for the designatecentrals
+        description: DesignateCentral is the Schema for the designatecentral
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -254,13 +254,17 @@ spec:
                   type: string
                 description: Map of hashes to track e.g. job status
                 type: object
+              networkAttachments:
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                description: NetworkAttachments status of the deployment pods
+                type: object
               readyCount:
                 description: ReadyCount of designate central instances
                 format: int32
                 type: integer
-              serviceID:
-                description: ServiceID - the ID of the registered service in keystone
-                type: string
             type: object
         type: object
     served: true

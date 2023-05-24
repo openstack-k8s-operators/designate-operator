@@ -6,5 +6,4 @@ resources:
 - designate_v1beta1_designateproducer.yaml
 - designate_v1beta1_designateworker.yaml
 - designate_v1beta1_designatemdns.yaml
-- designate_v1beta1_designatesink.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

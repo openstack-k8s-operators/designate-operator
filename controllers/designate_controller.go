@@ -622,6 +622,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	//
 	// normal reconcile tasks
 	//
+	r.Log.Info("Reconcile tasks starting....")
 
 	// deploy designate-api
 	designateAPI, op, err := r.apiDeploymentCreateOrUpdate(ctx, instance)
@@ -648,6 +649,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
+	r.Log.Info("Deployment API task reconciled")
 
 	// TODO: These will not work without rabbit yet
 	// deploy designate-central
@@ -673,30 +675,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
-
-	// deploy designate-sink
-	designateSink, op, err := r.sinkDeploymentCreateOrUpdate(ctx, instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateSinkReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateSinkReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
-	}
-
-	// Mirror DesignateSink status' ReadyCount to this parent CR
-	instance.Status.DesignateSinkReadyCount = designateSink.Status.ReadyCount
-
-	// Mirror DesignateSink's condition status
-	c = designateSink.Status.Conditions.Mirror(designatev1beta1.DesignateSinkReadyCondition)
-	if c != nil {
-		instance.Status.Conditions.Set(c)
-	}
+	r.Log.Info("Deployment Central task reconciled")
 
 	// deploy designate-worker
 	designateWorker, op, err := r.workerDeploymentCreateOrUpdate(ctx, instance)
@@ -721,6 +700,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
+	r.Log.Info("Deployment Worker task reconciled")
 
 	// deploy designate-mdns
 	designateMdns, op, err := r.mdnsDeploymentCreateOrUpdate(ctx, instance)
@@ -745,6 +725,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
+	r.Log.Info("Deployment Mdns task reconciled")
 
 	// deploy designate-agent
 	designateAgent, op, err := r.agentDeploymentCreateOrUpdate(ctx, instance)
@@ -769,6 +750,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
+	r.Log.Info("Deployment Agent task reconciled")
 
 	// deploy designate-producer
 	designateProducer, op, err := r.producerDeploymentCreateOrUpdate(ctx, instance)
@@ -793,6 +775,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
+	r.Log.Info("Deployment Producer task reconciled")
 
 	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' successfully", instance.Name))
 	return ctrl.Result{}, nil

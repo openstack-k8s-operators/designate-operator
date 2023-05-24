@@ -130,26 +130,16 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateAPI")
 		os.Exit(1)
 	}
+	if err = (&controllers.DesignateCentralReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Kclient: kclient,
+		Log:     ctrl.Log.WithName("controllers").WithName("DesignateCentral"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DesignateCentral")
+		os.Exit(1)
+	}
 	/*
-		if err = (&controllers.DesignateCentralReconciler{
-			Client:  mgr.GetClient(),
-			Scheme:  mgr.GetScheme(),
-			Kclient: kclient,
-			Log:     ctrl.Log.WithName("controllers").WithName("DesignateCentral"),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "DesignateCentral")
-			os.Exit(1)
-		}
-
-		if err = (&controllers.DesignateSinkReconciler{
-			Client:  mgr.GetClient(),
-			Scheme:  mgr.GetScheme(),
-			Kclient: kclient,
-			Log:     ctrl.Log.WithName("controllers").WithName("DesignateSink"),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "DesignateSink")
-			os.Exit(1)
-		}
 
 		if err = (&controllers.DesignateWorkReconciler{
 			Client:  mgr.GetClient(),
