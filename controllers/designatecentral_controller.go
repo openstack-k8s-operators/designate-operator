@@ -332,6 +332,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	//
 
 	parentDesignateName := designate.GetOwningDesignateName(instance)
+	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' init: parent name: %s", instance.Name, parentDesignateName))
 
 	configMaps := []string{
 		fmt.Sprintf("%s-scripts", parentDesignateName),     //ScriptsConfigMap
@@ -598,7 +599,7 @@ func (r *DesignateCentralReconciler) generateServiceConfigMaps(
 	serviceLabels map[string]string,
 ) error {
 	//
-	// create custom Configmap for designate-api-specific config input
+	// create custom Configmap for designate-central-specific config input
 	// - %-config-data configmap holding custom config for the service's designate.conf
 	//
 
