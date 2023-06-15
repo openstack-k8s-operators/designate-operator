@@ -44,25 +44,10 @@ const (
 // InitContainer - init container for designate api pods
 func InitContainer(init APIDetails) []corev1.Container {
 	runAsUser := int64(0)
-	trueVar := true
 
-	securityContext := &corev1.SecurityContext{
-		RunAsUser: &runAsUser,
-	}
-
-	if init.Privileged {
-		securityContext.Privileged = &trueVar
-	}
-
-	args := []string{"-c"}
-
-	if init.Debug {
-		args = append(
-			args,
-			"touch /tmp/stop-init-container && while [ -f  /tmp/stop-init-container ]; do sleep 5; done",
-		)
-	} else {
-		args = append(args, InitContainerCommand)
+	args := []string{
+		"-c",
+		InitContainerCommand,
 	}
 
 	envVars := map[string]env.Setter{}
@@ -83,7 +68,7 @@ func InitContainer(init APIDetails) []corev1.Container {
 			},
 		},
 		{
-			Name: "DesignatePassword",
+			Name: "AdminPassword",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -93,19 +78,7 @@ func InitContainer(init APIDetails) []corev1.Container {
 				},
 			},
 		},
-		// {
-		// 	Name: "AdminPassword",
-		// 	ValueFrom: &corev1.EnvVarSource{
-		// 		SecretKeyRef: &corev1.SecretKeySelector{
-		// 			LocalObjectReference: corev1.LocalObjectReference{
-		// 				Name: init.OSPSecret,
-		// 			},
-		// 			Key: init.UserPasswordSelector,
-		// 		},
-		// 	},
-		// },
 	}
-
 	if init.TransportURLSecret != "" {
 		envTransport := corev1.EnvVar{
 			Name: "TransportURL",
@@ -125,15 +98,17 @@ func InitContainer(init APIDetails) []corev1.Container {
 
 	return []corev1.Container{
 		{
-			Name:            "init",
-			Image:           init.ContainerImage,
-			SecurityContext: securityContext,
+			Name:  "init",
+			Image: init.ContainerImage,
+			SecurityContext: &corev1.SecurityContext{
+				RunAsUser: &runAsUser,
+			},
 			Command: []string{
 				"/bin/bash",
 			},
 			Args:         args,
 			Env:          envs,
-			VolumeMounts: init.VolumeMounts,
+			VolumeMounts: getInitVolumeMounts(),
 		},
 	}
 }

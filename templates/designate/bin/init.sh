@@ -25,6 +25,7 @@ export DBUSER=${DatabaseUser:?"Please specify a DatabaseUser variable."}
 export DBPASSWORD=${DatabasePassword:?"Please specify a DatabasePassword variable."}
 export DB=${DatabaseName:-"designate"}
 export TRANSPORTURL=${TransportURL:-""}
+export BACKENDURL=${BackendURL:-"redis://redis:6379/"}
 
 SVC_CFG=/etc/designate/designate.conf
 SVC_CFG_MERGED=/var/lib/config-data/merged/designate.conf
@@ -47,6 +48,9 @@ crudini --set ${SVC_CFG_MERGED} storage:sqlalchemy connection mysql+pymysql://ro
 crudini --set ${SVC_CFG_MERGED} keystone_authtoken password $PASSWORD
 if [ -n "$TRANSPORTURL" ]; then
     crudini --set ${SVC_CFG_MERGED} DEFAULT transport_url $TRANSPORTURL
+fi
+if [ -n "$BACKENDURL" ]; then
+    crudini --set ${SVC_CFG_MERGED} coordination backend_url $BACKENDURL
 fi
 
 # NOTE:dkehn - REMOVED because Kolla_set & start copy eveyrthing.

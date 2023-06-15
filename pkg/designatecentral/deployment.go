@@ -25,7 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//"k8s.io/apimachinery/pkg/util/intstr"
+	// "k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -43,52 +43,49 @@ func Deployment(
 	rootUser := int64(0)
 	// Designate's uid and gid magic numbers come from the 'designate-user' in
 	// https://github.com/openstack/kolla/blob/master/kolla/common/users.py
-	//designateUser := int64(42411)
-	//designateGroup := int64(42411)
-	/*
-		livenessProbe := &corev1.Probe{
-			// TODO might need tuning
-			TimeoutSeconds:      5,
-			PeriodSeconds:       3,
-			InitialDelaySeconds: 3,
-		}
-		startupProbe := &corev1.Probe{
-			// TODO might need tuning
-			TimeoutSeconds:      5,
-			FailureThreshold:    12,
-			PeriodSeconds:       5,
-			InitialDelaySeconds: 5,
-		}
-	*/
+	// designateUser := int64(42411)
+	// designateGroup := int64(42411)
+
+	// livenessProbe := &corev1.Probe{
+	// 	// TODO might need tuning
+	// 	TimeoutSeconds:      5,
+	// 	PeriodSeconds:       3,
+	// 	InitialDelaySeconds: 3,
+	// }
+	// startupProbe := &corev1.Probe{
+	// 	// TODO might need tuning
+	// 	TimeoutSeconds:      5,
+	// 	FailureThreshold:    12,
+	// 	PeriodSeconds:       5,
+	// 	InitialDelaySeconds: 5,
+	// }
 	args := []string{"-c"}
-	//var probeCommand []string
+	// var probeCommand []string
 	if instance.Spec.Debug.Service {
 		args = append(args, common.DebugCommand)
-		/*		livenessProbe.Exec = &corev1.ExecAction{
-					Command: []string{
-						"/bin/true",
-					},
-				}
-				startupProbe.Exec = livenessProbe.Exec
-				probeCommand = []string{
-					"/bin/sleep", "infinity",
-				}
-		*/
+		// livenessProbe.Exec = &corev1.ExecAction{
+		// 	Command: []string{
+		// 		"/bin/true",
+		// 	},
+		// }
+		// startupProbe.Exec = livenessProbe.Exec
+		// probeCommand = []string{
+		// 	"/bin/sleep", "infinity",
+		// }
 	} else {
 		args = append(args, ServiceCommand)
-		/*		livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-					Port: intstr.FromInt(8080),
-				}
-				startupProbe.HTTPGet = livenessProbe.HTTPGet
-				// Probe doesn't run kolla_set_configs because it uses the 'cinder' uid
-				// and gid and doesn't have permissions to make files be owned by root,
-				// so cinder.conf is in its original location
-				probeCommand = []string{
-					"/usr/local/bin/container-scripts/healthcheck.py",
-					"scheduler",
-					"/var/lib/config-data/merged/cinder.conf.d",
-				}
-		*/
+		// livenessProbe.HTTPGet = &corev1.HTTPGetAction{
+		// 	Port: intstr.FromInt(8080),
+		// }
+		// startupProbe.HTTPGet = livenessProbe.HTTPGet
+		// // Probe doesn't run kolla_set_configs because it uses the 'designate' uid
+		// // and gid and doesn't have permissions to make files be owned by root,
+		// // so designate.conf is in its original location
+		// probeCommand = []string{
+		// 	"/usr/local/bin/container-scripts/healthcheck.py",
+		// 	"scheduler",
+		// 	"/var/lib/config-data/merged/designate.conf",
+		// }
 	}
 
 	envVars := map[string]env.Setter{}
@@ -122,10 +119,13 @@ func Deployment(
 					Containers: []corev1.Container{
 						{
 							Name: designate.ServiceName + "-central",
+							// Command: []string{
+							// 	"/bin/sleep", "60000",
+							// },
 							Command: []string{
-								"/bin/sleep", "60000",
+								"/bin/bash",
 							},
-							//Args:  args,
+							Args:  args,
 							Image: instance.Spec.ContainerImage,
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &rootUser,
@@ -136,17 +136,16 @@ func Deployment(
 							// StartupProbe:  startupProbe,
 							// LivenessProbe: livenessProbe,
 						},
-						/*{
-							Name:    "probe",
-							Command: probeCommand,
-							Image:   instance.Spec.ContainerImage,
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser:  &designateUser,
-								RunAsGroup: &designateGroup,
-							},
-							VolumeMounts: volumeMounts,
-						},
-						*/
+						// {
+						// 	Name:    "probe",
+						// 	Command: probeCommand,
+						// 	Image:   instance.Spec.ContainerImage,
+						// 	SecurityContext: &corev1.SecurityContext{
+						// 		RunAsUser:  &designateUser,
+						// 		RunAsGroup: &designateGroup,
+						// 	},
+						// 	VolumeMounts: volumeMounts,
+						// },
 					},
 					NodeSelector: instance.Spec.NodeSelector,
 				},
