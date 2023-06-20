@@ -39,8 +39,8 @@ type DesignateCentralSpec struct {
 	// Common input parameters for all Designate services
 	DesignateTemplate `json:",inline"`
 
-	// Input parameters for the Designate Scheduler service
-	DesignateAgentTemplate `json:",inline"`
+	// Input parameters for the Designate Central service
+	DesignateCentralTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname

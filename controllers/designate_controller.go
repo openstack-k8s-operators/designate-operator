@@ -651,7 +651,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	r.Log.Info("Deployment API task reconciled")
 
-	// TODO: These will not work without rabbit yet
 	// deploy designate-central
 	designateCentral, op, err := r.centralDeploymentCreateOrUpdate(ctx, instance)
 	if err != nil {
