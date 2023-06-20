@@ -1,0 +1,11 @@
+{
+  "command": "/usr/bin/designate-producer --config-dir /etc/designate/designate.conf",
+  "config_files": [
+    {
+      "source": "/var/lib/config-data/merged/designate.conf",
+      "dest": "/etc/designate/designate.conf",
+      "owner": "root:designate",
+      "perm": "0750"
+    }
+  ]
+}

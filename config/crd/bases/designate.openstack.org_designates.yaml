@@ -498,7 +498,7 @@ spec:
                     type: object
                   replicas:
                     default: 1
-                    description: Replicas - Designate Agent Replicas
+                    description: Replicas - Designate Central Replicas
                     format: int32
                     type: integer
                   resources:
