@@ -92,15 +92,22 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis/finalizers,verbs=update
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateschedulers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateschedulers/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateschedulers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackups,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackups/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackups/finalizers,verbs=update
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatevolumes,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatevolumes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatevolumes/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentral,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentral/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentral/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducer,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducer/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducer/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateagent,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateagent/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateagent/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworker,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworker/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworker/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdns,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdns/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdns/finalizers,verbs=update
+
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
@@ -179,7 +186,7 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateAPIReadyCondition, condition.InitReason, designatev1beta1.DesignateAPIReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateCentralReadyCondition, condition.InitReason, designatev1beta1.DesignateCentralReadyInitMessage),
-			condition.UnknownCondition(designatev1beta1.DesignateSinkReadyCondition, condition.InitReason, designatev1beta1.DesignateSinkReadyInitMessage),
+			// condition.UnknownCondition(designatev1beta1.DesignateSinkReadyCondition, condition.InitReason, designatev1beta1.DesignateSinkReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateWorkerReadyCondition, condition.InitReason, designatev1beta1.DesignateWorkerReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
@@ -265,7 +272,7 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&mariadbv1.MariaDBDatabase{}).
 		Owns(&designatev1beta1.DesignateAPI{}).
 		Owns(&designatev1beta1.DesignateCentral{}).
-		Owns(&designatev1beta1.DesignateSink{}).
+		// Owns(&designatev1beta1.DesignateSink{}).
 		Owns(&designatev1beta1.DesignateWorker{}).
 		Owns(&designatev1beta1.DesignateMdns{}).
 		Owns(&designatev1beta1.DesignateProducer{}).
@@ -524,9 +531,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	// - parameters which has passwords gets added from the OpenStack secret via the init container
 	//
 	r.Log.Info("pre generateConfigMap ....")
-	for i, _ := range configMapVars {
-		r.Log.Info(fmt.Sprintf("configMapVars: %s", i))
-	}
 
 	err = r.generateServiceConfigMaps(ctx, helper, instance, &configMapVars, serviceLabels)
 	if err != nil {
@@ -982,38 +986,38 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 	return deployment, op, err
 }
 
-func (r *DesignateReconciler) sinkDeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateSink, controllerutil.OperationResult, error) {
-	deployment := &designatev1beta1.DesignateSink{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-sink", instance.Name),
-			Namespace: instance.Namespace,
-		},
-	}
+// func (r *DesignateReconciler) sinkDeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateSink, controllerutil.OperationResult, error) {
+// 	deployment := &designatev1beta1.DesignateSink{
+// 		ObjectMeta: metav1.ObjectMeta{
+// 			Name:      fmt.Sprintf("%s-sink", instance.Name),
+// 			Namespace: instance.Namespace,
+// 		},
+// 	}
 
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateSink
-		// Add in transfers from umbrella Designate CR (this instance) spec
-		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
-		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
-		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
-		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
+// 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
+// 		deployment.Spec = instance.Spec.DesignateSink
+// 		// Add in transfers from umbrella Designate CR (this instance) spec
+// 		// TODO: Add logic to determine when to set/overwrite, etc
+// 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
+// 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
+// 		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
+// 		deployment.Spec.Secret = instance.Spec.Secret
+// 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
+// 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
+// 		if len(deployment.Spec.NodeSelector) == 0 {
+// 			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
+// 		}
 
-		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
-		if err != nil {
-			return err
-		}
+// 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
+// 		if err != nil {
+// 			return err
+// 		}
 
-		return nil
-	})
+// 		return nil
+// 	})
 
-	return deployment, op, err
-}
+// 	return deployment, op, err
+// }
 
 func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateWorker, controllerutil.OperationResult, error) {
 	deployment := &designatev1beta1.DesignateWorker{

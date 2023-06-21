@@ -97,6 +97,32 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
+  - designateagent
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateagent/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateagent/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
   - designateapis
   verbs:
   - create
@@ -123,7 +149,7 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designatebackups
+  - designatecentral
   verbs:
   - create
   - delete
@@ -135,13 +161,13 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designatebackups/finalizers
+  - designatecentral/finalizers
   verbs:
   - update
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designatebackups/status
+  - designatecentral/status
   verbs:
   - get
   - patch
@@ -175,6 +201,84 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
+  - designatemdns
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designatemdns/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designatemdns/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateproducer
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateproducer/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateproducer/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateproducers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateproducers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateproducers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
   - designates
   verbs:
   - create
@@ -201,7 +305,7 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designateschedulers
+  - designateworker
   verbs:
   - create
   - delete
@@ -213,39 +317,13 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designateschedulers/finalizers
+  - designateworker/finalizers
   verbs:
   - update
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designateschedulers/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - designate.openstack.org
-  resources:
-  - designatevolumes
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - designate.openstack.org
-  resources:
-  - designatevolumes/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - designate.openstack.org
-  resources:
-  - designatevolumes/status
+  - designateworker/status
   verbs:
   - get
   - patch
