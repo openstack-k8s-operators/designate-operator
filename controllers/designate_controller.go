@@ -524,7 +524,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	// - parameters which has passwords gets added from the OpenStack secret via the init container
 	//
 	r.Log.Info("pre generateConfigMap ....")
-	for i, _ := range configMapVars {
+	for i := range configMapVars {
 		r.Log.Info(fmt.Sprintf("configMapVars: %s", i))
 	}
 
@@ -959,39 +959,6 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.Spec = instance.Spec.DesignateCentral
-		// Add in transfers from umbrella Designate CR (this instance) spec
-		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
-		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
-		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
-		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
-
-		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	return deployment, op, err
-}
-
-func (r *DesignateReconciler) sinkDeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateSink, controllerutil.OperationResult, error) {
-	deployment := &designatev1beta1.DesignateSink{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-sink", instance.Name),
-			Namespace: instance.Namespace,
-		},
-	}
-
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateSink
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
