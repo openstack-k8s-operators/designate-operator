@@ -114,15 +114,11 @@ type DesignateSpec struct {
 	// DesignateCentral - Spec definition for the Central service of this Designate deployment
 	DesignateCentral DesignateCentralSpec `json:"designateCentral"`
 
-	// +kubebuilder:validation:Required
-	// DesignateSink - Spec definition for the Sink service of this Designate deployment
-	DesignateSink DesignateSinkSpec `json:"designateSink"`
-
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// DesignateWorker - Spec definition for the Worker service of this Designate deployment
 	DesignateWorker DesignateWorkerSpec `json:"designateWorker"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// DesignateMdns - Spec definition for the Mdns service of this Designate deployment
 	DesignateMdns DesignateMdnsSpec `json:"designateMdns"`
 
@@ -130,7 +126,7 @@ type DesignateSpec struct {
 	// DesignateProducer - Spec definition for the Producer service of this Designate deployment
 	DesignateProducer DesignateProducerSpec `json:"designateProducer"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// DesignateAgent- Spec definition for the Agent service of this Designate deployment
 	DesignateAgent DesignateAgentSpec `json:"designateAgent"`
 }
@@ -160,9 +156,6 @@ type DesignateStatus struct {
 
 	// ReadyCount of Designate Central instance
 	DesignateCentralReadyCount int32 `json:"designateCentralReadyCount,omitempty"`
-
-	// ReadyCount of Designate Sink instance
-	DesignateSinkReadyCount int32 `json:"designateSinkReadyCount,omitempty"`
 
 	// ReadyCount of Designate Worker instance
 	DesignateWorkerReadyCount int32 `json:"designateWorkerReadyCount,omitempty"`
@@ -208,7 +201,6 @@ func init() {
 func (instance Designate) IsReady() bool {
 	return instance.Status.Conditions.IsTrue(DesignateAPIReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateCentralReadyCondition) &&
-		instance.Status.Conditions.IsTrue(DesignateSinkReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateWorkerReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateMdnsReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateAgentReadyCondition) &&
