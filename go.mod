@@ -4,15 +4,15 @@ go 1.19
 
 require (
 	github.com/go-logr/logr v1.2.4
-	github.com/onsi/ginkgo/v2 v2.9.2
-	github.com/onsi/gomega v1.27.6
+	github.com/onsi/ginkgo/v2 v2.11.0
+	github.com/onsi/gomega v1.27.8
 	github.com/openshift/api v3.9.0+incompatible
 	github.com/openstack-k8s-operators/designate-operator/api v0.0.0-00010101000000-000000000000
-	github.com/openstack-k8s-operators/infra-operator/apis v0.0.0-20230420195930-f71e24e80596
-	github.com/openstack-k8s-operators/keystone-operator/api v0.0.0-20230208150008-87df8c2f32cb
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230510145530-3c8e9179fb6e
-	github.com/openstack-k8s-operators/lib-common/modules/database v0.0.0-20221201135101-4ec1006d9216
-	github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-20221128124656-71e59ad7384d
+	github.com/openstack-k8s-operators/infra-operator/apis v0.0.0-20230626120108-3373a5ef951b
+	github.com/openstack-k8s-operators/keystone-operator/api v0.0.0-20230622141005-e9220a4b3dfe
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230626095153-3ee001a316f1
+	github.com/openstack-k8s-operators/lib-common/modules/database v0.0.0-20230626095153-3ee001a316f1
+	github.com/openstack-k8s-operators/mariadb-operator/api v0.0.0-20230602100742-579cb85d242d
 	go.uber.org/zap v1.24.0
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
@@ -50,8 +50,8 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.0.0-20230208113903-f7b52e2a2ccb // indirect
-	github.com/openstack-k8s-operators/lib-common/modules/storage v0.0.0-20230516091855-e51abe875764 // indirect
+	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.0.0-20230522113906-6f4206cbf317 // indirect
+	github.com/openstack-k8s-operators/lib-common/modules/storage v0.0.0-20230626095153-3ee001a316f1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.14.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
@@ -60,13 +60,13 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
-	golang.org/x/net v0.9.0 // indirect
+	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1 // indirect
-	golang.org/x/sys v0.7.0 // indirect
-	golang.org/x/term v0.7.0 // indirect
+	golang.org/x/sys v0.9.0 // indirect
+	golang.org/x/term v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.7.0 // indirect
+	golang.org/x/tools v0.9.3 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
