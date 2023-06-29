@@ -30,9 +30,6 @@ const (
 	// DesignateCentralReadyCondition Status=True condition which indicates if the DesignateCentral is configured and operational
 	DesignateCentralReadyCondition condition.Type = "DesignateCentralReady"
 
-	// DesignateSinkReadyCondition Status=True condition which indicates if the DesignateSink is configured and operational
-	DesignateSinkReadyCondition condition.Type = "DesignateSinkReady"
-
 	// DesignateWorkerReadyCondition Status=True condition which indicates if the DesignateWorker is configured and operational
 	DesignateWorkerReadyCondition condition.Type = "DesignateWorkerReady"
 
@@ -83,15 +80,6 @@ const (
 
 	// DesignateCentralReadyErrorMessage
 	DesignateCentralReadyErrorMessage = "DesignateCentral error occured %s"
-
-	//
-	// DesignateSinkReady condition messages
-	//
-	// DesignateSinkReadyInitMessage
-	DesignateSinkReadyInitMessage = "DesignateSink not started"
-
-	// DesignateSinkReadyErrorMessage
-	DesignateSinkReadyErrorMessage = "DesignateSink error occured %s"
 
 	//
 	// DesignateWorkerReady condition messages

@@ -21,9 +21,6 @@ spec:
   designateAgent:
     replicas: 1
     containerImage: quay.io/tripleowallabycentos9/openstack-designate-agent:current-tripleo
-  designateSink:
-    replicas: 1
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-sink:current-tripleo
   designateMdns:
     replicas: 1
     containerImage: quay.io/tripleowallabycentos9/openstack-designate-mdns:current-tripleo

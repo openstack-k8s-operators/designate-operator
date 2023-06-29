@@ -115,10 +115,6 @@ type DesignateSpec struct {
 	DesignateCentral DesignateCentralSpec `json:"designateCentral"`
 
 	// +kubebuilder:validation:Required
-	// DesignateSink - Spec definition for the Sink service of this Designate deployment
-	DesignateSink DesignateSinkSpec `json:"designateSink"`
-
-	// +kubebuilder:validation:Required
 	// DesignateWorker - Spec definition for the Worker service of this Designate deployment
 	DesignateWorker DesignateWorkerSpec `json:"designateWorker"`
 
@@ -160,9 +156,6 @@ type DesignateStatus struct {
 
 	// ReadyCount of Designate Central instance
 	DesignateCentralReadyCount int32 `json:"designateCentralReadyCount,omitempty"`
-
-	// ReadyCount of Designate Sink instance
-	DesignateSinkReadyCount int32 `json:"designateSinkReadyCount,omitempty"`
 
 	// ReadyCount of Designate Worker instance
 	DesignateWorkerReadyCount int32 `json:"designateWorkerReadyCount,omitempty"`
@@ -208,7 +201,6 @@ func init() {
 func (instance Designate) IsReady() bool {
 	return instance.Status.Conditions.IsTrue(DesignateAPIReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateCentralReadyCondition) &&
-		instance.Status.Conditions.IsTrue(DesignateSinkReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateWorkerReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateMdnsReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateAgentReadyCondition) &&

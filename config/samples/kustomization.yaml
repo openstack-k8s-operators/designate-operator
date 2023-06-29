@@ -5,7 +5,6 @@ resources:
 - designate_v1beta1_designateapi.yaml
 - designate_v1beta1_designatecentral.yaml
 - designate_v1beta1_designateproducer.yaml
-- designate_v1beta1_designatesink.yaml
 - designate_v1beta1_designateworker.yaml
 - designate_v1beta1_designatemdns.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
