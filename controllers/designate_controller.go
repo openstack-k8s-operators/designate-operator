@@ -186,7 +186,6 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateAPIReadyCondition, condition.InitReason, designatev1beta1.DesignateAPIReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateCentralReadyCondition, condition.InitReason, designatev1beta1.DesignateCentralReadyInitMessage),
-			// condition.UnknownCondition(designatev1beta1.DesignateSinkReadyCondition, condition.InitReason, designatev1beta1.DesignateSinkReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateWorkerReadyCondition, condition.InitReason, designatev1beta1.DesignateWorkerReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
@@ -272,7 +271,6 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&mariadbv1.MariaDBDatabase{}).
 		Owns(&designatev1beta1.DesignateAPI{}).
 		Owns(&designatev1beta1.DesignateCentral{}).
-		// Owns(&designatev1beta1.DesignateSink{}).
 		Owns(&designatev1beta1.DesignateWorker{}).
 		Owns(&designatev1beta1.DesignateMdns{}).
 		Owns(&designatev1beta1.DesignateProducer{}).
