@@ -139,6 +139,16 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateCentral")
 		os.Exit(1)
 	}
+	if err = (&controllers.DesignateProducerReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Kclient: kclient,
+		Log:     ctrl.Log.WithName("controllers").WithName("DesignateProducer"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DesignateProducer")
+		os.Exit(1)
+	}
+
 	/*
 
 		if err = (&controllers.DesignateWorkReconciler{
@@ -158,16 +168,6 @@ func main() {
 			Log:     ctrl.Log.WithName("controllers").WithName("DesignateMdns"),
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "DesignateMdns")
-			os.Exit(1)
-		}
-
-		if err = (&controllers.DesignateProducerReconciler{
-			Client:  mgr.GetClient(),
-			Scheme:  mgr.GetScheme(),
-			Kclient: kclient,
-			Log:     ctrl.Log.WithName("controllers").WithName("DesignateProducer"),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "DesignateProducer")
 			os.Exit(1)
 		}
 
