@@ -111,6 +111,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	// setup for all the reconcilers in the controllers
+	// desigante main controller
 	if err = (&controllers.DesignateReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -121,6 +123,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// desigante-api
 	if err = (&controllers.DesignateAPIReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -130,6 +133,8 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateAPI")
 		os.Exit(1)
 	}
+
+	// desigante-central
 	if err = (&controllers.DesignateCentralReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -139,6 +144,8 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateCentral")
 		os.Exit(1)
 	}
+
+	// desigante-producer
 	if err = (&controllers.DesignateProducerReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -149,18 +156,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// desigante-worker
+	if err = (&controllers.DesignateWorkerReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Kclient: kclient,
+		Log:     ctrl.Log.WithName("controllers").WithName("DesignateWork"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DesignateWork")
+		os.Exit(1)
+	}
 	/*
-
-		if err = (&controllers.DesignateWorkReconciler{
-			Client:  mgr.GetClient(),
-			Scheme:  mgr.GetScheme(),
-			Kclient: kclient,
-			Log:     ctrl.Log.WithName("controllers").WithName("DesignateWork"),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "DesignateWork")
-			os.Exit(1)
-		}
-
 		if err = (&controllers.DesignateMdnsReconciler{
 			Client:  mgr.GetClient(),
 			Scheme:  mgr.GetScheme(),

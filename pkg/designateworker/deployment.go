@@ -25,7 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	// "k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -40,46 +40,60 @@ func Deployment(
 	labels map[string]string,
 	annotations map[string]string,
 ) *appsv1.Deployment {
-	runAsUser := int64(0)
+	rootUser := int64(0)
+	// Designate's uid and gid magic numbers come from the 'designate-user' in
+	// https://github.com/openstack/kolla/blob/master/kolla/common/users.py
+	// designateUser := int64(42411)
+	// designateGroup := int64(42411)
 
-	livenessProbe := &corev1.Probe{
-		// TODO might need tuning
-		TimeoutSeconds:      5,
-		PeriodSeconds:       3,
-		InitialDelaySeconds: 5,
-	}
-	readinessProbe := &corev1.Probe{
-		// TODO might need tuning
-		TimeoutSeconds:      5,
-		PeriodSeconds:       5,
-		InitialDelaySeconds: 5,
-	}
-
+	// livenessProbe := &corev1.Probe{
+	// 	// TODO might need tuning
+	// 	TimeoutSeconds:      5,
+	// 	PeriodSeconds:       3,
+	// 	InitialDelaySeconds: 3,
+	// }
+	// startupProbe := &corev1.Probe{
+	// 	// TODO might need tuning
+	// 	TimeoutSeconds:      5,
+	// 	FailureThreshold:    12,
+	// 	PeriodSeconds:       5,
+	// 	InitialDelaySeconds: 5,
+	// }
 	args := []string{"-c"}
+	// var probeCommand []string
 	if instance.Spec.Debug.Service {
 		args = append(args, common.DebugCommand)
-		livenessProbe.Exec = &corev1.ExecAction{
-			Command: []string{
-				"/bin/true",
-			},
-		}
-		readinessProbe.Exec = livenessProbe.Exec
+		// livenessProbe.Exec = &corev1.ExecAction{
+		// 	Command: []string{
+		// 		"/bin/true",
+		// 	},
+		// }
+		// startupProbe.Exec = livenessProbe.Exec
+		// probeCommand = []string{
+		// 	"/bin/sleep", "infinity",
+		// }
 	} else {
 		args = append(args, ServiceCommand)
-		//
-		// https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-		//
-		livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-			Path: "/healthcheck",
-			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(designate.DesignatePublicPort)},
-		}
-		readinessProbe.HTTPGet = livenessProbe.HTTPGet
+		// livenessProbe.HTTPGet = &corev1.HTTPGetAction{
+		// 	Port: intstr.FromInt(8080),
+		// }
+		// startupProbe.HTTPGet = livenessProbe.HTTPGet
+		// // Probe doesn't run kolla_set_configs because it uses the 'designate' uid
+		// // and gid and doesn't have permissions to make files be owned by root,
+		// // so designate.conf is in its original location
+		// probeCommand = []string{
+		// 	"/usr/local/bin/container-scripts/healthcheck.py",
+		// 	"scheduler",
+		// 	"/var/lib/config-data/merged/designate.conf",
+		// }
 	}
 
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_FILE"] = env.SetValue(KollaConfig)
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
+
+	volumeMounts := designate.GetAllVolumeMounts()
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -105,20 +119,33 @@ func Deployment(
 					Containers: []corev1.Container{
 						{
 							Name: designate.ServiceName + "-worker",
+							// Command: []string{
+							// 	"/bin/sleep", "60000",
+							// },
 							Command: []string{
 								"/bin/bash",
 							},
 							Args:  args,
 							Image: instance.Spec.ContainerImage,
 							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: &runAsUser,
+								RunAsUser: &rootUser,
 							},
-							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:   designate.GetAllVolumeMounts(),
-							Resources:      instance.Spec.Resources,
-							ReadinessProbe: readinessProbe,
-							LivenessProbe:  livenessProbe,
+							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts: volumeMounts,
+							Resources:    instance.Spec.Resources,
+							// StartupProbe:  startupProbe,
+							// LivenessProbe: livenessProbe,
 						},
+						// {
+						// 	Name:    "probe",
+						// 	Command: probeCommand,
+						// 	Image:   instance.Spec.ContainerImage,
+						// 	SecurityContext: &corev1.SecurityContext{
+						// 		RunAsUser:  &designateUser,
+						// 		RunAsGroup: &designateGroup,
+						// 	},
+						// 	VolumeMounts: volumeMounts,
+						// },
 					},
 					NodeSelector: instance.Spec.NodeSelector,
 				},
