@@ -141,12 +141,6 @@ type DesignateStatus struct {
 	// TransportURLSecret - Secret containing RabbitMQ transportURL
 	TransportURLSecret string `json:"transportURLSecret,omitempty"`
 
-	// API endpoints
-	APIEndpoints map[string]map[string]string `json:"apiEndpoints,omitempty"`
-
-	// ServiceIDs
-	ServiceIDs map[string]string `json:"serviceIDs,omitempty"`
-
 	// ReadyCount of Designate API instance
 	DesignateAPIReadyCount int32 `json:"designateAPIReadyCount,omitempty"`
 

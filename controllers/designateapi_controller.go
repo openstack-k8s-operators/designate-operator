@@ -188,12 +188,6 @@ func (r *DesignateAPIReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if instance.Status.Hash == nil {
 		instance.Status.Hash = map[string]string{}
 	}
-	if instance.Status.APIEndpoints == nil {
-		instance.Status.APIEndpoints = map[string]map[string]string{}
-	}
-	if instance.Status.ServiceIDs == nil {
-		instance.Status.ServiceIDs = map[string]string{}
-	}
 	if instance.Status.NetworkAttachments == nil {
 		instance.Status.NetworkAttachments = map[string][]string{}
 	}
@@ -299,37 +293,34 @@ func (r *DesignateAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *DesignateAPIReconciler) reconcileDelete(ctx context.Context, instance *designatev1beta1.DesignateAPI, helper *helper.Helper) (ctrl.Result, error) {
 	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
 
-	// It's possible to get here before the endpoints have been set in the status, so check for this
-	if instance.Status.APIEndpoints != nil {
-		for _, ksSvc := range keystoneServices {
+	for _, ksSvc := range keystoneServices {
 
-			// Remove the finalizer from our KeystoneEndpoint CR
-			keystoneEndpoint, err := keystonev1.GetKeystoneEndpointWithName(ctx, helper, ksSvc["name"], instance.Namespace)
-			if err != nil && !k8s_errors.IsNotFound(err) {
+		// Remove the finalizer from our KeystoneEndpoint CR
+		keystoneEndpoint, err := keystonev1.GetKeystoneEndpointWithName(ctx, helper, ksSvc["name"], instance.Namespace)
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+
+		if err == nil {
+			controllerutil.RemoveFinalizer(keystoneEndpoint, helper.GetFinalizer())
+			if err = helper.GetClient().Update(ctx, keystoneEndpoint); err != nil && !k8s_errors.IsNotFound(err) {
 				return ctrl.Result{}, err
 			}
+			util.LogForObject(helper, "Removed finalizer from our KeystoneEndpoint", instance)
+		}
 
-			if err == nil {
-				controllerutil.RemoveFinalizer(keystoneEndpoint, helper.GetFinalizer())
-				if err = helper.GetClient().Update(ctx, keystoneEndpoint); err != nil && !k8s_errors.IsNotFound(err) {
-					return ctrl.Result{}, err
-				}
-				util.LogForObject(helper, "Removed finalizer from our KeystoneEndpoint", instance)
-			}
+		// Remove the finalizer from our KeystoneService CR
+		keystoneService, err := keystonev1.GetKeystoneServiceWithName(ctx, helper, ksSvc["name"], instance.Namespace)
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
 
-			// Remove the finalizer from our KeystoneService CR
-			keystoneService, err := keystonev1.GetKeystoneServiceWithName(ctx, helper, ksSvc["name"], instance.Namespace)
-			if err != nil && !k8s_errors.IsNotFound(err) {
+		if err == nil {
+			controllerutil.RemoveFinalizer(keystoneService, helper.GetFinalizer())
+			if err = helper.GetClient().Update(ctx, keystoneService); err != nil && !k8s_errors.IsNotFound(err) {
 				return ctrl.Result{}, err
 			}
-
-			if err == nil {
-				controllerutil.RemoveFinalizer(keystoneService, helper.GetFinalizer())
-				if err = helper.GetClient().Update(ctx, keystoneService); err != nil && !k8s_errors.IsNotFound(err) {
-					return ctrl.Result{}, err
-				}
-				util.LogForObject(helper, "Removed finalizer from our KeystoneService", instance)
-			}
+			util.LogForObject(helper, "Removed finalizer from our KeystoneService", instance)
 		}
 	}
 
@@ -391,15 +382,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		return ctrlResult, nil
 	}
 
-	//
-	// Update instance status with service endpoint url from route host information
-	//
-	// TODO: need to support https default here
-	if instance.Status.APIEndpoints == nil {
-		instance.Status.APIEndpoints = map[string]map[string]string{}
-	}
-
-	instance.Status.APIEndpoints[designate.ServiceName] = apiEndpoints
 	// Endpoint - end
 
 	instance.Status.Conditions.MarkTrue(condition.ExposeServiceReadyCondition, condition.ExposeServiceReadyMessage)
@@ -410,10 +392,6 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	// create service and user in keystone - - https://docs.openstack.org/Designate/latest/install/install-rdo.html#configure-user-and-endpoints
 	// TODO: rework this
 	//
-	if instance.Status.ServiceIDs == nil {
-		instance.Status.ServiceIDs = map[string]string{}
-	}
-
 	for _, ksSvc := range keystoneServices {
 		ksSvcSpec := keystonev1.KeystoneServiceSpec{
 			ServiceType:        ksSvc["type"],
@@ -442,11 +420,9 @@ func (r *DesignateAPIReconciler) reconcileInit(
 			return ctrlResult, nil
 		}
 
-		instance.Status.ServiceIDs[ksSvc["name"]] = ksSvcObj.GetServiceID()
-
 		ksEndptSpec := keystonev1.KeystoneEndpointSpec{
 			ServiceName: ksSvc["name"],
-			Endpoints:   instance.Status.APIEndpoints[ksSvc["name"]],
+			Endpoints:   apiEndpoints,
 		}
 
 		ksEndptObj := keystonev1.NewKeystoneEndpoint(

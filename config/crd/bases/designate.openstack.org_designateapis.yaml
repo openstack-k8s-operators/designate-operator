@@ -206,13 +206,6 @@ spec:
           status:
             description: DesignateAPIStatus defines the observed state of DesignateAPI
             properties:
-              apiEndpoint:
-                additionalProperties:
-                  additionalProperties:
-                    type: string
-                  type: object
-                description: API endpoint
-                type: object
               conditions:
                 description: Conditions
                 items:
@@ -272,11 +265,6 @@ spec:
                 description: ReadyCount of designate API instances
                 format: int32
                 type: integer
-              serviceIDs:
-                additionalProperties:
-                  type: string
-                description: ServiceIDs - the ID of the registered service in keystone
-                type: object
             type: object
         type: object
     served: true

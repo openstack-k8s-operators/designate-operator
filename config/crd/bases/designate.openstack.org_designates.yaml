@@ -995,13 +995,6 @@ spec:
           status:
             description: DesignateStatus defines the observed state of Designate
             properties:
-              apiEndpoints:
-                additionalProperties:
-                  additionalProperties:
-                    type: string
-                  type: object
-                description: API endpoints
-                type: object
               conditions:
                 description: Conditions
                 items:
@@ -1072,11 +1065,6 @@ spec:
                 additionalProperties:
                   type: string
                 description: Map of hashes to track e.g. job status
-                type: object
-              serviceIDs:
-                additionalProperties:
-                  type: string
-                description: ServiceIDs
                 type: object
               transportURLSecret:
                 description: TransportURLSecret - Secret containing RabbitMQ transportURL

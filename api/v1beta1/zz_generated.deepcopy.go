@@ -140,35 +140,11 @@ func (in *DesignateAPIStatus) DeepCopyInto(out *DesignateAPIStatus) {
 			(*out)[key] = val
 		}
 	}
-	if in.APIEndpoints != nil {
-		in, out := &in.APIEndpoints, &out.APIEndpoints
-		*out = make(map[string]map[string]string, len(*in))
-		for key, val := range *in {
-			var outVal map[string]string
-			if val == nil {
-				(*out)[key] = nil
-			} else {
-				in, out := &val, &outVal
-				*out = make(map[string]string, len(*in))
-				for key, val := range *in {
-					(*out)[key] = val
-				}
-			}
-			(*out)[key] = outVal
-		}
-	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make(condition.Conditions, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
-	if in.ServiceIDs != nil {
-		in, out := &in.ServiceIDs, &out.ServiceIDs
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
 		}
 	}
 	if in.NetworkAttachments != nil {
@@ -799,30 +775,6 @@ func (in *DesignateStatus) DeepCopyInto(out *DesignateStatus) {
 		*out = make(condition.Conditions, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
-	}
-	if in.APIEndpoints != nil {
-		in, out := &in.APIEndpoints, &out.APIEndpoints
-		*out = make(map[string]map[string]string, len(*in))
-		for key, val := range *in {
-			var outVal map[string]string
-			if val == nil {
-				(*out)[key] = nil
-			} else {
-				in, out := &val, &outVal
-				*out = make(map[string]string, len(*in))
-				for key, val := range *in {
-					(*out)[key] = val
-				}
-			}
-			(*out)[key] = outVal
-		}
-	}
-	if in.ServiceIDs != nil {
-		in, out := &in.ServiceIDs, &out.ServiceIDs
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
 		}
 	}
 }
