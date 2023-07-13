@@ -34,7 +34,7 @@ type DesignateCentralTemplate struct {
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// DesignateCentralSpec defines the desired state of DesignateAgent
+// DesignateCentralSpec defines the desired state of DesignateCentral
 type DesignateCentralSpec struct {
 	// Common input parameters for all Designate services
 	DesignateTemplate `json:",inline"`

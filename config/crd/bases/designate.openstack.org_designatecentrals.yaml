@@ -46,7 +46,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: DesignateCentralSpec defines the desired state of DesignateAgent
+            description: DesignateCentralSpec defines the desired state of DesignateCentral
             properties:
               containerImage:
                 description: ContainerImage - Designate Container Image URL (will

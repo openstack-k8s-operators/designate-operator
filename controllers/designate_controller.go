@@ -98,9 +98,6 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducers/finalizers,verbs=update
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateagents,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateagents/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateagents/finalizers,verbs=update
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworkers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworkers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworkers/finalizers,verbs=update
@@ -189,7 +186,6 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			condition.UnknownCondition(designatev1beta1.DesignateWorkerReadyCondition, condition.InitReason, designatev1beta1.DesignateWorkerReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
-			condition.UnknownCondition(designatev1beta1.DesignateAgentReadyCondition, condition.InitReason, designatev1beta1.DesignateAgentReadyInitMessage),
 			condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
 			condition.UnknownCondition(condition.NetworkAttachmentsReadyCondition, condition.InitReason, condition.NetworkAttachmentsReadyInitMessage),
 			// service account, role, rolebinding conditions
@@ -274,7 +270,6 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&designatev1beta1.DesignateWorker{}).
 		Owns(&designatev1beta1.DesignateMdns{}).
 		Owns(&designatev1beta1.DesignateProducer{}).
-		Owns(&designatev1beta1.DesignateAgent{}).
 		Owns(&rabbitmqv1.TransportURL{}).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.ConfigMap{}).
@@ -728,31 +723,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	r.Log.Info("Deployment Mdns task reconciled")
 
-	// deploy designate-agent
-	designateAgent, op, err := r.agentDeploymentCreateOrUpdate(ctx, instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateAgentReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateAgentReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
-	}
-
-	// Mirror DesignateAgent status' ReadyCount to this parent CR
-	instance.Status.DesignateAgentReadyCount = designateAgent.Status.ReadyCount
-
-	// Mirror DesignateAgent's condition status
-	c = designateAgent.Status.Conditions.Mirror(designatev1beta1.DesignateAgentReadyCondition)
-	if c != nil {
-		instance.Status.Conditions.Set(c)
-	}
-	r.Log.Info("Deployment Agent task reconciled")
-
 	// deploy designate-producer
 	designateProducer, op, err := r.producerDeploymentCreateOrUpdate(ctx, instance)
 	if err != nil {
@@ -1060,39 +1030,6 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.Spec = instance.Spec.DesignateProducer
-		// Add in transfers from umbrella Designate CR (this instance) spec
-		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
-		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
-		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
-		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
-
-		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	return deployment, op, err
-}
-
-func (r *DesignateReconciler) agentDeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateAgent, controllerutil.OperationResult, error) {
-	deployment := &designatev1beta1.DesignateAgent{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-agent", instance.Name),
-			Namespace: instance.Namespace,
-		},
-	}
-
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateAgent
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser

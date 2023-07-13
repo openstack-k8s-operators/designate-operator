@@ -18,9 +18,6 @@ spec:
   designateCentral:
     replicas: 1
     containerImage: quay.io/tripleowallabycentos9/openstack-designate-central:current-tripleo
-  designateAgent:
-    replicas: 1
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-agent:current-tripleo
   designateMdns:
     replicas: 1
     containerImage: quay.io/tripleowallabycentos9/openstack-designate-mdns:current-tripleo
