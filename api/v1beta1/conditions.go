@@ -38,9 +38,6 @@ const (
 
 	// DesignateProducerReadyCondition Status=True condition which indicates if the DesignateProducer is configured and operational
 	DesignateProducerReadyCondition condition.Type = "DesignateProducerReady"
-
-	// DesignateAgentReadyCondition Status=True condition which indicates if the DesignateAgent is configured and operational
-	DesignateAgentReadyCondition condition.Type = "DesignateAgentReady"
 )
 
 // Designate Reasons used by API objects.
@@ -107,13 +104,4 @@ const (
 
 	// DesignateProducerReadyErrorMessage
 	DesignateProducerReadyErrorMessage = "DesignateProducer error occured %s"
-
-	//
-	// DesignateAgentReady condition messages
-	//
-	// DesignateProducerReadyInitMessage
-	DesignateAgentReadyInitMessage = "DesignateAgent not started"
-
-	// DesignateProducerReadyErrorMessage
-	DesignateAgentReadyErrorMessage = "DesignateAgent error occured %s"
 )

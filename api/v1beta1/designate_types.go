@@ -125,10 +125,6 @@ type DesignateSpec struct {
 	// +kubebuilder:validation:Required
 	// DesignateProducer - Spec definition for the Producer service of this Designate deployment
 	DesignateProducer DesignateProducerSpec `json:"designateProducer"`
-
-	// +kubebuilder:validation:Required
-	// DesignateAgent- Spec definition for the Agent service of this Designate deployment
-	DesignateAgent DesignateAgentSpec `json:"designateAgent"`
 }
 
 // DesignateStatus defines the observed state of Designate
@@ -165,9 +161,6 @@ type DesignateStatus struct {
 
 	// ReadyCount of Designate Producer instance
 	DesignateProducerReadyCount int32 `json:"designateProducerReadyCount,omitempty"`
-
-	// ReadyCount of Designate Agent instance
-	DesignateAgentReadyCount int32 `json:"designateAgentReadyCount,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -203,7 +196,6 @@ func (instance Designate) IsReady() bool {
 		instance.Status.Conditions.IsTrue(DesignateCentralReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateWorkerReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateMdnsReadyCondition) &&
-		instance.Status.Conditions.IsTrue(DesignateAgentReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateProducerReadyCondition)
 
 }
