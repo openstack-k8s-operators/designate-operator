@@ -175,6 +175,32 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
+  - designatemdnss
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designatemdnss/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designatemdnss/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
   - designateproducers
   verbs:
   - create

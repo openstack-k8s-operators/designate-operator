@@ -16,6 +16,10 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - description: NetworkAttachments
+      jsonPath: .status.networkAttachments
+      name: NetworkAttachments
+      type: string
     - description: Status
       jsonPath: .status.conditions[0].status
       name: Status
@@ -250,13 +254,17 @@ spec:
                   type: string
                 description: Map of hashes to track e.g. job status
                 type: object
+              networkAttachments:
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                description: NetworkAttachments status of the deployment pods
+                type: object
               readyCount:
                 description: ReadyCount of designate MDNS instances
                 format: int32
                 type: integer
-              serviceID:
-                description: ServiceID - the ID of the registered service in keystone
-                type: string
             type: object
         type: object
     served: true
