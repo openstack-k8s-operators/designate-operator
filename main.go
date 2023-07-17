@@ -166,17 +166,17 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateWork")
 		os.Exit(1)
 	}
-	/*
-		if err = (&controllers.DesignateMdnsReconciler{
-			Client:  mgr.GetClient(),
-			Scheme:  mgr.GetScheme(),
-			Kclient: kclient,
-			Log:     ctrl.Log.WithName("controllers").WithName("DesignateMdns"),
-		}).SetupWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create controller", "controller", "DesignateMdns")
-			os.Exit(1)
-		}
-	*/
+
+	// designate-mdns
+	if err = (&controllers.DesignateMdnsReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Kclient: kclient,
+		Log:     ctrl.Log.WithName("controllers").WithName("DesignateMdns"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DesignateMdns")
+		os.Exit(1)
+	}
 
 	//+kubebuilder:scaffold:builder
 
