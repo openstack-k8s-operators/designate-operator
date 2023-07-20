@@ -202,9 +202,6 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if instance.Status.Hash == nil {
 		instance.Status.Hash = map[string]string{}
 	}
-	if instance.Status.APIEndpoints == nil {
-		instance.Status.APIEndpoints = map[string]map[string]string{}
-	}
 
 	// Handle service delete
 	if !instance.DeletionTimestamp.IsZero() {
@@ -636,9 +633,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 
-	// Mirror DesignateAPI status' APIEndpoints and ReadyCount to this parent CR
-	instance.Status.APIEndpoints = designateAPI.Status.APIEndpoints
-	instance.Status.ServiceIDs = designateAPI.Status.ServiceIDs
+	// Mirror DesignateAPI status' ReadyCount to this parent CR
 	instance.Status.DesignateAPIReadyCount = designateAPI.Status.ReadyCount
 
 	// Mirror DesignateAPI's condition status
