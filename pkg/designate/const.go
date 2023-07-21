@@ -23,8 +23,6 @@ const (
 	// DatabaseName -
 	DatabaseName = "designate"
 
-	// DesignateAdminPort -
-	DesignateAdminPort int32 = 9001
 	// DesignatePublicPort -
 	DesignatePublicPort int32 = 9001
 	// DesignateInternalPort -
