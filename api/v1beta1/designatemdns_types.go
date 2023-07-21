@@ -28,8 +28,10 @@ type DesignateMdnsTemplate struct {
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Maximum=32
+	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate Mdns Replicas
-	Replicas int32 `json:"replicas"`
+	Replicas *int32 `json:"replicas"`
 }
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
@@ -100,5 +102,5 @@ func init() {
 
 // IsReady - returns true if service is ready to serve requests
 func (instance DesignateMdns) IsReady() bool {
-	return instance.Status.ReadyCount == instance.Spec.Replicas
+	return instance.Status.ReadyCount == *(instance.Spec.Replicas)
 }

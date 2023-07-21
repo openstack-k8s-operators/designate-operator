@@ -28,8 +28,10 @@ type DesignateAPITemplate struct {
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
+	// +kubebuilder:validation:Maximum=32
+	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate API Replicas
-	Replicas int32 `json:"replicas"`
+	Replicas *int32 `json:"replicas"`
 }
 
 // DesignateAPISpec defines the desired state of DesignateAPI
@@ -98,5 +100,5 @@ func init() {
 
 // IsReady - returns true if service is ready to serve requests
 func (instance DesignateAPI) IsReady() bool {
-	return instance.Status.ReadyCount == instance.Spec.Replicas
+	return instance.Status.ReadyCount == *(instance.Spec.Replicas)
 }
