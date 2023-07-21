@@ -270,6 +270,9 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&rabbitmqv1.TransportURL{}).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.ServiceAccount{}).
+		Owns(&rbacv1.Role{}).
+		Owns(&rbacv1.RoleBinding{}).
 		// Watch for TransportURL Secrets which belong to any TransportURLs created by Designate CRs
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			handler.EnqueueRequestsFromMapFunc(transportURLSecretFn)).
