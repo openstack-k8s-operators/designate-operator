@@ -1,0 +1,13 @@
+{
+  "extends": [
+    "github>openstack-k8s-operators/renovate-config"
+  ],
+  "constraints": {
+    "go": "1.19"
+  },
+  "postUpgradeTasks": {
+    "commands": ["make gowork", "make tidy", "make manifests generate"],
+    "fileFilters": ["**/go.mod", "**/go.sum", "**/*.go", "**/*.yaml"],
+    "executionMode": "update"
+  }
+}
