@@ -3,16 +3,11 @@ module github.com/openstack-k8s-operators/designate-operator/api
 go 1.19
 
 require (
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.0.0-20230626095153-3ee001a316f1
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.1.0
 	github.com/openstack-k8s-operators/lib-common/modules/storage v0.0.0-20230626095153-3ee001a316f1
 	k8s.io/api v0.27.1
 	k8s.io/apimachinery v0.27.1
 	sigs.k8s.io/controller-runtime v0.14.6
-)
-
-require (
-	github.com/onsi/ginkgo/v2 v2.11.0 // indirect
-	github.com/onsi/gomega v1.27.8 // indirect
 )
 
 require (
