@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.1.0
-	github.com/openstack-k8s-operators/lib-common/modules/storage v0.0.0-20230626095153-3ee001a316f1
+	github.com/openstack-k8s-operators/lib-common/modules/storage v0.1.1-0.20230811131408-7be84c6eae21
 	k8s.io/api v0.26.7
 	k8s.io/apimachinery v0.26.7
 	sigs.k8s.io/controller-runtime v0.14.6
@@ -23,7 +23,7 @@ require (
 	golang.org/x/text v0.11.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	k8s.io/klog/v2 v2.80.1 // indirect
+	k8s.io/klog/v2 v2.100.1 // indirect
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
