@@ -24,7 +24,7 @@ spec:
     - description: DesignateMdns is the Schema for the designatemdnss API
       displayName: Designate Mdns
       kind: DesignateMdns
-      name: designatemdns.designate.openstack.org
+      name: designatemdnses.designate.openstack.org
       version: v1beta1
     - description: DesignateProducer is the Schema for the designateproducers API
       displayName: Designate Producer
