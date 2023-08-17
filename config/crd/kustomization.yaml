@@ -5,7 +5,7 @@ resources:
 - bases/designate.openstack.org_designateapis.yaml
 - bases/designate.openstack.org_designatecentrals.yaml
 - bases/designate.openstack.org_designates.yaml
-- bases/designate.openstack.org_designatemdns.yaml
+- bases/designate.openstack.org_designatemdnses.yaml
 - bases/designate.openstack.org_designateworkers.yaml
 - bases/designate.openstack.org_designateproducers.yaml
 

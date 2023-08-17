@@ -16,6 +16,31 @@ spec:
       kind: DesignateAPI
       name: designateapis.designate.openstack.org
       version: v1beta1
+    - description: DesignateCentrals is the Schema for the designatecentrals API
+      displayName: Designate Centrals
+      kind: DesignateCentrals
+      name: designatecentrals.designate.openstack.org
+      version: v1beta1
+    - description: DesignateMdns is the Schema for the designatemdnss API
+      displayName: Designate Mdns
+      kind: DesignateMdns
+      name: designatemdnses.designate.openstack.org
+      version: v1beta1
+    - description: DesignateProducer is the Schema for the designateproducers API
+      displayName: Designate Producer
+      kind: DesignateProducer
+      name: designateproducers.designate.openstack.org
+      version: v1beta1
+    - description: DesignateWorker is the Schema for the designateworkers API
+      displayName: Designate Worker
+      kind: DesignateWorker
+      name: designateworkers.designate.openstack.org
+      version: v1beta1
+    - description: Designate is the Schema for the designates API
+      displayName: Designate
+      kind: Designate
+      name: designates.designate.openstack.org
+      version: v1beta1
   description: Designate Operator
   displayName: Designate Operator
   icon:

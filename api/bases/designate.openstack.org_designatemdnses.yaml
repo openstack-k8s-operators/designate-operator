@@ -5,13 +5,13 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.2
   creationTimestamp: null
-  name: designatemdns.designate.openstack.org
+  name: designatemdnses.designate.openstack.org
 spec:
   group: designate.openstack.org
   names:
     kind: DesignateMdns
     listKind: DesignateMdnsList
-    plural: designatemdns
+    plural: designatemdnses
     singular: designatemdns
   scope: Namespaced
   versions:
@@ -31,7 +31,7 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: DesignateMdns is the Schema for the designatemdns
+        description: DesignateMdns is the Schema for the designatemdnses API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

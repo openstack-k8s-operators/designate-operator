@@ -27,7 +27,7 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Designate is the Schema for the designateapis
+        description: Designate is the Schema for the designates API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

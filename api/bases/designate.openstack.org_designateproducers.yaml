@@ -31,7 +31,7 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: DesignateProducer is the Schema for the designateproducer
+        description: DesignateProducer is the Schema for the designateproducer API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
