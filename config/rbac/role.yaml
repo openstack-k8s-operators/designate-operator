@@ -149,7 +149,7 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designatemdns
+  - designatemdnses
   verbs:
   - create
   - delete
@@ -161,39 +161,13 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designatemdns/finalizers
+  - designatemdnses/finalizers
   verbs:
   - update
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designatemdns/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - designate.openstack.org
-  resources:
-  - designatemdnss
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - designate.openstack.org
-  resources:
-  - designatemdnss/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - designate.openstack.org
-  resources:
-  - designatemdnss/status
+  - designatemdnses/status
   verbs:
   - get
   - patch
