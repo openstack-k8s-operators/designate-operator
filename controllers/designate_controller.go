@@ -104,6 +104,9 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9/finalizers,verbs=update
 
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;patch;delete;watch
@@ -186,6 +189,7 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			condition.UnknownCondition(designatev1beta1.DesignateWorkerReadyCondition, condition.InitReason, designatev1beta1.DesignateWorkerReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
+			condition.UnknownCondition(designatev1beta1.DesignateBackendbind9ReadyCondition, condition.InitReason, designatev1beta1.DesignateBackendbind9ReadyInitMessage),
 			condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
 			condition.UnknownCondition(condition.NetworkAttachmentsReadyCondition, condition.InitReason, condition.NetworkAttachmentsReadyInitMessage),
 			// service account, role, rolebinding conditions
@@ -267,6 +271,7 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&designatev1beta1.DesignateWorker{}).
 		Owns(&designatev1beta1.DesignateMdns{}).
 		Owns(&designatev1beta1.DesignateProducer{}).
+		Owns(&designatev1beta1.DesignateBackendbind9{}).
 		Owns(&rabbitmqv1.TransportURL{}).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.ConfigMap{}).
@@ -747,6 +752,33 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	r.Log.Info("Deployment Producer task reconciled")
 
 	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' successfully", instance.Name))
+
+	// deploy designate-backendbind9
+	designateBackendbind9, op, err := r.backendbind9DeploymentCreateOrUpdate(ctx, instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			designatev1beta1.DesignateBackendbind9ReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			designatev1beta1.DesignateBackendbind9ReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, err
+	}
+	if op != controllerutil.OperationResultNone {
+		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	}
+
+	// Mirror DesignateBackendbind9 status' ReadyCount to this parent CR
+	instance.Status.DesignateBackendbind9ReadyCount = designateBackendbind9.Status.ReadyCount
+
+	// Mirror DesignateBackendbind9's condition status
+	c = designateBackendbind9.Status.Conditions.Mirror(designatev1beta1.DesignateBackendbind9ReadyCondition)
+	if c != nil {
+		instance.Status.Conditions.Set(c)
+	}
+	r.Log.Info("Deployment Backendbind9 task reconciled")
+
+	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
@@ -1028,6 +1060,39 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.Spec = instance.Spec.DesignateProducer
+		// Add in transfers from umbrella Designate CR (this instance) spec
+		// TODO: Add logic to determine when to set/overwrite, etc
+		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
+		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
+		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
+		deployment.Spec.Secret = instance.Spec.Secret
+		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
+		deployment.Spec.ServiceAccount = instance.RbacResourceName()
+		if len(deployment.Spec.NodeSelector) == 0 {
+			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
+		}
+
+		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return deployment, op, err
+}
+
+func (r *DesignateReconciler) backendbind9DeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateBackendbind9, controllerutil.OperationResult, error) {
+	deployment := &designatev1beta1.DesignateBackendbind9{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-backendbind9", instance.Name),
+			Namespace: instance.Namespace,
+		},
+	}
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
+		deployment.Spec = instance.Spec.DesignateBackendbind9
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser

@@ -1,0 +1,47 @@
+{
+  "command": "/usr/sbin/named -f -d10",
+  "config_files": [
+    {
+      "source": "/var/lib/config-data/merged/designate.conf",
+      "dest": "/etc/designate/designate.conf",
+      "owner": "root:designate",
+      "perm": "0750"
+    },
+    {
+      "source": "/var/lib/config-data/merged/named.conf",
+      "dest": "/etc/named/named.conf",
+      "owner": "named:named",
+      "perm": "0644"
+    },
+    {
+      "source": "/var/lib/config-data/merged/named.conf.default-zones",
+      "dest": "/etc/named/named.conf.default-zones",
+      "owner": "named:named",
+      "perm": "0644"
+    },
+    {
+      "source": "/var/lib/config-data/merged/named.conf.local",
+      "dest": "/etc/named/named.conf.local",
+      "owner": "named:named",
+      "perm": "0644"
+    },
+    {
+      "source": "/var/lib/config-data/merged/named.conf.options",
+      "dest": "/etc/named/named.conf.options",
+      "owner": "named:named",
+      "perm": "0644"
+    },
+    {
+      "source": "/var/lib/config-data/merged/rndc.conf",
+      "dest": "/etc/named/rndc.conf",
+      "owner": "named:named",
+      "perm": "0644"
+    },
+    {
+      "source": "/var/lib/config-data/merged/rndc.key",
+      "dest": "/etc/named/rndc.key",
+      "owner": "named:named",
+      "perm": "0644"
+    }
+  ]
+}

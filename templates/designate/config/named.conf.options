@@ -1,0 +1,18 @@
+include "/etc/bind/rndc.key";
+
+options {
+    directory "/var/cache/bind";
+    allow-new-zones yes;
+    dnssec-validation auto;
+    auth-nxdomain no;    # conform to RFC1035
+    listen-on port BINDPORT { IPV4ADDR; };
+    listen-on-v6 port BINDPORT { any; };
+    recursion no;
+    pid-file "/run/named/named.pid";
+    session-keyfile "/run/named/session.key";
+    minimal-responses yes;
+};
+
+controls {
+    inet IPV4ADDR port RNDCPORT allow { IPV4ADDR; } keys { "rndc-key"; };
+};

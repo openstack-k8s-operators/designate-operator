@@ -57,6 +57,11 @@ type DesignateTemplate struct {
 	// +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
 	// PasswordSelectors - Selectors to identify the DB and ServiceUser password from the Secret
 	PasswordSelectors PasswordSelector `json:"passwordSelectors"`
+
+	// +kubebuilder:validation:Optional
+	// BackendType - Defines the backend service/configuration we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc..
+	// Helps maintain a single init container/init.sh to do container setup
+	BackendType string `json:"None"`
 }
 
 // DesignateServiceTemplate defines the input parameters that can be defined for a given

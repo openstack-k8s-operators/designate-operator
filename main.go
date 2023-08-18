@@ -114,7 +114,7 @@ func main() {
 	}
 
 	// setup for all the reconcilers in the controllers
-	// desigante main controller
+	// designate main controller
 	if err = (&controllers.DesignateReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -125,7 +125,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// desigante-api
+	// designate-api
 	if err = (&controllers.DesignateAPIReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -136,7 +136,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// desigante-central
+	// designate-central
 	if err = (&controllers.DesignateCentralReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -147,7 +147,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// desigante-producer
+	// designate-producer
 	if err = (&controllers.DesignateProducerReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -158,7 +158,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// desigante-worker
+	// designate-worker
 	if err = (&controllers.DesignateWorkerReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -180,6 +180,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// designate-backendbind9
+	if err = (&controllers.DesignateBackendbind9Reconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Kclient: kclient,
+		Log:     ctrl.Log.WithName("controllers").WithName("DesignateBackendbind9"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DesignateBackendbind9")
+		os.Exit(1)
+	}
+
 	// Acquire environmental defaults and initialize operator defaults with them
 	designatev1.SetupDefaults()
 
@@ -193,6 +204,7 @@ func main() {
 
 		checker = mgr.GetWebhookServer().StartedChecker()
 	}
+	
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", checker); err != nil {

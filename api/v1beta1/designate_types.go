@@ -75,6 +75,11 @@ type DesignateSpec struct {
 	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
 
 	// +kubebuilder:validation:Optional
+	// BackendType - Defines the backend service/configuration we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc..
+	// Helps maintain a single init container/init.sh to do container setup
+	BackendType string `json:"None"`
+
+	// +kubebuilder:validation:Optional
 	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
 	// actual action pod gets started with sleep infinity
 	Debug DesignateDebug `json:"debug,omitempty"`
@@ -125,6 +130,10 @@ type DesignateSpec struct {
 	// +kubebuilder:validation:Required
 	// DesignateProducer - Spec definition for the Producer service of this Designate deployment
 	DesignateProducer DesignateProducerSpec `json:"designateProducer"`
+
+	// +kubebuilder:validation:Required
+	// DesignateBackendbind9 - Spec definition for the Backendbind9 service of this Designate deployment
+	DesignateBackendbind9 DesignateBackendbind9Spec `json:"designateBackendbind9"`
 }
 
 // DesignateStatus defines the observed state of Designate
@@ -155,6 +164,9 @@ type DesignateStatus struct {
 
 	// ReadyCount of Designate Producer instance
 	DesignateProducerReadyCount int32 `json:"designateProducerReadyCount,omitempty"`
+
+	// ReadyCount of Designate Backendbind9 instance
+	DesignateBackendbind9ReadyCount int32 `json:"designateBackendbind9ReadyCount,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -190,8 +202,8 @@ func (instance Designate) IsReady() bool {
 		instance.Status.Conditions.IsTrue(DesignateCentralReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateWorkerReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateMdnsReadyCondition) &&
-		instance.Status.Conditions.IsTrue(DesignateProducerReadyCondition)
-
+		instance.Status.Conditions.IsTrue(DesignateProducerReadyCondition) &&
+		instance.Status.Conditions.IsTrue(DesignateBackendbind9ReadyCondition)
 }
 
 // DesignateExtraVolMounts exposes additional parameters processed by the designate-operator

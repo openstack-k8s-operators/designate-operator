@@ -21,28 +21,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DesignateWorkerTemplate defines the input parameters for the Designate Scheduler service
-type DesignateWorkerTemplate struct {
-	// Common input parameters for the Designate Worker service
+// DesignateBackendbind9Template defines the input parameters for the Designate Scheduler service
+type DesignateBackendbind9Template struct {
+	// Common input parameters for the Designate Backendbind9 service
 	DesignateServiceTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Maximum=32
 	// +kubebuilder:validation:Minimum=0
-	// Replicas - Designate Worker Replicas
+	// Replicas - Designate Backendbind9 Replicas
 	Replicas *int32 `json:"replicas"`
 }
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// DesignateWorkerSpec defines the desired state of DesignateWorker
-type DesignateWorkerSpec struct {
+// DesignateBackendbind9Spec defines the desired state of DesignateBackendbind9
+type DesignateBackendbind9Spec struct {
 	// Common input parameters for all Designate services
 	DesignateTemplate `json:",inline"`
 
-	// Input parameters for the Designate Worker service
-	DesignateWorkerTemplate `json:",inline"`
+	// Input parameters for the Designate Backendbind9 service
+	DesignateBackendbind9Template `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname
@@ -57,9 +57,9 @@ type DesignateWorkerSpec struct {
 	ServiceAccount string `json:"serviceAccount"`
 }
 
-// DesignateWorkerStatus defines the observed state of DesignateWorker
-type DesignateWorkerStatus struct {
-	// ReadyCount of designate central instances
+// DesignateBackendbind9Status defines the observed state of DesignateBackendbind9
+type DesignateBackendbind9Status struct {
+	// ReadyCount of designate backendbind9 instances
 	ReadyCount int32 `json:"readyCount,omitempty"`
 
 	// Map of hashes to track e.g. job status
@@ -72,34 +72,34 @@ type DesignateWorkerStatus struct {
 	NetworkAttachments map[string][]string `json:"networkAttachments,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[0].status",description="Status"
+//+kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[0].message",description="Message"
 
-// DesignateWorker is the Schema for the designateworker API
-type DesignateWorker struct {
+// DesignateBackendbind9 is the Schema for the designatebackendbind9
+type DesignateBackendbind9 struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DesignateWorkerSpec   `json:"spec,omitempty"`
-	Status DesignateWorkerStatus `json:"status,omitempty"`
+	Spec   DesignateBackendbind9Spec   `json:"spec,omitempty"`
+	Status DesignateBackendbind9Status `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// DesignateWorkerList contains a list of DesignateWorker
-type DesignateWorkerList struct {
+// DesignateBackendbind9List contains a list of DesignateBackendbind9
+type DesignateBackendbind9List struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []DesignateWorker `json:"items"`
+	Items           []DesignateBackendbind9 `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&DesignateWorker{}, &DesignateWorkerList{})
+	SchemeBuilder.Register(&DesignateBackendbind9{}, &DesignateBackendbind9List{})
 }
 
 // IsReady - returns true if service is ready to serve requests
-func (instance DesignateWorker) IsReady() bool {
+func (instance DesignateBackendbind9) IsReady() bool {
 	return instance.Status.ReadyCount == *(instance.Spec.Replicas)
 }
