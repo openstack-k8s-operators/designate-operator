@@ -8,6 +8,7 @@ resources:
 - bases/designate.openstack.org_designatemdns.yaml
 - bases/designate.openstack.org_designateworkers.yaml
 - bases/designate.openstack.org_designateproducers.yaml
+- bases/designate.openstack.org_designatebackendbind9s.yaml
 
 #+kubebuilder:scaffold:crdkustomizeresource
 

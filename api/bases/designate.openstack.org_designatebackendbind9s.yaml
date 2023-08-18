@@ -5,21 +5,17 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.2
   creationTimestamp: null
-  name: designatecentrals.designate.openstack.org
+  name: designatebackendbind9s.designate.openstack.org
 spec:
   group: designate.openstack.org
   names:
-    kind: DesignateCentral
-    listKind: DesignateCentralList
-    plural: designatecentrals
-    singular: designatecentral
+    kind: DesignateBackendbind9
+    listKind: DesignateBackendbind9List
+    plural: designatebackendbind9s
+    singular: designatebackendbind9
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: NetworkAttachments
-      jsonPath: .status.networkAttachments
-      name: NetworkAttachments
-      type: string
     - description: Status
       jsonPath: .status.conditions[0].status
       name: Status
@@ -31,7 +27,7 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: DesignateCentral is the Schema for the designatecentral
+        description: DesignateBackendbind9 is the Schema for the designatebackendbind9
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -46,7 +42,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: DesignateCentralSpec defines the desired state of DesignateCentral
+            description: DesignateBackendbind9Spec defines the desired state of DesignateBackendbind9
             properties:
               None:
                 description: BackendType - Defines the backend service/configuration
@@ -138,7 +134,7 @@ spec:
                 type: object
               replicas:
                 default: 1
-                description: Replicas - Designate Central Replicas
+                description: Replicas - Designate Backendbind9 Replicas
                 format: int32
                 maximum: 32
                 minimum: 0
@@ -211,7 +207,8 @@ spec:
             - containerImage
             type: object
           status:
-            description: DesignateCentralStatus defines the observed state of DesignateCentral
+            description: DesignateBackendbind9Status defines the observed state of
+              DesignateBackendbind9
             properties:
               conditions:
                 description: Conditions
@@ -269,7 +266,7 @@ spec:
                 description: NetworkAttachments status of the deployment pods
                 type: object
               readyCount:
-                description: ReadyCount of designate central instances
+                description: ReadyCount of designate backendbind9 instances
                 format: int32
                 type: integer
             type: object

@@ -48,6 +48,11 @@ spec:
           spec:
             description: DesignateProducerSpec defines the desired state of DesignateProducer
             properties:
+              None:
+                description: BackendType - Defines the backend service/configuration
+                  we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps maintain
+                  a single init container/init.sh to do container setup
+                type: string
               containerImage:
                 description: ContainerImage - Designate Container Image URL (will
                   be set to environmental default if empty)
