@@ -1,0 +1,23 @@
+# This patch inject custom ENV settings to the manager container
+# Used to set our default image locations
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        env:
+        - name: DESIGNATE_API_IMAGE_URL_DEFAULT
+          value: quay.io/podified-antelope-centos9/openstack-designate-api:current-podified
+        - name: DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT
+          value: quay.io/podified-antelope-centos9/openstack-designate-central:current-podified
+        - name: DESIGNATE_MDNS_IMAGE_URL_DEFAULT
+          value: quay.io/podified-antelope-centos9/openstack-designate-mdns:current-podified
+        - name: DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT
+          value: quay.io/podified-antelope-centos9/openstack-designate-producer:current-podified
+        - name: DESIGNATE_WORKER_IMAGE_URL_DEFAULT
+          value: quay.io/podified-antelope-centos9/openstack-designate-worker:current-podified
