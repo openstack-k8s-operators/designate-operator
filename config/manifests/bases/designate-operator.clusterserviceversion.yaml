@@ -11,35 +11,40 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: DesignateAPI is the Schema for the designateapis API
-      displayName: Designate API
-      kind: DesignateAPI
-      name: designateapis.designate.openstack.org
-      version: v1beta1
     - description: DesignateCentrals is the Schema for the designatecentrals API
       displayName: Designate Centrals
       kind: DesignateCentrals
       name: designatecentrals.designate.openstack.org
       version: v1beta1
-    - description: DesignateMdns is the Schema for the designatemdnss API
+    - description: DesignateAPI is the Schema for the designateapis API
+      displayName: Designate API
+      kind: DesignateAPI
+      name: designateapis.designate.openstack.org
+      version: v1beta1
+    - description: DesignateCentral is the Schema for the designatecentral API
+      displayName: Designate Central
+      kind: DesignateCentral
+      name: designatecentrals.designate.openstack.org
+      version: v1beta1
+    - description: DesignateMdns is the Schema for the designatemdnses API
       displayName: Designate Mdns
       kind: DesignateMdns
       name: designatemdnses.designate.openstack.org
       version: v1beta1
-    - description: DesignateProducer is the Schema for the designateproducers API
+    - description: DesignateProducer is the Schema for the designateproducer API
       displayName: Designate Producer
       kind: DesignateProducer
       name: designateproducers.designate.openstack.org
-      version: v1beta1
-    - description: DesignateWorker is the Schema for the designateworkers API
-      displayName: Designate Worker
-      kind: DesignateWorker
-      name: designateworkers.designate.openstack.org
       version: v1beta1
     - description: Designate is the Schema for the designates API
       displayName: Designate
       kind: Designate
       name: designates.designate.openstack.org
+      version: v1beta1
+    - description: DesignateWorker is the Schema for the designateworker API
+      displayName: Designate Worker
+      kind: DesignateWorker
+      name: designateworkers.designate.openstack.org
       version: v1beta1
   description: Designate Operator
   displayName: Designate Operator

@@ -17,7 +17,23 @@ limitations under the License.
 package v1beta1
 
 import (
+	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	corev1 "k8s.io/api/core/v1"
+)
+
+const (
+	// Container image fall-back defaults
+
+	// DesignateAPIContainerImage is the fall-back container image for DesignateAPI
+	DesignateAPIContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-api:current-podified"
+	// DesignateCentralContainerImage is the fall-back container image for DesignateCentral
+	DesignateCentralContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-central:current-podified"
+	// DesignateMdnsContainerImage is the fall-back container image for DesignateMdns
+	DesignateMdnsContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-mdns:current-podified"
+	// DesignateProducerContainerImage is the fall-back container image for DesignateProducer
+	DesignateProducerContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-producer:current-podified"
+	// DesignateWorkerContainerImage is the fall-back container image for DesignateWorker
+	DesignateWorkerContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-worker:current-podified"
 )
 
 // DesignateTemplate defines common input parameters used by all Designate services
@@ -126,4 +142,18 @@ type DesignateServiceDebug struct {
 	// +kubebuilder:default=false
 	// service enable debug
 	Service bool `json:"service"`
+}
+
+// SetupDefaults - initializes any CRD field defaults based on environment variables (the defaulting mechanism itself is implemented via webhooks)
+func SetupDefaults() {
+	// Acquire environmental defaults and initialize Designate defaults with them
+	designateDefaults := DesignateDefaults{
+		APIContainerImageURL:      util.GetEnvVar("DESIGNATE_API_IMAGE_URL_DEFAULT", DesignateAPIContainerImage),
+		CentralContainerImageURL:  util.GetEnvVar("DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT", DesignateCentralContainerImage),
+		MdnsContainerImageURL:     util.GetEnvVar("DESIGNATE_MDNS_IMAGE_URL_DEFAULT", DesignateMdnsContainerImage),
+		ProducerContainerImageURL: util.GetEnvVar("DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT", DesignateProducerContainerImage),
+		WorkerContainerImageURL:   util.GetEnvVar("DESIGNATE_WORKER_IMAGE_URL_DEFAULT", DesignateWorkerContainerImage),
+	}
+
+	SetupDesignateDefaults(designateDefaults)
 }

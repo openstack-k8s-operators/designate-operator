@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"os"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -35,11 +36,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
-	"github.com/openstack-k8s-operators/designate-operator/controllers"
 	rabbitmqv1 "github.com/openstack-k8s-operators/infra-operator/apis/rabbitmq/v1beta1"
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+
+	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
+	"github.com/openstack-k8s-operators/designate-operator/controllers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -178,13 +180,26 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Acquire environmental defaults and initialize operator defaults with them
+	designatev1.SetupDefaults()
+
+	checker := healthz.Ping
+	// Setup webhooks if requested
+	if strings.ToLower(os.Getenv("ENABLE_WEBHOOKS")) != "false" {
+		if err = (&designatev1.Designate{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Designate")
+			os.Exit(1)
+		}
+
+		checker = mgr.GetWebhookServer().StartedChecker()
+	}
 	//+kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	if err := mgr.AddHealthzCheck("healthz", checker); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err := mgr.AddReadyzCheck("readyz", checker); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
