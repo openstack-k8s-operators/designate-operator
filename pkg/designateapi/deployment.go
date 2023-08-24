@@ -116,7 +116,7 @@ func Deployment(
 								RunAsUser: &runAsUser,
 							},
 							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: designate.GetServiceVolumeMounts(),
+							VolumeMounts: designate.GetServiceVolumeMounts("designate-api"),
 							Resources:    instance.Spec.Resources,
 							//ReadinessProbe: readinessProbe,
 							//LivenessProbe:  livenessProbe,

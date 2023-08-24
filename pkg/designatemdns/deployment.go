@@ -114,7 +114,7 @@ func Deployment(
 								RunAsUser: &rootUser,
 							},
 							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: designate.GetServiceVolumeMounts(),
+							VolumeMounts: designate.GetServiceVolumeMounts("designate-mdns"),
 							Resources:    instance.Spec.Resources,
 							// StartupProbe:  startupProbe,
 							// LivenessProbe: livenessProbe,
