@@ -102,31 +102,6 @@ func GetServiceVolumeMounts() []corev1.VolumeMount {
 	}
 }
 
-// GetOpenstackVolumes - returns the volumes used for the service deployment and for
-// any jobs needs access for the full service configuration
-func GetOpenstackVolumes(serviceConfigConfigMapName string) []corev1.Volume {
-	var configMode int32 = 0640
-	return []corev1.Volume{
-		{
-			Name: configVolume,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					DefaultMode: &configMode,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: serviceConfigConfigMapName,
-					},
-				},
-			},
-		},
-		{
-			Name: logVolume,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{Medium: ""},
-			},
-		},
-	}
-}
-
 // #############################################################################
 // getVolumes
 func getVolumes(name string) []corev1.Volume {

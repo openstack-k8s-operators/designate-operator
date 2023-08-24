@@ -99,8 +99,8 @@ func Deployment(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.Spec.ServiceAccount,
-					Volumes: designate.GetOpenstackVolumes(
-						designate.GetServiceConfigConfigMapName(instance.Name),
+					Volumes: designate.GetVolumes(
+						designate.GetOwningDesignateName(instance),
 					),
 					Containers: []corev1.Container{
 						{
@@ -114,7 +114,7 @@ func Deployment(
 								RunAsUser: &rootUser,
 							},
 							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: designate.GetServiceVolumeMounts()
+							VolumeMounts: designate.GetServiceVolumeMounts(),
 							Resources:    instance.Spec.Resources,
 							// StartupProbe:  startupProbe,
 							// LivenessProbe: livenessProbe,
@@ -125,8 +125,6 @@ func Deployment(
 			},
 		},
 	}
-	deployment.Spec.Template.Spec.Volumes = designate.GetVolumes(
-		designate.GetOwningDesignateName(instance))
 
 	// If possible two pods of the same service should not
 	// run on the same worker node. If this is not possible
