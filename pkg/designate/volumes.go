@@ -102,22 +102,6 @@ func GetServiceVolumeMounts() []corev1.VolumeMount {
 	}
 }
 
-// GetOpenstackVolumeMounts - VolumeMounts use to inject config and scripts
-func GetOpenstackVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      configVolume,
-			MountPath: "/var/lib/openstack/config",
-			ReadOnly:  false,
-		},
-		{
-			Name:      logVolume,
-			MountPath: "/var/log/ndesignate",
-			ReadOnly:  false,
-		},
-	}
-}
-
 // GetOpenstackVolumes - returns the volumes used for the service deployment and for
 // any jobs needs access for the full service configuration
 func GetOpenstackVolumes(serviceConfigConfigMapName string) []corev1.Volume {
