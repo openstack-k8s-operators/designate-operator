@@ -104,9 +104,6 @@ func Deployment(
 					Containers: []corev1.Container{
 						{
 							Name: designate.ServiceName + "-api",
-							//Command: []string{
-							//"/bin/sleep", "600000",
-							//},
 							Command: []string{
 								"/bin/bash",
 							},
@@ -116,7 +113,7 @@ func Deployment(
 								RunAsUser: &runAsUser,
 							},
 							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: designate.GetAllVolumeMounts(),
+							VolumeMounts: designate.GetServiceVolumeMounts(),
 							Resources:    instance.Spec.Resources,
 							//ReadinessProbe: readinessProbe,
 							//LivenessProbe:  livenessProbe,

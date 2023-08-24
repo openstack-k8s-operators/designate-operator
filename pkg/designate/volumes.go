@@ -64,7 +64,7 @@ func GetVolumes(baseConfigMapName string) []corev1.Volume {
 	}
 }
 
-// GetInitVolumeMounts - Nova Control Plane init task VolumeMounts
+// GetInitVolumeMounts - Designate Control Plane init task VolumeMounts
 func GetInitVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
@@ -79,28 +79,6 @@ func GetInitVolumeMounts() []corev1.VolumeMount {
 		},
 		{
 			Name:      "config-data-merged",
-			MountPath: "/var/lib/config-data/merged",
-			ReadOnly:  false,
-		},
-	}
-}
-
-// GetAllVolumeMounts - VolumeMounts providing access to both the raw input
-// configuration and the volume of the merged configuration
-func GetAllVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      scriptVolume,
-			MountPath: "/usr/local/bin/container-scripts",
-			ReadOnly:  true,
-		},
-		{
-			Name:      configVolume,
-			MountPath: "/var/lib/config-data/default",
-			ReadOnly:  true,
-		},
-		{
-			Name:      mergedConfigVolume,
 			MountPath: "/var/lib/config-data/merged",
 			ReadOnly:  false,
 		},
