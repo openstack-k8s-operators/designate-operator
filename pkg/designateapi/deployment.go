@@ -101,12 +101,12 @@ func Deployment(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.Spec.ServiceAccount,
+					Volumes: designate.GetVolumes(
+						designate.GetOwningDesignateName(instance),
+					),
 					Containers: []corev1.Container{
 						{
 							Name: designate.ServiceName + "-api",
-							//Command: []string{
-							//"/bin/sleep", "600000",
-							//},
 							Command: []string{
 								"/bin/bash",
 							},
@@ -116,7 +116,7 @@ func Deployment(
 								RunAsUser: &runAsUser,
 							},
 							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: designate.GetAllVolumeMounts(),
+							VolumeMounts: designate.GetServiceVolumeMounts("designate-api"),
 							Resources:    instance.Spec.Resources,
 							//ReadinessProbe: readinessProbe,
 							//LivenessProbe:  livenessProbe,
@@ -127,8 +127,6 @@ func Deployment(
 			},
 		},
 	}
-	deployment.Spec.Template.Spec.Volumes = designate.GetVolumes(
-		designate.GetOwningDesignateName(instance))
 
 	// If possible two pods of the same service should not
 	// run on the same worker node. If this is not possible

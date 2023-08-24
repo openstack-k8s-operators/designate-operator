@@ -64,7 +64,7 @@ func GetVolumes(baseConfigMapName string) []corev1.Volume {
 	}
 }
 
-// GetInitVolumeMounts - Nova Control Plane init task VolumeMounts
+// GetInitVolumeMounts - Designate Control Plane init task VolumeMounts
 func GetInitVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
@@ -85,31 +85,9 @@ func GetInitVolumeMounts() []corev1.VolumeMount {
 	}
 }
 
-// GetAllVolumeMounts - VolumeMounts providing access to both the raw input
-// configuration and the volume of the merged configuration
-func GetAllVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      scriptVolume,
-			MountPath: "/usr/local/bin/container-scripts",
-			ReadOnly:  true,
-		},
-		{
-			Name:      configVolume,
-			MountPath: "/var/lib/config-data/default",
-			ReadOnly:  true,
-		},
-		{
-			Name:      mergedConfigVolume,
-			MountPath: "/var/lib/config-data/merged",
-			ReadOnly:  false,
-		},
-	}
-}
-
 // GetServiceVolumeMounts - VolumeMounts to get access to the merged
 // configuration
-func GetServiceVolumeMounts() []corev1.VolumeMount {
+func GetServiceVolumeMounts(serviceName string) []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
 			Name:      scriptVolume,
@@ -121,46 +99,11 @@ func GetServiceVolumeMounts() []corev1.VolumeMount {
 			MountPath: "/var/lib/config-data/merged",
 			ReadOnly:  false,
 		},
-	}
-}
-
-// GetOpenstackVolumeMounts - VolumeMounts use to inject config and scripts
-func GetOpenstackVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
 		{
-			Name:      configVolume,
-			MountPath: "/var/lib/openstack/config",
-			ReadOnly:  false,
-		},
-		{
-			Name:      logVolume,
-			MountPath: "/var/log/ndesignate",
-			ReadOnly:  false,
-		},
-	}
-}
-
-// GetOpenstackVolumes - returns the volumes used for the service deployment and for
-// any jobs needs access for the full service configuration
-func GetOpenstackVolumes(serviceConfigConfigMapName string) []corev1.Volume {
-	var configMode int32 = 0640
-	return []corev1.Volume{
-		{
-			Name: configVolume,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					DefaultMode: &configMode,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: serviceConfigConfigMapName,
-					},
-				},
-			},
-		},
-		{
-			Name: logVolume,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{Medium: ""},
-			},
+			Name:      mergedConfigVolume,
+			MountPath: "/var/lib/kolla/config_files/config.json",
+			SubPath:   serviceName + "-config.json",
+			ReadOnly:  true,
 		},
 	}
 }
@@ -214,22 +157,6 @@ func getInitVolumeMounts() []corev1.VolumeMount {
 		{
 			Name:      "config-data",
 			MountPath: "/var/lib/config-data/default",
-			ReadOnly:  true,
-		},
-		{
-			Name:      "config-data-merged",
-			MountPath: "/var/lib/config-data/merged",
-			ReadOnly:  false,
-		},
-	}
-}
-
-// getVolumeMounts - general VolumeMounts
-func getVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      "scripts",
-			MountPath: "/usr/local/bin/container-scripts",
 			ReadOnly:  true,
 		},
 		{

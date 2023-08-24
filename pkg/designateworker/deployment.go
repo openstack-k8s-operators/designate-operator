@@ -60,7 +60,6 @@ func Deployment(
 	// 	InitialDelaySeconds: 5,
 	// }
 	args := []string{"-c"}
-	// var probeCommand []string
 	if instance.Spec.Debug.Service {
 		args = append(args, common.DebugCommand)
 		// livenessProbe.Exec = &corev1.ExecAction{
@@ -69,9 +68,6 @@ func Deployment(
 		// 	},
 		// }
 		// startupProbe.Exec = livenessProbe.Exec
-		// probeCommand = []string{
-		// 	"/bin/sleep", "infinity",
-		// }
 	} else {
 		args = append(args, ServiceCommand)
 		// livenessProbe.HTTPGet = &corev1.HTTPGetAction{
@@ -81,19 +77,12 @@ func Deployment(
 		// // Probe doesn't run kolla_set_configs because it uses the 'designate' uid
 		// // and gid and doesn't have permissions to make files be owned by root,
 		// // so designate.conf is in its original location
-		// probeCommand = []string{
-		// 	"/usr/local/bin/container-scripts/healthcheck.py",
-		// 	"scheduler",
-		// 	"/var/lib/config-data/merged/designate.conf",
-		// }
 	}
 
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_FILE"] = env.SetValue(KollaConfig)
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
-
-	volumeMounts := designate.GetAllVolumeMounts()
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -113,15 +102,12 @@ func Deployment(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.Spec.ServiceAccount,
-					Volumes: designate.GetOpenstackVolumes(
-						designate.GetServiceConfigConfigMapName(instance.Name),
+					Volumes: designate.GetVolumes(
+						designate.GetOwningDesignateName(instance),
 					),
 					Containers: []corev1.Container{
 						{
 							Name: designate.ServiceName + "-worker",
-							// Command: []string{
-							// 	"/bin/sleep", "60000",
-							// },
 							Command: []string{
 								"/bin/bash",
 							},
@@ -131,29 +117,17 @@ func Deployment(
 								RunAsUser: &rootUser,
 							},
 							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: volumeMounts,
+							VolumeMounts: designate.GetServiceVolumeMounts("designate-worker"),
 							Resources:    instance.Spec.Resources,
 							// StartupProbe:  startupProbe,
 							// LivenessProbe: livenessProbe,
 						},
-						// {
-						// 	Name:    "probe",
-						// 	Command: probeCommand,
-						// 	Image:   instance.Spec.ContainerImage,
-						// 	SecurityContext: &corev1.SecurityContext{
-						// 		RunAsUser:  &designateUser,
-						// 		RunAsGroup: &designateGroup,
-						// 	},
-						// 	VolumeMounts: volumeMounts,
-						// },
 					},
 					NodeSelector: instance.Spec.NodeSelector,
 				},
 			},
 		},
 	}
-	deployment.Spec.Template.Spec.Volumes = designate.GetVolumes(
-		designate.GetOwningDesignateName(instance))
 
 	// If possible two pods of the same service should not
 	// run on the same worker node. If this is not possible
@@ -178,7 +152,7 @@ func Deployment(
 		TransportURLSecret:   instance.Spec.TransportURLSecret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		VolumeMounts:         designate.GetAllVolumeMounts(),
+		VolumeMounts:         designate.GetInitVolumeMounts(),
 		Debug:                instance.Spec.Debug.InitContainer,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
