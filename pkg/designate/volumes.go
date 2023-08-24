@@ -87,7 +87,7 @@ func GetInitVolumeMounts() []corev1.VolumeMount {
 
 // GetServiceVolumeMounts - VolumeMounts to get access to the merged
 // configuration
-func GetServiceVolumeMounts() []corev1.VolumeMount {
+func GetServiceVolumeMounts(serviceName string) []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
 			Name:      scriptVolume,
@@ -98,6 +98,12 @@ func GetServiceVolumeMounts() []corev1.VolumeMount {
 			Name:      mergedConfigVolume,
 			MountPath: "/var/lib/config-data/merged",
 			ReadOnly:  false,
+		},
+		{
+			Name:      mergedConfigVolume,
+			MountPath: "/var/lib/kolla/config_files/config.json",
+			SubPath:   serviceName + "-config.json",
+			ReadyOnly: true,
 		},
 	}
 }
@@ -151,22 +157,6 @@ func getInitVolumeMounts() []corev1.VolumeMount {
 		{
 			Name:      "config-data",
 			MountPath: "/var/lib/config-data/default",
-			ReadOnly:  true,
-		},
-		{
-			Name:      "config-data-merged",
-			MountPath: "/var/lib/config-data/merged",
-			ReadOnly:  false,
-		},
-	}
-}
-
-// getVolumeMounts - general VolumeMounts
-func getVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      "scripts",
-			MountPath: "/usr/local/bin/container-scripts",
 			ReadOnly:  true,
 		},
 		{
