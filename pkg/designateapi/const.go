@@ -16,9 +16,6 @@ limitations under the License.
 package designateapi
 
 const (
-	// KollaConfig -
-	KollaConfig = "/var/lib/config-data/merged/designate-api-config.json"
-
 	// Component -
 	Component = "designate-api"
 )

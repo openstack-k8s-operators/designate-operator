@@ -27,7 +27,4 @@ const (
 	DesignatePublicPort int32 = 9001
 	// DesignateInternalPort -
 	DesignateInternalPort int32 = 9001
-
-	// KollaDbSyncConfig -
-	KollaDbSyncConfig = "/var/lib/config-data/merged/db-sync-config.json"
 )

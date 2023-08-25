@@ -16,9 +16,6 @@ limitations under the License.
 package designatemdns
 
 const (
-	// KollaConfig -
-	KollaConfig = "/var/lib/config-data/merged/designate-mdns-config.json"
-
 	// Component -
 	Component = "designate-mdns"
 )

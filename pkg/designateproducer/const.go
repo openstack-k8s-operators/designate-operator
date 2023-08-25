@@ -16,9 +16,6 @@ limitations under the License.
 package designateproducer
 
 const (
-	// KollaConfig -
-	KollaConfig = "/var/lib/config-data/merged/designate-producer-config.json"
-
 	// Component -
 	Component = "designate-producer"
 )
