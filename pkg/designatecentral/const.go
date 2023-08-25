@@ -16,9 +16,6 @@ limitations under the License.
 package designatecentral
 
 const (
-	// KollaConfig -
-	KollaConfig = "/var/lib/config-data/merged/designate-central-config.json"
-
 	// Component -
 	Component = "designate-central"
 )

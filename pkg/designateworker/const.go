@@ -16,9 +16,6 @@ limitations under the License.
 package designateworker
 
 const (
-	// KollaConfig -
-	KollaConfig = "/var/lib/config-data/merged/designate-worker-config.json"
-
 	// Component -
 	Component = "designate-worker"
 )
