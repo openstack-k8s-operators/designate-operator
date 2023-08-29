@@ -1,8 +1,13 @@
-include "/etc/bind/rndc.key";
+include "/etc/named/rndc.key";
+
+acl designate-workers {
+    IPV4ADDR;
+};
 
 options {
-    directory "/var/cache/bind";
+    directory "/var/named";
     allow-new-zones yes;
+    allow-notify { designate-workers; };
     dnssec-validation auto;
     auth-nxdomain no;    # conform to RFC1035
     listen-on port BINDPORT { IPV4ADDR; };
@@ -11,8 +16,16 @@ options {
     pid-file "/run/named/named.pid";
     session-keyfile "/run/named/session.key";
     minimal-responses yes;
+    dump-file       "/var/named/data/cache_dump.db";
+    statistics-file "/var/named/data/named_stats.txt";
+    memstatistics-file "/var/named/data/named_mem_stats.txt";
+    secroots-file   "/var/named/data/named.secroots";
+    recursing-file  "/var/named/data/named.recursing";
+    pid-file "/run/named/named.pid";
+    session-keyfile "/run/named/session.key";
+
 };
 
 controls {
-    inet IPV4ADDR port RNDCPORT allow { IPV4ADDR; } keys { "rndc-key"; };
+    inet IPV4ADDR port RNDCPORT allow { "designate-workers"; } keys { "rndc-key"; };
 };

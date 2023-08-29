@@ -9,20 +9,20 @@ zone "." {
 
 zone "localhost" {
 	type master;
-	file "/etc/bind/db.local";
+	file "/etc/named/db.local";
 };
 
 zone "127.in-addr.arpa" {
 	type master;
-	file "/etc/bind/db.127";
+	file "/etc/named/db.127";
 };
 
 zone "0.in-addr.arpa" {
 	type master;
-	file "/etc/bind/db.0";
+	file "/etc/named/db.0";
 };
 
 zone "255.in-addr.arpa" {
 	type master;
-	file "/etc/bind/db.255";
+	file "/etc/named}/db.255";
 };

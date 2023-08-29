@@ -18,7 +18,16 @@ package v1beta1
 
 import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	// "github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	// Container image fall-back defaults
+
+	// DesignateBackendbind9ContainerImage is the fall-back container image for DesignateBackendbind9
+	DesignateBackendbind9ContainerImage =
+		"quay.io/tripleowallabycentos9/openstack-designate-backend-bind9:current-tripleo"
 )
 
 // DesignateBackendbind9Template defines the input parameters for the Designate Scheduler service
@@ -103,3 +112,30 @@ func init() {
 func (instance DesignateBackendbind9) IsReady() bool {
 	return instance.Status.ReadyCount == *(instance.Spec.Replicas)
 }
+
+// RbacConditionsSet - set the conditions for the rbac object
+func (instance DesignateBackendbind9) RbacConditionsSet(c *condition.Condition) {
+	instance.Status.Conditions.Set(c)
+}
+
+// RbacNamespace - return the namespace
+func (instance DesignateBackendbind9) RbacNamespace() string {
+	return instance.Namespace
+}
+
+// RbacResourceName - return the name to be used for rbac objects (serviceaccount, role, rolebinding)
+func (instance DesignateBackendbind9) RbacResourceName() string {
+	return "designatebackendbind9-" + instance.Name
+}
+
+// SetupDefaults - initializes any CRD field defaults based on environment variables (the defaulting mechanism itself is implemented via webhooks)
+// func SetupDefaults() {
+// 	// Acquire environmental defaults and initialize DesignateBackendbind9 defaults with them
+// 	redisDefaults := DesignateBackendbind9Defaults{
+// 		ContainerImageURL: util.GetEnvVar("INFRA_REDIS_IMAGE_URL_DEFAULT", DesignateBackendbind9ContainerImage),
+// 	}
+
+// 	SetupDesignateBackendbind9Defaults(redisDefaults)
+// }
+
+

@@ -123,32 +123,6 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
-  - designatebackendbind9
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - designate.openstack.org
-  resources:
-  - designatebackendbind9/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - designate.openstack.org
-  resources:
-  - designatebackendbind9/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - designate.openstack.org
-  resources:
   - designatebackendbind9s
   verbs:
   - create
@@ -398,6 +372,14 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - anyuid
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use
 - apiGroups:
   - security.openshift.io
   resourceNames:

@@ -180,7 +180,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// designate-backendbind9
+	// // designate-backendbind9
 	if err = (&controllers.DesignateBackendbind9Reconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
@@ -204,7 +204,7 @@ func main() {
 
 		checker = mgr.GetWebhookServer().StartedChecker()
 	}
-	
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", checker); err != nil {
