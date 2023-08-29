@@ -178,9 +178,10 @@ func Deployment(
 		TransportURLSecret:   instance.Spec.TransportURLSecret,
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		BackendType:          instance.Spec.BackendType,
-		VolumeMounts:         designate.GetAllVolumeMounts(),
-		Debug:                instance.Spec.Debug.InitContainer,
+		// BackendType:          "bind9",
+		BackendType:  instance.Spec.BackendType,
+		VolumeMounts: designate.GetAllVolumeMounts(),
+		Debug:        instance.Spec.Debug.InitContainer,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 

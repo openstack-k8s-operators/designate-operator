@@ -69,9 +69,20 @@ function setup_bind9 {
         sudo chown $BIND_USER:$BIND_GROUP $BIND_CFG_DIR
     fi
 
-    sudo chown -R $BIND_USER:$BIND_GROUP $BIND_CFG_DIR $BIND_VAR_DIR
+    if [[ ! -d $BIND_VAR_DIR ]]; then
+        sudo mkdir -p $BIND_VAR_DIR
+        sudo chown $BIND_USER:$BIND_GROUP $BIND_VAR_DIR
+    fi
+
+    if [[ ! -d $BIND_CACHE_DIR ]]; then
+        sudo mkdir -p $BIND_CACHE_DIR
+        sudo chown $BIND_USER:$BIND_GROUP $BIND_CACHE_DIR
+    fi
+
     sudo chmod -R g+r $BIND_CFG_DIR
     sudo chmod -R g+rw $BIND_VAR_DIR
+    sudo chmod -R g+rw $BIND_CACHE_DIR
+
 }
 
 # Copy default service config from container image as base
@@ -99,19 +110,26 @@ if [ "$BACKENDTYPE" == "bind9" ]; then
     # setup some critical env vars
     BIND_SERVICE_NAME=named
     BIND_CFG_DIR=/etc/named
-    BIND_CFG_FILE=/etc/named.conf
+    BIND_CFG_FILE=/etc/named/named.conf
     BIND_VAR_DIR=/var/named
+    BIND_CACHE_DIR=/var/cache/named
     BIND_USER=named
     BIND_GROUP=named
     BIND_PORT=53
     RNDC_PORT=953
-    IP4ADDR=$(hostname --ip-address)
-    
-    # Install bind9
-    dnf install -y bind9
-    
+    MYIPADDR=$(hostname --ip-address)
+
     setup_bind9
+
+    # change the tags to values
+    sudo sed -i 's/IPV4ADDR/'$MYIPADDR'/g' $BIND_CFG_FILE
+    sudo sed -i 's/BINDPORT/'$BIND_PORT'/g' $BIND_CFG_FILE
+    sudo sed -i 's/RNDCPORT/'$RNDC_PORT'/g' $BIND_CFG_FILE
     
+    sed -i 's/IPV4ADDR/'$MYIPADDR'/g' $BIND_CFG_DIR/rndc.conf
+    sed -i 's/RNDCPORT/'$RNDC_PORT'/g' $BIND_CFG_DIR/rndc.conf
+    
+
 elif [ "$BACKENDTYPE" = "unbound" ]; then
     msgout "INFO" "unbound setup ****UNDER CONSTRUCTION***"
 elif [ "$BACKENDTYPE" = "byo" ]; then

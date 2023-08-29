@@ -1,5 +1,5 @@
 {
-  "command": "/usr/sbin/named -f -d10",
+  "command": "/usr/sbin/named -c /etc/named/named.conf -f",
   "config_files": [
     {
       "source": "/var/lib/config-data/merged/designate.conf",
@@ -10,24 +10,6 @@
     {
       "source": "/var/lib/config-data/merged/named.conf",
       "dest": "/etc/named/named.conf",
-      "owner": "named:named",
-      "perm": "0644"
-    },
-    {
-      "source": "/var/lib/config-data/merged/named.conf.default-zones",
-      "dest": "/etc/named/named.conf.default-zones",
-      "owner": "named:named",
-      "perm": "0644"
-    },
-    {
-      "source": "/var/lib/config-data/merged/named.conf.local",
-      "dest": "/etc/named/named.conf.local",
-      "owner": "named:named",
-      "perm": "0644"
-    },
-    {
-      "source": "/var/lib/config-data/merged/named.conf.options",
-      "dest": "/etc/named/named.conf.options",
       "owner": "named:named",
       "perm": "0644"
     },
