@@ -67,9 +67,9 @@ func (r *DesignateReconciler) GetKClient() kubernetes.Interface {
 	return r.Kclient
 }
 
-// GetLogger -
-func (r *DesignateReconciler) GetLogger() logr.Logger {
-	return r.Log
+// GetLogger returns a logger object with a prefix of "controller.name" and additional controller context fields
+func (r *DesignateReconciler) GetLogger(ctx context.Context) logr.Logger {
+	return log.FromContext(ctx).WithName("Controllers").WithName("Designate")
 }
 
 // GetScheme -
@@ -81,7 +81,6 @@ func (r *DesignateReconciler) GetScheme() *runtime.Scheme {
 type DesignateReconciler struct {
 	client.Client
 	Kclient kubernetes.Interface
-	Log     logr.Logger
 	Scheme  *runtime.Scheme
 }
 
@@ -127,7 +126,7 @@ type DesignateReconciler struct {
 
 // Reconcile -
 func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
-	_ = log.FromContext(ctx)
+	Log := r.GetLogger(ctx)
 
 	// Fetch the Designate instance
 	instance := &designatev1beta1.Designate{}
@@ -148,7 +147,7 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		r.Client,
 		r.Kclient,
 		r.Scheme,
-		r.Log,
+		Log,
 	)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -218,7 +217,7 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// transportURLSecretFn - Watch for changes made to the secret associated with the RabbitMQ
 	// TransportURL created and used by Designate CRs.  Watch functions return a list of namespace-scoped
 	// CRs that then get fed  to the reconciler.  Hence, in this case, we need to know the name of the
@@ -230,6 +229,8 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// reconciliation for a Designate CR that does not need it.
 	//
 	// TODO: We also need a watch func to monitor for changes to the secret referenced by Designate.Spec.Secret
+	Log := r.GetLogger(ctx)
+
 	transportURLSecretFn := func(o client.Object) []reconcile.Request {
 		result := []reconcile.Request{}
 
@@ -239,7 +240,7 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			client.InNamespace(o.GetNamespace()),
 		}
 		if err := r.Client.List(context.Background(), designates, listOpts...); err != nil {
-			r.Log.Error(err, "Unable to retrieve Designate CRs %v")
+			Log.Error(err, "Unable to retrieve Designate CRs %v")
 			return nil
 		}
 
@@ -252,7 +253,7 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 							Namespace: o.GetNamespace(),
 							Name:      cr.Name,
 						}
-						r.Log.Info(fmt.Sprintf("TransportURL Secret %s belongs to TransportURL belonging to Designate CR %s", o.GetName(), cr.Name))
+						Log.Info(fmt.Sprintf("TransportURL Secret %s belongs to TransportURL belonging to Designate CR %s", o.GetName(), cr.Name))
 						result = append(result, reconcile.Request{NamespacedName: name})
 					}
 				}
@@ -287,7 +288,9 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *DesignateReconciler) reconcileDelete(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
 
 	// remove db finalizer first
 	db, err := mariadbv1.GetDatabaseByName(ctx, helper, instance.Name)
@@ -306,7 +309,7 @@ func (r *DesignateReconciler) reconcileDelete(ctx context.Context, instance *des
 
 	// Service is deleted so remove the finalizer.
 	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' delete successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' delete successfully", instance.Name))
 
 	return ctrl.Result{}, nil
 }
@@ -318,7 +321,9 @@ func (r *DesignateReconciler) reconcileInit(
 	serviceLabels map[string]string,
 	serviceAnnotations map[string]string,
 ) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
 
 	//
 	// create service DB instance
@@ -413,7 +418,7 @@ func (r *DesignateReconciler) reconcileInit(
 	}
 	if dbSyncjob.HasChanged() {
 		instance.Status.Hash[designatev1beta1.DbSyncHash] = dbSyncjob.GetHash()
-		r.Log.Info(fmt.Sprintf("Service '%s' - Job %s hash added - %s", instance.Name, jobDef.Name, instance.Status.Hash[designatev1beta1.DbSyncHash]))
+		Log.Info(fmt.Sprintf("Service '%s' - Job %s hash added - %s", instance.Name, jobDef.Name, instance.Status.Hash[designatev1beta1.DbSyncHash]))
 	}
 	instance.Status.Conditions.MarkTrue(condition.DBSyncReadyCondition, condition.DBSyncReadyMessage)
 
@@ -422,12 +427,14 @@ func (r *DesignateReconciler) reconcileInit(
 
 	// run Designate db sync - end
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s'", instance.Name))
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s'", instance.Name))
 
 	// Service account, role, binding
 	rbacRules := []rbacv1.PolicyRule{
@@ -474,13 +481,13 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("TransportURL %s successfully reconciled - operation: %s", transportURL.Name, string(op)))
+		Log.Info(fmt.Sprintf("TransportURL %s successfully reconciled - operation: %s", transportURL.Name, string(op)))
 	}
 
 	instance.Status.TransportURLSecret = transportURL.Status.SecretName
 
 	if instance.Status.TransportURLSecret == "" {
-		r.Log.Info(fmt.Sprintf("Waiting for TransportURL %s secret to be created", transportURL.Name))
+		Log.Info(fmt.Sprintf("Waiting for TransportURL %s secret to be created", transportURL.Name))
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			designatev1beta1.DesignateRabbitMqTransportURLReadyCondition,
 			condition.RequestedReason,
@@ -530,7 +537,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	// - %-config configmap holding minimal designate config required to get the service up, user can add additional files to be added to the service
 	// - parameters which has passwords gets added from the OpenStack secret via the init container
 	//
-	r.Log.Info("pre generateConfigMap ....")
+	Log.Info("pre generateConfigMap ....")
 
 	err = r.generateServiceConfigMaps(ctx, helper, instance, &configMapVars, serviceLabels)
 	if err != nil {
@@ -542,7 +549,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	r.Log.Info("post generateConfigMap ....")
+	Log.Info("post generateConfigMap ....")
 
 	//
 	// create hash over all the different input resources to identify if any those changed
@@ -556,12 +563,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			condition.SeverityWarning,
 			condition.ServiceConfigReadyErrorMessage,
 			err.Error()))
-		r.Log.Info(fmt.Sprintf("createHashOfInputHashes failed: %v", err))
+		Log.Info(fmt.Sprintf("createHashOfInputHashes failed: %v", err))
 		return ctrl.Result{}, err
 	} else if hashChanged {
 		// Hash changed and instance status should be updated (which will be done by main defer func),
 		// so we need to return and reconcile again
-		r.Log.Info("input hashes have changed, restarting reconcile")
+		Log.Info("input hashes have changed, restarting reconcile")
 		return ctrl.Result{}, nil
 	}
 	// Create ConfigMaps and Secrets - end
@@ -628,7 +635,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	//
 	// normal reconcile tasks
 	//
-	r.Log.Info("Reconcile tasks starting....")
+	Log.Info("Reconcile tasks starting....")
 
 	// deploy designate-api
 	designateAPI, op, err := r.apiDeploymentCreateOrUpdate(ctx, instance)
@@ -642,7 +649,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 
 	// Mirror DesignateAPI status' ReadyCount to this parent CR
@@ -653,7 +660,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
-	r.Log.Info("Deployment API task reconciled")
+	Log.Info("Deployment API task reconciled")
 
 	// deploy designate-central
 	designateCentral, op, err := r.centralDeploymentCreateOrUpdate(ctx, instance)
@@ -667,7 +674,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 
 	// Mirror DesignateCentral status' ReadyCount to this parent CR
@@ -678,7 +685,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
-	r.Log.Info("Deployment Central task reconciled")
+	Log.Info("Deployment Central task reconciled")
 
 	// deploy designate-worker
 	designateWorker, op, err := r.workerDeploymentCreateOrUpdate(ctx, instance)
@@ -692,7 +699,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 
 	// Mirror DesignateWorker status' ReadyCount to this parent CR
@@ -703,7 +710,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
-	r.Log.Info("Deployment Worker task reconciled")
+	Log.Info("Deployment Worker task reconciled")
 
 	// deploy designate-mdns
 	designateMdns, op, err := r.mdnsDeploymentCreateOrUpdate(ctx, instance)
@@ -717,7 +724,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 
 	// Mirror DesignateMdns status' ReadyCount to this parent CR
@@ -728,7 +735,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
-	r.Log.Info("Deployment Mdns task reconciled")
+	Log.Info("Deployment Mdns task reconciled")
 
 	// deploy designate-producer
 	designateProducer, op, err := r.producerDeploymentCreateOrUpdate(ctx, instance)
@@ -742,7 +749,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 
 	// Mirror DesignateProducer status' ReadyCount to this parent CR
@@ -753,7 +760,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
-	r.Log.Info("Deployment Producer task reconciled")
+	Log.Info("Deployment Producer task reconciled")
 
 	// deploy designate-backendbind9
 	designateBackendbind9, op, err := r.backendbind9DeploymentCreateOrUpdate(ctx, instance)
@@ -767,7 +774,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 
 	// Mirror DesignateBackendbind9 status' ReadyCount to this parent CR
@@ -778,7 +785,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
-	r.Log.Info("Deployment Backendbind9 task reconciled")
+	Log.Info("Deployment Backendbind9 task reconciled")
 
 	// deploy the unbound reconcilier if necessary
 	designateUnbound, op, err := r.unboundDeploymentCreateOrUpdate(ctx, instance)
@@ -792,7 +799,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 	if op != controllerutil.OperationResultNone {
-		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 
 	instance.Status.DesignateUnboundReadyCount = designateUnbound.Status.ReadyCount
@@ -802,29 +809,33 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if c != nil {
 		instance.Status.Conditions.Set(c)
 	}
-	r.Log.Info("Deployment Unbound task reconciled")
+	Log.Info("Deployment Unbound task reconciled")
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' successfully", instance.Name))
+	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
 
 	// TODO: should have minor update tasks if required
 	// - delete dbsync hash from status to rerun it?
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' update successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' update successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
 
 	// TODO: should have major version upgrade tasks
 	// -delete dbsync hash from status to rerun it?
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' upgrade successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' upgrade successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
@@ -907,17 +918,19 @@ func (r *DesignateReconciler) createHashOfInputHashes(
 	instance *designatev1beta1.Designate,
 	envVars map[string]env.Setter,
 ) (string, bool, error) {
+	Log := r.GetLogger(ctx)
+
 	var hashMap map[string]string
 	changed := false
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
 	hash, err := util.ObjectHash(mergedMapVars)
 	if err != nil {
-		r.Log.Info("XXX - Error creating hash")
+		Log.Info("XXX - Error creating hash")
 		return hash, changed, err
 	}
 	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, hash); changed {
 		instance.Status.Hash = hashMap
-		r.Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
+		Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
 	}
 	return hash, changed, nil
 }

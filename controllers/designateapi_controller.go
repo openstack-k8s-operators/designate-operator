@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -64,11 +65,6 @@ func (r *DesignateAPIReconciler) GetKClient() kubernetes.Interface {
 	return r.Kclient
 }
 
-// GetLogger -
-func (r *DesignateAPIReconciler) GetLogger() logr.Logger {
-	return r.Log
-}
-
 // GetScheme -
 func (r *DesignateAPIReconciler) GetScheme() *runtime.Scheme {
 	return r.Scheme
@@ -78,8 +74,12 @@ func (r *DesignateAPIReconciler) GetScheme() *runtime.Scheme {
 type DesignateAPIReconciler struct {
 	client.Client
 	Kclient kubernetes.Interface
-	Log     logr.Logger
 	Scheme  *runtime.Scheme
+}
+
+// GetLogger returns a logger object with a prefix of "controller.name" and additional controller context fields
+func (r *DesignateAPIReconciler) GetLogger(ctx context.Context) logr.Logger {
+	return log.FromContext(ctx).WithName("Controllers").WithName("DesignateAPI")
 }
 
 var (
@@ -116,7 +116,7 @@ var (
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
 func (r *DesignateAPIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
-	_ = r.Log.WithValues("designateapi", req.NamespacedName)
+	Log := r.GetLogger(ctx)
 
 	// Fetch the DesignateAPI instance
 	instance := &designatev1beta1.DesignateAPI{}
@@ -137,7 +137,7 @@ func (r *DesignateAPIReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.Client,
 		r.Kclient,
 		r.Scheme,
-		r.Log,
+		Log,
 	)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -206,9 +206,11 @@ func (r *DesignateAPIReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *DesignateAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Watch for changes to any CustomServiceConfigSecrets. Global secrets
 	// (e.g. TransportURLSecret) are handled by the top designate controller.
+	Log := r.GetLogger(ctx)
+
 	svcSecretFn := func(o client.Object) []reconcile.Request {
 		var namespace string = o.GetNamespace()
 		var secretName string = o.GetName()
@@ -220,7 +222,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			client.InNamespace(namespace),
 		}
 		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
-			r.Log.Error(err, "Unable to retrieve API CRs %v")
+			Log.Error(err, "Unable to retrieve API CRs")
 			return nil
 		}
 		for _, cr := range apis.Items {
@@ -230,7 +232,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						Namespace: namespace,
 						Name:      cr.Name,
 					}
-					r.Log.Info(fmt.Sprintf("Secret %s is used by Designate CR %s", secretName, cr.Name))
+					Log.Info(fmt.Sprintf("Secret %s is used by Designate CR %s", secretName, cr.Name))
 					result = append(result, reconcile.Request{NamespacedName: name})
 				}
 			}
@@ -255,7 +257,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			client.InNamespace(o.GetNamespace()),
 		}
 		if err := r.Client.List(context.Background(), designateAPIs, listOpts...); err != nil {
-			r.Log.Error(err, "Unable to retrieve DesignateAPI CRs %v")
+			Log.Error(err, "Unable to retrieve DesignateAPI CRs %v")
 			return nil
 		}
 
@@ -265,7 +267,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					Namespace: cr.GetNamespace(),
 					Name:      cr.GetName(),
 				}
-				r.Log.Info(fmt.Sprintf("NAD %s is used by DesignateAPI CR %s", o.GetName(), cr.GetName()))
+				Log.Info(fmt.Sprintf("NAD %s is used by DesignateAPI CR %s", o.GetName(), cr.GetName()))
 				result = append(result, reconcile.Request{NamespacedName: name})
 			}
 		}
@@ -290,7 +292,9 @@ func (r *DesignateAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *DesignateAPIReconciler) reconcileDelete(ctx context.Context, instance *designatev1beta1.DesignateAPI, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
 
 	for _, ksSvc := range keystoneServices {
 
@@ -326,7 +330,7 @@ func (r *DesignateAPIReconciler) reconcileDelete(ctx context.Context, instance *
 	// We did all the cleanup on the objects we created so we can remove the
 	// finalizer from ourselves to allow the deletion
 	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' delete successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' delete successfully", instance.Name))
 
 	return ctrl.Result{}, nil
 }
@@ -337,7 +341,9 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	helper *helper.Helper,
 	serviceLabels map[string]string,
 ) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
 
 	//
 	// expose the service (create service, route and return the created endpoint URLs)
@@ -523,12 +529,14 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		}
 	}
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *designatev1beta1.DesignateAPI, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info("Reconciling Service")
+	Log := r.GetLogger(ctx)
+
+	Log.Info("Reconciling Service")
 
 	// ConfigMap
 	configMapVars := make(map[string]env.Setter)
@@ -765,27 +773,31 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	}
 	// create Deployment - end
 
-	r.Log.Info("Reconciled Service successfully")
+	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateAPIReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateAPI, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
 
 	// TODO: should have minor update tasks if required
 	// - delete dbsync hash from status to rerun it?
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' update successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' update successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateAPIReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateAPI, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
 
 	// TODO: should have major version upgrade tasks
 	// -delete dbsync hash from status to rerun it?
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' upgrade successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' upgrade successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
@@ -874,6 +886,8 @@ func (r *DesignateAPIReconciler) createHashOfInputHashes(
 	instance *designatev1beta1.DesignateAPI,
 	envVars map[string]env.Setter,
 ) (string, bool, error) {
+	Log := r.GetLogger(ctx)
+
 	var hashMap map[string]string
 	changed := false
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
@@ -883,7 +897,7 @@ func (r *DesignateAPIReconciler) createHashOfInputHashes(
 	}
 	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, hash); changed {
 		instance.Status.Hash = hashMap
-		r.Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
+		Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
 	}
 	return hash, changed, nil
 }

@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -127,8 +128,7 @@ func main() {
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("Designate"),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(context.Background(), mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Designate")
 		os.Exit(1)
 	}
@@ -138,8 +138,7 @@ func main() {
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("DesignateAPI"),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(context.Background(), mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateAPI")
 		os.Exit(1)
 	}
@@ -149,8 +148,7 @@ func main() {
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("DesignateCentral"),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(context.Background(), mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateCentral")
 		os.Exit(1)
 	}
@@ -160,8 +158,7 @@ func main() {
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("DesignateProducer"),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(context.Background(), mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateProducer")
 		os.Exit(1)
 	}
@@ -171,8 +168,7 @@ func main() {
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("DesignateWork"),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(context.Background(), mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateWork")
 		os.Exit(1)
 	}
@@ -182,8 +178,7 @@ func main() {
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("DesignateMdns"),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(context.Background(), mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateMdns")
 		os.Exit(1)
 	}
