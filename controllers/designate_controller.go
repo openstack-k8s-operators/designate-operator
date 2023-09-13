@@ -104,7 +104,6 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses/finalizers,verbs=update
-
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
@@ -186,6 +185,7 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			condition.UnknownCondition(designatev1beta1.DesignateWorkerReadyCondition, condition.InitReason, designatev1beta1.DesignateWorkerReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
 			condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
+			// condition.UnknownCondition(designatev1beta1.DesignateBackendbind9ReadyCondition, condition.InitReason, designatev1beta1.DesignateBackendbind9ReadyInitMessage),
 			condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
 			condition.UnknownCondition(condition.NetworkAttachmentsReadyCondition, condition.InitReason, condition.NetworkAttachmentsReadyInitMessage),
 			// service account, role, rolebinding conditions

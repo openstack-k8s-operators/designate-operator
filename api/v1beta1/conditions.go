@@ -38,6 +38,9 @@ const (
 
 	// DesignateProducerReadyCondition Status=True condition which indicates if the DesignateProducer is configured and operational
 	DesignateProducerReadyCondition condition.Type = "DesignateProducerReady"
+
+	// DesignateBackendbind9ReadyCondition Status=True condition which indicates if the DesignateBackendbind9 is configured and operational
+	DesignateBackendbind9ReadyCondition condition.Type = "DesignateBackendbind9Ready"
 )
 
 // Designate Reasons used by API objects.
@@ -104,4 +107,13 @@ const (
 
 	// DesignateProducerReadyErrorMessage
 	DesignateProducerReadyErrorMessage = "DesignateProducer error occured %s"
+
+	//
+	// DesignateBackendbind9Ready condition messages
+	//
+	// DesignateBackendbind9ReadyInitMessage
+	DesignateBackendbind9ReadyInitMessage = "DesignateBackendbind9 not started"
+
+	// DesignateBackendbind9ReadyErrorMessage
+	DesignateBackendbind9ReadyErrorMessage = "DesignateBackendbind9 error occured %s"
 )

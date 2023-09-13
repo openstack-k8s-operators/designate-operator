@@ -44,6 +44,11 @@ spec:
           spec:
             description: DesignateSpec defines the desired state of Designate
             properties:
+              None:
+                description: BackendType - Defines the backend service/configuration
+                  we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps maintain
+                  a single init container/init.sh to do container setup
+                type: string
               customServiceConfig:
                 default: '# add your customization here'
                 description: CustomServiceConfig - customize the service config using
@@ -90,6 +95,11 @@ spec:
                 description: DesignateAPI - Spec definition for the API service of
                   this Designate deployment
                 properties:
+                  None:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
+                      maintain a single init container/init.sh to do container setup
+                    type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
                       be set to environmental default if empty)
@@ -253,6 +263,11 @@ spec:
                 description: DesignateCentral - Spec definition for the Central service
                   of this Designate deployment
                 properties:
+                  None:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
+                      maintain a single init container/init.sh to do container setup
+                    type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
                       be set to environmental default if empty)
@@ -416,6 +431,11 @@ spec:
                 description: DesignateMdns - Spec definition for the Mdns service
                   of this Designate deployment
                 properties:
+                  None:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
+                      maintain a single init container/init.sh to do container setup
+                    type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
                       be set to environmental default if empty)
@@ -579,6 +599,11 @@ spec:
                 description: DesignateProducer - Spec definition for the Producer
                   service of this Designate deployment
                 properties:
+                  None:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
+                      maintain a single init container/init.sh to do container setup
+                    type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
                       be set to environmental default if empty)
@@ -742,6 +767,11 @@ spec:
                 description: DesignateWorker - Spec definition for the Worker service
                   of this Designate deployment
                 properties:
+                  None:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
+                      maintain a single init container/init.sh to do container setup
+                    type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
                       be set to environmental default if empty)

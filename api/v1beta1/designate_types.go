@@ -75,6 +75,11 @@ type DesignateSpec struct {
 	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
 
 	// +kubebuilder:validation:Optional
+	// BackendType - Defines the backend service/configuration we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc..
+	// Helps maintain a single init container/init.sh to do container setup
+	BackendType string `json:"None"`
+
+	// +kubebuilder:validation:Optional
 	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
 	// actual action pod gets started with sleep infinity
 	Debug DesignateDebug `json:"debug,omitempty"`
@@ -191,7 +196,6 @@ func (instance Designate) IsReady() bool {
 		instance.Status.Conditions.IsTrue(DesignateWorkerReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateMdnsReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateProducerReadyCondition)
-
 }
 
 // DesignateExtraVolMounts exposes additional parameters processed by the designate-operator

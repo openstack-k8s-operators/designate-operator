@@ -41,7 +41,7 @@ type DesignateWorkerSpec struct {
 	// Common input parameters for all Designate services
 	DesignateTemplate `json:",inline"`
 
-	// Input parameters for the Designate Scheduler service
+	// Input parameters for the Designate Worker service
 	DesignateWorkerTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional

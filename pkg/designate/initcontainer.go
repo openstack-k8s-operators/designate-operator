@@ -31,6 +31,7 @@ type APIDetails struct {
 	TransportURLSecret   string
 	DBPasswordSelector   string
 	UserPasswordSelector string
+	BackendType          string
 	VolumeMounts         []corev1.VolumeMount
 	Privileged           bool
 	Debug                bool
@@ -54,6 +55,7 @@ func InitContainer(init APIDetails) []corev1.Container {
 	envVars["DatabaseHost"] = env.SetValue(init.DatabaseHost)
 	envVars["DatabaseUser"] = env.SetValue(init.DatabaseUser)
 	envVars["DatabaseName"] = env.SetValue(init.DatabaseName)
+	envVars["BackendType"] = env.SetValue(init.BackendType)
 
 	envs := []corev1.EnvVar{
 		{
