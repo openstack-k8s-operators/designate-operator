@@ -137,5 +137,3 @@ func (instance DesignateBackendbind9) RbacResourceName() string {
 
 // 	SetupDesignateBackendbind9Defaults(redisDefaults)
 // }
-
-
