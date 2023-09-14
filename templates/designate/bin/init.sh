@@ -125,10 +125,10 @@ if [ "$BACKENDTYPE" == "bind9" ]; then
     sudo sed -i 's/IPV4ADDR/'$MYIPADDR'/g' $BIND_CFG_FILE
     sudo sed -i 's/BINDPORT/'$BIND_PORT'/g' $BIND_CFG_FILE
     sudo sed -i 's/RNDCPORT/'$RNDC_PORT'/g' $BIND_CFG_FILE
-    
+
     sed -i 's/IPV4ADDR/'$MYIPADDR'/g' $BIND_CFG_DIR/rndc.conf
     sed -i 's/RNDCPORT/'$RNDC_PORT'/g' $BIND_CFG_DIR/rndc.conf
-    
+
 
 elif [ "$BACKENDTYPE" = "unbound" ]; then
     msgout "INFO" "unbound setup ****UNDER CONSTRUCTION***"
