@@ -80,6 +80,18 @@ type DesignateSpec struct {
 	BackendType string `json:"None"`
 
 	// +kubebuilder:validation:Optional
+	// BackendTypeProtocol - Defines the backend protocol to be used between the desigante-worker &
+	// desigante_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
+	// Please Note: this MUST match what is in the /etc/designate.conf ['service:worker']
+	BackendWorkerServerProtocol string `json:"backendWorkerServerProtocol"`
+
+	// +kubebuilder:validation:Optional
+	// BackendTypeProtocol - Defines the backend protocol to be used between the desigante-worker &
+	// desigante_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
+	// Please Note: this MUST match what is in the /etc/designate.conf ['service:mdns']
+	BackendMdnsServerProtocol string `json:"backendMdnsServerProtocol"`
+
+	// +kubebuilder:validation:Optional
 	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
 	// actual action pod gets started with sleep infinity
 	Debug DesignateDebug `json:"debug,omitempty"`
