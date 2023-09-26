@@ -62,6 +62,18 @@ type DesignateTemplate struct {
 	// BackendType - Defines the backend service/configuration we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc..
 	// Helps maintain a single init container/init.sh to do container setup
 	BackendType string `json:"None"`
+
+	// +kubebuilder:validation:Optional
+	// BackendTypeProtocol - Defines the backend protocol to be used between the desigante-worker &
+	// desigante_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
+	// Please Note: this MUST match what is in the /etc/designate.conf ['service:worker']
+	BackendWorkerServerProtocol string `json:"backendWorkerServerProtocol"`
+
+	// +kubebuilder:validation:Optional
+	// BackendTypeProtocol - Defines the backend protocol to be used between the desigante-worker &
+	// desigante_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
+	// Please Note: this MUST match what is in the /etc/designate.conf ['service:mdns']
+	BackendMdnsServerProtocol string `json:"backendMdnsServerProtocol"`
 }
 
 // DesignateServiceTemplate defines the input parameters that can be defined for a given

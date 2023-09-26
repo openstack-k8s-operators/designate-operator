@@ -49,6 +49,18 @@ spec:
                   we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps maintain
                   a single init container/init.sh to do container setup
                 type: string
+              backendMdnsServerProtocol:
+                description: 'BackendTypeProtocol - Defines the backend protocol to
+                  be used between the desigante-worker & desigante_mdns to/from the
+                  DNS server. Acceptable values are: "UDP", "TCP" Please Note: this
+                  MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                type: string
+              backendWorkerServerProtocol:
+                description: 'BackendTypeProtocol - Defines the backend protocol to
+                  be used between the desigante-worker & desigante_mdns to/from the
+                  DNS server. Acceptable values are: "UDP", "TCP" Please Note: this
+                  MUST match what is in the /etc/designate.conf [''service:worker'']'
+                type: string
               customServiceConfig:
                 default: '# add your customization here'
                 description: CustomServiceConfig - customize the service config using
@@ -99,6 +111,18 @@ spec:
                     description: BackendType - Defines the backend service/configuration
                       we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
                       maintain a single init container/init.sh to do container setup
+                    type: string
+                  backendMdnsServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendWorkerServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:worker'']'
                     type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
@@ -268,6 +292,18 @@ spec:
                       we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
                       maintain a single init container/init.sh to do container setup
                     type: string
+                  backendMdnsServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendWorkerServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:worker'']'
+                    type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
                       be set to environmental default if empty)
@@ -435,6 +471,18 @@ spec:
                     description: BackendType - Defines the backend service/configuration
                       we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
                       maintain a single init container/init.sh to do container setup
+                    type: string
+                  backendMdnsServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendWorkerServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:worker'']'
                     type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
@@ -604,6 +652,18 @@ spec:
                       we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
                       maintain a single init container/init.sh to do container setup
                     type: string
+                  backendMdnsServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendWorkerServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:worker'']'
+                    type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
                       be set to environmental default if empty)
@@ -771,6 +831,18 @@ spec:
                     description: BackendType - Defines the backend service/configuration
                       we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps
                       maintain a single init container/init.sh to do container setup
+                    type: string
+                  backendMdnsServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendWorkerServerProtocol:
+                    description: 'BackendTypeProtocol - Defines the backend protocol
+                      to be used between the desigante-worker & desigante_mdns to/from
+                      the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
+                      this MUST match what is in the /etc/designate.conf [''service:worker'']'
                     type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
