@@ -6,7 +6,8 @@ aliases:
   - johnsom
   - dkehn
   ci-approvers:
-  - Sandeepyadav93
+  - lewisdenny
+  - frenzyfriday
   - viroel
   openstack-approvers:
   - abays
