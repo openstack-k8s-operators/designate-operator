@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"time"
 
-	routev1 "github.com/openshift/api/route/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,7 +38,6 @@ import (
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	designateproducer "github.com/openstack-k8s-operators/designate-operator/pkg/designateproducer"
-	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
@@ -255,10 +253,7 @@ func (r *DesignateProducerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&designatev1beta1.DesignateProducer{}).
-		Owns(&keystonev1.KeystoneService{}).
-		Owns(&keystonev1.KeystoneEndpoint{}).
 		Owns(&appsv1.Deployment{}).
-		Owns(&routev1.Route{}).
 		Owns(&corev1.Service{}).
 		// watch the secrets we don't own
 		Watches(&source.Kind{Type: &corev1.Secret{}},

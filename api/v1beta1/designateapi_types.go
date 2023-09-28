@@ -18,6 +18,7 @@ package v1beta1
 
 import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+  "github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -53,12 +54,26 @@ type DesignateAPISpec struct {
 	// +kubebuilder:validation:Optional
 	// ServiceAccount - service account name used internally to provide Designate services the default SA name
 	ServiceAccount string `json:"serviceAccount"`
+
+ // Override, provides the ability to override the generated manifest of several child resources.
+ Override APIOverrideSpec `json:"override,omitempty"`
+
+}
+
+// APIOverrideSpec to override the generated manifest of several child resources.
+type APIOverrideSpec struct {
+    // Override configuration for the Service created to serve traffic to the cluster.
+    // The key must be the endpoint type (public, internal)
+    Service map[service.Endpoint]service.RoutedOverrideSpec `json:"service,omitempty"`
 }
 
 // DesignateAPIStatus defines the observed state of DesignateAPI
 type DesignateAPIStatus struct {
 	// Map of hashes to track e.g. job status
 	Hash map[string]string `json:"hash,omitempty"`
+
+	// API endpoints
+	APIEndpoints map[string]map[string]string `json:"apiEndpoints,omitempty"`
 
 	// Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
