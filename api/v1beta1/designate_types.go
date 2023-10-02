@@ -80,14 +80,14 @@ type DesignateSpec struct {
 	BackendType string `json:"None"`
 
 	// +kubebuilder:validation:Optional
-	// BackendTypeProtocol - Defines the backend protocol to be used between the desigante-worker &
-	// desigante_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
+	// BackendTypeProtocol - Defines the backend protocol to be used between the designate-worker &
+	// designate_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
 	// Please Note: this MUST match what is in the /etc/designate.conf ['service:worker']
 	BackendWorkerServerProtocol string `json:"backendWorkerServerProtocol"`
 
 	// +kubebuilder:validation:Optional
-	// BackendTypeProtocol - Defines the backend protocol to be used between the desigante-worker &
-	// desigante_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
+	// BackendTypeProtocol - Defines the backend protocol to be used between the designate-worker &
+	// designate_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
 	// Please Note: this MUST match what is in the /etc/designate.conf ['service:mdns']
 	BackendMdnsServerProtocol string `json:"backendMdnsServerProtocol"`
 
