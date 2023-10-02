@@ -28,6 +28,7 @@ import (
 
 	"github.com/go-logr/logr"
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
+
 	// "github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/pkg/designatebackendbind9"
 	//"github.com/openstack-k8s-operators/lib-common/modules/common"
@@ -187,8 +188,8 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	// Service to expose designatebackendbind9 pods
-	commonsvc := commonservice.NewService(designatebackendbind9.Service(instance),
-		map[string]string{}, time.Duration(5)*time.Second)
+	commonsvc, _ := commonservice.NewService(designatebackendbind9.Service(instance),
+		time.Duration(5)*time.Second, &commonservice.OverrideSpec{})
 	sres, serr := commonsvc.CreateOrPatch(ctx, helper)
 	if serr != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
