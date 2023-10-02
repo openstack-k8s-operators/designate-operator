@@ -2,7 +2,6 @@ apiVersion: designate.openstack.org/v1beta1
 kind: Designate
 metadata:
   name: designate
-  namespace: openstack
 spec:
   secret: osp-secret
   serviceUser: designate
@@ -12,15 +11,3 @@ spec:
   databaseInstance: openstack
   databaseUser: designate
   rabbitMqClusterName: rabbitmq
-  designateAPI:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo
-  designateCentral:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-central:current-tripleo
-  designateMdns:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-mdns:current-tripleo
-  designateWorker:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-worker:current-tripleo
-  designateProducer:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-producer:current-tripleo
-  designateBackendbind9:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-backend-bind9:current-tripleo

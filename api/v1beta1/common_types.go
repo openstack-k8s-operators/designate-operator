@@ -25,15 +25,19 @@ const (
 	// Container image fall-back defaults
 
 	// DesignateAPIContainerImage is the fall-back container image for DesignateAPI
-	DesignateAPIContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-api:current-podified"
+	DesignateAPIContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo"
 	// DesignateCentralContainerImage is the fall-back container image for DesignateCentral
-	DesignateCentralContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-central:current-podified"
+	DesignateCentralContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-central:current-tripleo"
 	// DesignateMdnsContainerImage is the fall-back container image for DesignateMdns
-	DesignateMdnsContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-mdns:current-podified"
+	DesignateMdnsContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-mdns:current-tripleo"
 	// DesignateProducerContainerImage is the fall-back container image for DesignateProducer
-	DesignateProducerContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-producer:current-podified"
+	DesignateProducerContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-producer:current-tripleo"
 	// DesignateWorkerContainerImage is the fall-back container image for DesignateWorker
-	DesignateWorkerContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-worker:current-podified"
+	DesignateWorkerContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-worker:current-tripleo"
+	// DesignateUnboundContainerImage is the fall-back container image for DesignateUnbound
+	DesignateUnboundContainerImage = "quay.io/tripleowallabycentos9/openstack-unbound:current-tripleo"
+	// DesignateBackendbind9ContainerImage is the fall-back container image for DesignateUnbound
+	DesignateBackendbind9ContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-backend-bind9:current-tripleo"
 )
 
 // DesignateTemplate defines common input parameters used by all Designate services
@@ -59,7 +63,7 @@ type DesignateTemplate struct {
 	PasswordSelectors PasswordSelector `json:"passwordSelectors"`
 
 	// +kubebuilder:validation:Optional
-	// BackendType - Defines the backend service/configuration we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc..
+	// BackendType - Defines the backend service/configuration we are using, i.e. bind9, PowerDNS, BYO, etc..
 	// Helps maintain a single init container/init.sh to do container setup
 	BackendType string `json:"None"`
 
@@ -165,11 +169,13 @@ type DesignateServiceDebug struct {
 func SetupDefaults() {
 	// Acquire environmental defaults and initialize Designate defaults with them
 	designateDefaults := DesignateDefaults{
-		APIContainerImageURL:      util.GetEnvVar("DESIGNATE_API_IMAGE_URL_DEFAULT", DesignateAPIContainerImage),
-		CentralContainerImageURL:  util.GetEnvVar("DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT", DesignateCentralContainerImage),
-		MdnsContainerImageURL:     util.GetEnvVar("DESIGNATE_MDNS_IMAGE_URL_DEFAULT", DesignateMdnsContainerImage),
-		ProducerContainerImageURL: util.GetEnvVar("DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT", DesignateProducerContainerImage),
-		WorkerContainerImageURL:   util.GetEnvVar("DESIGNATE_WORKER_IMAGE_URL_DEFAULT", DesignateWorkerContainerImage),
+		APIContainerImageURL:          util.GetEnvVar("DESIGNATE_API_IMAGE_URL_DEFAULT", DesignateAPIContainerImage),
+		CentralContainerImageURL:      util.GetEnvVar("DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT", DesignateCentralContainerImage),
+		MdnsContainerImageURL:         util.GetEnvVar("DESIGNATE_MDNS_IMAGE_URL_DEFAULT", DesignateMdnsContainerImage),
+		ProducerContainerImageURL:     util.GetEnvVar("DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT", DesignateProducerContainerImage),
+		WorkerContainerImageURL:       util.GetEnvVar("DESIGNATE_WORKER_IMAGE_URL_DEFAULT", DesignateWorkerContainerImage),
+		UnboundContainerImageURL:      util.GetEnvVar("DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT", DesignateUnboundContainerImage),
+		Backendbind9ContainerImageURL: util.GetEnvVar("DESIGNATE_BACKENDBIND9_IMAGE_URL_DEFAULT", DesignateBackendbind9ContainerImage),
 	}
 
 	SetupDesignateDefaults(designateDefaults)

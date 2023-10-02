@@ -16,6 +16,11 @@ spec:
       kind: DesignateCentrals
       name: designatecentrals.designate.openstack.org
       version: v1beta1
+    - description: DesignateUnbound is the Schema for the designateunbound API
+      displayName: Designate Unbound
+      kind: DesignateUnbound
+      name: designateunbounds.designate.openstack.org
+      version: v1beta1
     - description: DesignateAPI is the Schema for the designateapis API
       displayName: Designate API
       kind: DesignateAPI

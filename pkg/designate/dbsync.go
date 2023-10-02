@@ -26,7 +26,7 @@ import (
 
 const (
 	// DBSyncCommand -
-	DBSyncCommand = "/usr/local/bin/kolla_start"
+	DBSyncCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
 )
 
 // DbSyncJob func
@@ -48,7 +48,6 @@ func DbSyncJob(
 
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
-	envVars["KOLLA_BOOTSTRAP"] = env.SetValue("TRUE")
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

@@ -30,11 +30,13 @@ import (
 
 // DesignateDefaults -
 type DesignateDefaults struct {
-	APIContainerImageURL      string
-	CentralContainerImageURL  string
-	MdnsContainerImageURL     string
-	ProducerContainerImageURL string
-	WorkerContainerImageURL   string
+	APIContainerImageURL          string
+	CentralContainerImageURL      string
+	MdnsContainerImageURL         string
+	ProducerContainerImageURL     string
+	WorkerContainerImageURL       string
+	Backendbind9ContainerImageURL string
+	UnboundContainerImageURL      string
 }
 
 var designateDefaults DesignateDefaults
@@ -82,6 +84,12 @@ func (spec *DesignateSpec) Default() {
 	}
 	if spec.DesignateWorker.ContainerImage == "" {
 		spec.DesignateWorker.ContainerImage = designateDefaults.WorkerContainerImageURL
+	}
+	if spec.DesignateBackendbind9.ContainerImage == "" {
+		spec.DesignateBackendbind9.ContainerImage = designateDefaults.Backendbind9ContainerImageURL
+	}
+	if spec.DesignateUnbound.ContainerImage == "" {
+		spec.DesignateUnbound.ContainerImage = designateDefaults.UnboundContainerImageURL
 	}
 }
 

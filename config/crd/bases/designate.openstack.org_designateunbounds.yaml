@@ -5,21 +5,17 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.11.1
   creationTimestamp: null
-  name: designateproducers.designate.openstack.org
+  name: designateunbounds.designate.openstack.org
 spec:
   group: designate.openstack.org
   names:
-    kind: DesignateProducer
-    listKind: DesignateProducerList
-    plural: designateproducers
-    singular: designateproducer
+    kind: DesignateUnbound
+    listKind: DesignateUnboundList
+    plural: designateunbounds
+    singular: designateunbound
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: NetworkAttachments
-      jsonPath: .status.networkAttachments
-      name: NetworkAttachments
-      type: string
     - description: Status
       jsonPath: .status.conditions[0].status
       name: Status
@@ -31,7 +27,7 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: DesignateProducer is the Schema for the designateproducer API
+        description: DesignateUnbound is the Schema for the designateworker API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -46,25 +42,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: DesignateProducerSpec defines the desired state of DesignateProducer
+            description: DesignateUnboundSpec defines the desired state of DesignateUnbound
             properties:
-              None:
-                description: BackendType - Defines the backend service/configuration
-                  we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain a
-                  single init container/init.sh to do container setup
-                type: string
-              backendMdnsServerProtocol:
-                description: 'BackendTypeProtocol - Defines the backend protocol to
-                  be used between the designate-worker & designate_mdns to/from the
-                  DNS server. Acceptable values are: "UDP", "TCP" Please Note: this
-                  MUST match what is in the /etc/designate.conf [''service:mdns'']'
-                type: string
-              backendWorkerServerProtocol:
-                description: 'BackendTypeProtocol - Defines the backend protocol to
-                  be used between the designate-worker & designate_mdns to/from the
-                  DNS server. Acceptable values are: "UDP", "TCP" Please Note: this
-                  MUST match what is in the /etc/designate.conf [''service:worker'']'
-                type: string
               containerImage:
                 description: ContainerImage - Designate Container Image URL (will
                   be set to environmental default if empty)
@@ -84,15 +63,6 @@ spec:
                 items:
                   type: string
                 type: array
-              databaseHostname:
-                description: DatabaseHostname - Designate Database Hostname
-                type: string
-              databaseUser:
-                default: designate
-                description: 'DatabaseUser - optional username used for designate
-                  DB, defaults to designate TODO: -> implement needs work in mariadb-operator,
-                  right now only designate'
-                type: string
               debug:
                 description: Debug - enable debug for different deploy stages. If
                   an init container is used, it runs and the actual action pod gets
@@ -129,28 +99,9 @@ spec:
                   this service. Setting here overrides any global NodeSelector settings
                   within the Designate CR.
                 type: object
-              passwordSelectors:
-                default:
-                  database: DesignateDatabasePassword
-                  service: DesignatePassword
-                description: PasswordSelectors - Selectors to identify the DB and
-                  ServiceUser password from the Secret
-                properties:
-                  database:
-                    default: DesignateDatabasePassword
-                    description: 'Database - Selector to get the designate database
-                      user password from the Secret TODO: not used, need change in
-                      mariadb-operator'
-                    type: string
-                  service:
-                    default: DesignatePassword
-                    description: Service - Selector to get the designate service password
-                      from the Secret
-                    type: string
-                type: object
               replicas:
                 default: 1
-                description: Replicas - Designate Producer Replicas
+                description: Replicas - Designate Unbound Replicas
                 format: int32
                 maximum: 32
                 minimum: 0
@@ -203,27 +154,15 @@ spec:
                       to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                     type: object
                 type: object
-              secret:
-                description: Secret containing OpenStack password information for
-                  DesignateDatabasePassword
-                type: string
               serviceAccount:
                 description: ServiceAccount - service account name used internally
                   to provide Designate services the default SA name
-                type: string
-              serviceUser:
-                default: designate
-                description: ServiceUser - optional username used for this service
-                  to register in designate
-                type: string
-              transportURLSecret:
-                description: Secret containing RabbitMq transport URL
                 type: string
             required:
             - containerImage
             type: object
           status:
-            description: DesignateProducerStatus defines the observed state of DesignateProducer
+            description: DesignateUnboundStatus defines the observed state of DesignateUnbound
             properties:
               conditions:
                 description: Conditions
@@ -281,7 +220,7 @@ spec:
                 description: NetworkAttachments status of the deployment pods
                 type: object
               readyCount:
-                description: ReadyCount of designate Producer instances
+                description: ReadyCount of designate central instances
                 format: int32
                 type: integer
             type: object

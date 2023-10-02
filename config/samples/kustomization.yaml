@@ -7,4 +7,5 @@ resources:
 - designate_v1beta1_designateworker.yaml
 - designate_v1beta1_designatemdns.yaml
 - designate_v1beta1_designatebackendbind9.yaml
+- designate_v1beta1_designateunbound.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

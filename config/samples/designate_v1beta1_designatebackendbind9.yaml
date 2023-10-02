@@ -1,6 +1,6 @@
 apiVersion: designate.openstack.org/v1beta1
 kind: DesignateBackendbind9
 metadata:
-  name: designatebackendbind9-sample
+  name: designatebackendbind9
 spec:
   # TODO(user): Add fields here

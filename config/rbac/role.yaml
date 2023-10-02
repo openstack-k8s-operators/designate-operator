@@ -253,6 +253,32 @@ rules:
 - apiGroups:
   - designate.openstack.org
   resources:
+  - designateunbounds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateunbounds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
+  - designateunbounds/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - designate.openstack.org
+  resources:
   - designateworkers
   verbs:
   - create
