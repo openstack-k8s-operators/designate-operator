@@ -41,42 +41,36 @@ func Deployment(
 	annotations map[string]string,
 ) *appsv1.Deployment {
 	rootUser := int64(0)
-	// Designate's uid and gid magic numbers come from the 'designate-user' in
-	// https://github.com/openstack/kolla/blob/master/kolla/common/users.py
-	// designateUser := int64(42411)
-	// designateGroup := int64(42411)
 
-	// livenessProbe := &corev1.Probe{
-	// 	// TODO might need tuning
-	// 	TimeoutSeconds:      5,
-	// 	PeriodSeconds:       3,
-	// 	InitialDelaySeconds: 3,
-	// }
-	// startupProbe := &corev1.Probe{
-	// 	// TODO might need tuning
-	// 	TimeoutSeconds:      5,
-	// 	FailureThreshold:    12,
-	// 	PeriodSeconds:       5,
-	// 	InitialDelaySeconds: 5,
-	// }
+	livenessProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      10,
+		PeriodSeconds:       15,
+		InitialDelaySeconds: 5,
+	}
+	startupProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      10,
+		PeriodSeconds:       15,
+		InitialDelaySeconds: 5,
+	}
 	args := []string{"-c"}
 	if instance.Spec.Debug.Service {
 		args = append(args, common.DebugCommand)
-		// livenessProbe.Exec = &corev1.ExecAction{
-		// 	Command: []string{
-		// 		"/bin/true",
-		// 	},
-		// }
-		// startupProbe.Exec = livenessProbe.Exec
+		livenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/bin/true",
+			},
+		}
+		startupProbe.Exec = livenessProbe.Exec
 	} else {
 		args = append(args, ServiceCommand)
-		// livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-		// 	Port: intstr.FromInt(8080),
-		// }
-		// startupProbe.HTTPGet = livenessProbe.HTTPGet
-		// // Probe doesn't run kolla_set_configs because it uses the 'designate' uid
-		// // and gid and doesn't have permissions to make files be owned by root,
-		// // so designate.conf is in its original location
+		livenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/usr/bin/pgrep", "-r", "DRST", "-f", "designate.worker",
+			},
+		}
+		startupProbe.Exec = livenessProbe.Exec
 	}
 
 	envVars := map[string]env.Setter{}
@@ -115,11 +109,11 @@ func Deployment(
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &rootUser,
 							},
-							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: designate.GetServiceVolumeMounts("designate-worker"),
-							Resources:    instance.Spec.Resources,
-							// StartupProbe:  startupProbe,
-							// LivenessProbe: livenessProbe,
+							Env:           env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:  designate.GetServiceVolumeMounts("designate-worker"),
+							Resources:     instance.Spec.Resources,
+							StartupProbe:  startupProbe,
+							LivenessProbe: livenessProbe,
 						},
 					},
 					NodeSelector: instance.Spec.NodeSelector,

@@ -26,7 +26,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	// "k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -43,26 +43,44 @@ func Deployment(instance *designatev1beta1.DesignateBackendbind9) *appsv1.Deploy
 	}
 	ls := labels.GetLabels(instance, "desigantebackendbind9", matchls)
 
-	// livenessProbe := &corev1.Probe{
-	// 	// TODO might need tuning
-	// 	TimeoutSeconds:      5,
-	// 	PeriodSeconds:       3,
-	// 	InitialDelaySeconds: 3,
-	// }
-	// readinessProbe := &corev1.Probe{
-	// 	// TODO might need tuning
-	// 	TimeoutSeconds:      5,
-	// 	PeriodSeconds:       5,
-	// 	InitialDelaySeconds: 5,
-	// }
+	livenessProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      15,
+		PeriodSeconds:       13,
+		InitialDelaySeconds: 3,
+	}
+	readinessProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      15,
+		PeriodSeconds:       15,
+		InitialDelaySeconds: 5,
+	}
 
-	// TODO might want to disable probes in 'Debug' mode
-	// livenessProbe.TCPSocket = &corev1.TCPSocketAction{
-	// 	Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(6379)},
-	// }
-	// readinessProbe.TCPSocket = &corev1.TCPSocketAction{
-	// 	Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(6379)},
-	// }
+	// TODO(beagles) this can be simplified - jumped through a few hops to
+	// avoid interfering with development in progress.
+	args := []string{}
+	command := []string{}
+	// XXX(beagles) forced because orig was forced.
+	if true {
+		command = append(command, "/bin/sleep", "60000")
+		livenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/bin/true",
+			},
+		}
+		readinessProbe.Exec = livenessProbe.Exec
+	} else {
+		command = append(command, "/bin/bash")
+		args = append(args, "-c", ServiceCommand)
+
+		// Check for the rndc port.
+		livenessProbe.TCPSocket = &corev1.TCPSocketAction{
+			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(953)},
+		}
+		readinessProbe.TCPSocket = &corev1.TCPSocketAction{
+			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(953)},
+		}
+	}
 
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_FILE"] = env.SetValue(KollaConfig)
@@ -86,24 +104,19 @@ func Deployment(instance *designatev1beta1.DesignateBackendbind9) *appsv1.Deploy
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.RbacResourceName(),
 					Containers: []corev1.Container{{
-						Image: instance.Spec.ContainerImage,
-						Name:  "designatebackendbind9",
-						Command: []string{
-							"/bin/sleep", "60000",
-						},
-						// Command: []string{
-						// 	"/bin/bash",
-						// },
-						// Args:  args,
+						Image:   instance.Spec.ContainerImage,
+						Name:    "designatebackendbind9",
+						Command: command,
+						Args:    args,
 						Ports: []corev1.ContainerPort{{
 							ContainerPort: 6379,
 							Name:          "designatebackendbind9",
 						}},
-						Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-						VolumeMounts: designate.GetServiceVolumeMounts("designate-backendbind9"),
-						Resources:    instance.Spec.Resources,
-						// ReadinessProbe: readinessProbe,
-						// LivenessProbe:  livenessProbe,
+						Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
+						VolumeMounts:   designate.GetServiceVolumeMounts("designate-backendbind9"),
+						Resources:      instance.Spec.Resources,
+						ReadinessProbe: readinessProbe,
+						LivenessProbe:  livenessProbe,
 					}},
 				},
 			},
