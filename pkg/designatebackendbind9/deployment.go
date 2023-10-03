@@ -38,10 +38,10 @@ const (
 func Deployment(instance *designatev1beta1.DesignateBackendbind9) *appsv1.Deployment {
 	matchls := map[string]string{
 		"app":   "designaatebackendbind9",
-		"cr":    "desigantebac kendbind9-" + instance.Name,
+		"cr":    "designatebackendbind9-" + instance.Name,
 		"owner": "designate-operator",
 	}
-	ls := labels.GetLabels(instance, "desigantebackendbind9", matchls)
+	ls := labels.GetLabels(instance, "designatebackendbind9", matchls)
 
 	// livenessProbe := &corev1.Probe{
 	// 	// TODO might need tuning
