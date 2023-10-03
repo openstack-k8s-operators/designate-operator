@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"time"
 
-	routev1 "github.com/openshift/api/route/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
+	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	designateapi "github.com/openstack-k8s-operators/designate-operator/pkg/designateapi"
@@ -50,6 +50,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 )
 
@@ -188,6 +189,9 @@ func (r *DesignateAPIReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if instance.Status.Hash == nil {
 		instance.Status.Hash = map[string]string{}
 	}
+	if instance.Status.APIEndpoints == nil {
+		instance.Status.APIEndpoints = map[string]map[string]string{}
+	}
 	if instance.Status.NetworkAttachments == nil {
 		instance.Status.NetworkAttachments = map[string][]string{}
 	}
@@ -238,36 +242,34 @@ func (r *DesignateAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// watch for configmap where the CM owner label AND the CR.Spec.ManagingCrName label matches
-	configMapFn := func(o client.Object) []reconcile.Request {
+	// Watch for changes to NADs
+	// NOTE: Dkehn/DPrince are configMap and NAD one in the same??
+	nadFn := func(o client.Object) []reconcile.Request {
 		result := []reconcile.Request{}
+		// configMapFn := func(o client.Object) []reconcile.Request {
+		// 	result := []reconcile.Request{}
 
 		// get all API CRs
-		apis := &designatev1beta1.DesignateAPIList{}
+		designateAPIs := &designatev1beta1.DesignateAPIList{}
 		listOpts := []client.ListOption{
 			client.InNamespace(o.GetNamespace()),
 		}
-		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
-			r.Log.Error(err, "Unable to retrieve API CRs %v")
+		if err := r.Client.List(context.Background(), designateAPIs, listOpts...); err != nil {
+			r.Log.Error(err, "Unable to retrieve DesignateAPI CRs %v")
 			return nil
 		}
 
-		label := o.GetLabels()
-		// TODO: Just trying to verify that the CM is owned by this CR's managing CR
-		if l, ok := label[labels.GetOwnerNameLabelSelector(labels.GetGroupLabel(designate.ServiceName))]; ok {
-			for _, cr := range apis.Items {
-				// return reconcil event for the CR where the CM owner label AND
-				// the parentDesignateName matches
-				if l == designate.GetOwningDesignateName(&cr) {
-					// return namespace and Name of CR
-					name := client.ObjectKey{
-						Namespace: o.GetNamespace(),
-						Name:      cr.Name,
-					}
-					r.Log.Info(fmt.Sprintf("ConfigMap object %s and CR %s marked with label: %s", o.GetName(), cr.Name, l))
-					result = append(result, reconcile.Request{NamespacedName: name})
+		for _, cr := range designateAPIs.Items {
+			if util.StringInSlice(o.GetName(), cr.Spec.NetworkAttachments) {
+				name := client.ObjectKey{
+					Namespace: cr.GetNamespace(),
+					Name:      cr.GetName(),
 				}
+				r.Log.Info(fmt.Sprintf("NAD %s is used by DesignateAPI CR %s", o.GetName(), cr.GetName()))
+				result = append(result, reconcile.Request{NamespacedName: name})
 			}
 		}
+
 		if len(result) > 0 {
 			return result
 		}
@@ -278,15 +280,12 @@ func (r *DesignateAPIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&designatev1beta1.DesignateAPI{}).
 		Owns(&keystonev1.KeystoneService{}).
 		Owns(&keystonev1.KeystoneEndpoint{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&routev1.Route{}).
 		Owns(&corev1.Service{}).
-		// watch the secrets we don't own
+		Owns(&appsv1.Deployment{}).
 		Watches(&source.Kind{Type: &corev1.Secret{}},
 			handler.EnqueueRequestsFromMapFunc(svcSecretFn)).
-		// watch the config CMs we don't own
-		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
-			handler.EnqueueRequestsFromMapFunc(configMapFn)).
+		Watches(&source.Kind{Type: &networkv1.NetworkAttachmentDefinition{}},
+			handler.EnqueueRequestsFromMapFunc(nadFn)).
 		Complete(r)
 }
 
@@ -353,33 +352,101 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		Port: designate.DesignateInternalPort,
 		Path: "/",
 	}
-	data := map[endpoint.Endpoint]endpoint.Data{
-		endpoint.EndpointPublic:   publicEndpointData,
-		endpoint.EndpointInternal: internalEndpointData,
+	designateEndpoints := map[service.Endpoint]endpoint.Data{
+		service.EndpointPublic:   publicEndpointData,
+		service.EndpointInternal: internalEndpointData,
 	}
-	apiEndpoints, ctrlResult, err := endpoint.ExposeEndpoints(
-		ctx,
-		helper,
-		designate.ServiceName,
-		serviceLabels,
-		data,
-		time.Duration(5)*time.Second,
-	)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.ExposeServiceReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.ExposeServiceReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.ExposeServiceReadyCondition,
-			condition.RequestedReason,
-			condition.SeverityInfo,
-			condition.ExposeServiceReadyRunningMessage))
-		return ctrlResult, nil
+
+	apiEndpoints := make(map[string]string)
+
+	for endpointType, data := range designateEndpoints {
+		endpointTypeStr := string(endpointType)
+		endpointName := designate.ServiceName + "-" + endpointTypeStr
+		svcOverride := instance.Spec.Override.Service[endpointType]
+		if svcOverride.EmbeddedLabelsAnnotations == nil {
+			svcOverride.EmbeddedLabelsAnnotations = &service.EmbeddedLabelsAnnotations{}
+		}
+
+		exportLabels := util.MergeStringMaps(
+			serviceLabels,
+			map[string]string{
+				service.AnnotationEndpointKey: endpointTypeStr,
+			},
+		)
+
+		// Create the service
+		svc, err := service.NewService(
+			service.GenericService(&service.GenericServiceDetails{
+				Name:      endpointName,
+				Namespace: instance.Namespace,
+				Labels:    exportLabels,
+				Selector:  serviceLabels,
+				Port: service.GenericServicePort{
+					Name:     endpointName,
+					Port:     data.Port,
+					Protocol: corev1.ProtocolTCP,
+				},
+			}),
+			5,
+			&svcOverride.OverrideSpec,
+		)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.ExposeServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.ExposeServiceReadyErrorMessage,
+				err.Error()))
+
+			return ctrl.Result{}, err
+		}
+
+		svc.AddAnnotation(map[string]string{
+			service.AnnotationEndpointKey: endpointTypeStr,
+		})
+
+		// add Annotation to whether creating an ingress is required or not
+		if endpointType == service.EndpointPublic && svc.GetServiceType() == corev1.ServiceTypeClusterIP {
+			svc.AddAnnotation(map[string]string{
+				service.AnnotationIngressCreateKey: "true",
+			})
+		} else {
+			svc.AddAnnotation(map[string]string{
+				service.AnnotationIngressCreateKey: "false",
+			})
+			if svc.GetServiceType() == corev1.ServiceTypeLoadBalancer {
+				svc.AddAnnotation(map[string]string{
+					service.AnnotationHostnameKey: svc.GetServiceHostname(), // add annotation to register service name in dnsmasq
+				})
+			}
+		}
+
+		ctrlResult, err := svc.CreateOrPatch(ctx, helper)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.ExposeServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.ExposeServiceReadyErrorMessage,
+				err.Error()))
+
+			return ctrlResult, err
+		} else if (ctrlResult != ctrl.Result{}) {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.ExposeServiceReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.ExposeServiceReadyRunningMessage))
+			return ctrlResult, nil
+		}
+		// create service - end
+
+		// TODO: TLS, pass in https as protocol, create TLS cert
+		apiEndpoints[string(endpointType)], err = svc.GetAPIEndpoint(
+			svcOverride.EndpointURL, data.Protocol, data.Path)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Endpoint - end
@@ -389,9 +456,17 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	// expose service - end
 
 	//
+	// Update instance status with service endpoint url from route host information
+	//
+	if instance.Status.APIEndpoints == nil {
+		instance.Status.APIEndpoints = map[string]map[string]string{}
+	}
+	//instance.Status.APIEndpoints = apiEndpoints
+	instance.Status.APIEndpoints[designate.ServiceName] = apiEndpoints
+
+	//
 	// create service and user in keystone - - https://docs.openstack.org/Designate/latest/install/install-rdo.html#configure-user-and-endpoints
 	// TODO: rework this
-	//
 	for _, ksSvc := range keystoneServices {
 		ksSvcSpec := keystonev1.KeystoneServiceSpec{
 			ServiceType:        ksSvc["type"],
@@ -404,7 +479,7 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		}
 
 		ksSvcObj := keystonev1.NewKeystoneService(ksSvcSpec, instance.Namespace, serviceLabels, time.Duration(10)*time.Second)
-		ctrlResult, err = ksSvcObj.CreateOrPatch(ctx, helper)
+		ctrlResult, err := ksSvcObj.CreateOrPatch(ctx, helper)
 		if err != nil {
 			return ctrlResult, err
 		}
@@ -444,7 +519,7 @@ func (r *DesignateAPIReconciler) reconcileInit(
 		}
 
 		if (ctrlResult != ctrl.Result{}) {
-			return ctrlResult, nil
+			return ctrl.Result{}, nil
 		}
 	}
 
