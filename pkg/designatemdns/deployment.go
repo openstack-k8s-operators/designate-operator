@@ -25,7 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	// "k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -41,39 +41,37 @@ func Deployment(
 	annotations map[string]string,
 ) *appsv1.Deployment {
 	rootUser := int64(0)
-	// Designate's uid and gid magic numbers come from the 'designate-user' in
-	// https://github.com/openstack/kolla/blob/master/kolla/common/users.py
-	// designateUser := int64(42411)
-	// designateGroup := int64(42411)
 
-	// livenessProbe := &corev1.Probe{
-	// 	// TODO might need tuning
-	// 	TimeoutSeconds:      5,
-	// 	PeriodSeconds:       3,
-	// 	InitialDelaySeconds: 3,
-	// }
-	// startupProbe := &corev1.Probe{
-	// 	// TODO might need tuning
-	// 	TimeoutSeconds:      5,
-	// 	FailureThreshold:    12,
-	// 	PeriodSeconds:       5,
-	// 	InitialDelaySeconds: 5,
-	// }
+	livenessProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      15,
+		PeriodSeconds:       13,
+		InitialDelaySeconds: 3,
+	}
+	readinessProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      15,
+		PeriodSeconds:       15,
+		InitialDelaySeconds: 5,
+	}
+
 	args := []string{"-c"}
 	if instance.Spec.Debug.Service {
 		args = append(args, common.DebugCommand)
-		// livenessProbe.Exec = &corev1.ExecAction{
-		// 	Command: []string{
-		// 		"/bin/true",
-		// 	},
-		// }
-		// startupProbe.Exec = livenessProbe.Exec
+		livenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/bin/true",
+			},
+		}
+		readinessProbe.Exec = livenessProbe.Exec
 	} else {
 		args = append(args, ServiceCommand)
-		// livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-		// 	Port: intstr.FromInt(8080),
-		// }
-		// startupProbe.HTTPGet = livenessProbe.HTTPGet
+		livenessProbe.TCPSocket = &corev1.TCPSocketAction{
+			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(5354)},
+		}
+		readinessProbe.TCPSocket = &corev1.TCPSocketAction{
+			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(5354)},
+		}
 	}
 
 	envVars := map[string]env.Setter{}
@@ -112,11 +110,11 @@ func Deployment(
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &rootUser,
 							},
-							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: designate.GetServiceVolumeMounts("designate-mdns"),
-							Resources:    instance.Spec.Resources,
-							// StartupProbe:  startupProbe,
-							// LivenessProbe: livenessProbe,
+							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:   designate.GetServiceVolumeMounts("designate-mdns"),
+							Resources:      instance.Spec.Resources,
+							ReadinessProbe: readinessProbe,
+							LivenessProbe:  livenessProbe,
 						},
 					},
 					NodeSelector: instance.Spec.NodeSelector,

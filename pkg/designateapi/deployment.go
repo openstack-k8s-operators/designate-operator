@@ -25,7 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -42,40 +42,36 @@ func Deployment(
 ) *appsv1.Deployment {
 	runAsUser := int64(0)
 
-	/*
-		livenessProbe := &corev1.Probe{
-			// TODO might need tuning
-			TimeoutSeconds:      5,
-			PeriodSeconds:       3,
-			InitialDelaySeconds: 5,
-		}
-		readinessProbe := &corev1.Probe{
-			// TODO might need tuning
-			TimeoutSeconds:      5,
-			PeriodSeconds:       5,
-			InitialDelaySeconds: 5,
-		}
-	*/
+	livenessProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      15,
+		PeriodSeconds:       13,
+		InitialDelaySeconds: 3,
+	}
+	readinessProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      15,
+		PeriodSeconds:       15,
+		InitialDelaySeconds: 5,
+	}
 
 	args := []string{"-c"}
 	if instance.Spec.Debug.Service {
 		args = append(args, common.DebugCommand)
-		//livenessProbe.Exec = &corev1.ExecAction{
-		//	Command: []string{
-		//		"/bin/true",
-		//	},
-		//}
-		//readinessProbe.Exec = livenessProbe.Exec
+		livenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/bin/true",
+			},
+		}
+		readinessProbe.Exec = livenessProbe.Exec
 	} else {
 		args = append(args, ServiceCommand)
-		//
-		// https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-		//
-		//livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-		//Path: "/healthcheck",
-		//Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(designate.DesignatePublicPort)},
-		//}
-		//readinessProbe.HTTPGet = livenessProbe.HTTPGet
+
+		livenessProbe.HTTPGet = &corev1.HTTPGetAction{
+			Path: "/healthcheck",
+			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(designate.DesignatePublicPort)},
+		}
+		readinessProbe.HTTPGet = livenessProbe.HTTPGet
 	}
 
 	envVars := map[string]env.Setter{}
@@ -114,11 +110,11 @@ func Deployment(
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &runAsUser,
 							},
-							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: designate.GetServiceVolumeMounts("designate-api"),
-							Resources:    instance.Spec.Resources,
-							//ReadinessProbe: readinessProbe,
-							//LivenessProbe:  livenessProbe,
+							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:   designate.GetServiceVolumeMounts("designate-api"),
+							Resources:      instance.Spec.Resources,
+							ReadinessProbe: readinessProbe,
+							LivenessProbe:  livenessProbe,
 						},
 					},
 					NodeSelector: instance.Spec.NodeSelector,

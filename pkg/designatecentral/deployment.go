@@ -46,34 +46,35 @@ func Deployment(
 	// designateUser := int64(42411)
 	// designateGroup := int64(42411)
 
-	// livenessProbe := &corev1.Probe{
-	// 	// TODO might need tuning
-	// 	TimeoutSeconds:      5,
-	// 	PeriodSeconds:       3,
-	// 	InitialDelaySeconds: 3,
-	// }
-	// startupProbe := &corev1.Probe{
-	// 	// TODO might need tuning
-	// 	TimeoutSeconds:      5,
-	// 	FailureThreshold:    12,
-	// 	PeriodSeconds:       5,
-	// 	InitialDelaySeconds: 5,
-	// }
+	livenessProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      10,
+		PeriodSeconds:       15,
+		InitialDelaySeconds: 5,
+	}
+	startupProbe := &corev1.Probe{
+		// TODO might need tuning
+		TimeoutSeconds:      10,
+		PeriodSeconds:       15,
+		InitialDelaySeconds: 5,
+	}
 	args := []string{"-c"}
 	if instance.Spec.Debug.Service {
 		args = append(args, common.DebugCommand)
-		// livenessProbe.Exec = &corev1.ExecAction{
-		// 	Command: []string{
-		// 		"/bin/true",
-		// 	},
-		// }
-		// startupProbe.Exec = livenessProbe.Exec
+		livenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/bin/true",
+			},
+		}
+		startupProbe.Exec = livenessProbe.Exec
 	} else {
 		args = append(args, ServiceCommand)
-		// livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-		// 	Port: intstr.FromInt(8080),
-		// }
-		// startupProbe.HTTPGet = livenessProbe.HTTPGet
+		livenessProbe.Exec = &corev1.ExecAction{
+			Command: []string{
+				"/usr/bin/pgrep", "-r", "DRST", "-f", "designate.central",
+			},
+		}
+		startupProbe.Exec = livenessProbe.Exec
 	}
 
 	envVars := map[string]env.Setter{}
@@ -112,11 +113,11 @@ func Deployment(
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &rootUser,
 							},
-							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: designate.GetServiceVolumeMounts("designate-central"),
-							Resources:    instance.Spec.Resources,
-							// StartupProbe:  startupProbe,
-							// LivenessProbe: livenessProbe,
+							Env:           env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:  designate.GetServiceVolumeMounts("designate-central"),
+							Resources:     instance.Spec.Resources,
+							StartupProbe:  startupProbe,
+							LivenessProbe: livenessProbe,
 						},
 					},
 					NodeSelector: instance.Spec.NodeSelector,
