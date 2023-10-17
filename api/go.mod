@@ -3,7 +3,7 @@ module github.com/openstack-k8s-operators/designate-operator/api
 go 1.19
 
 require (
-	github.com/onsi/ginkgo/v2 v2.12.1
+	github.com/onsi/ginkgo/v2 v2.13.0
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.3.1-0.20231009135225-e0907a2df5d8
 	github.com/openstack-k8s-operators/lib-common/modules/storage v0.3.1-0.20231009135225-e0907a2df5d8
 	k8s.io/api v0.26.9
