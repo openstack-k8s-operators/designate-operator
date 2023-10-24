@@ -22,3 +22,5 @@ spec:
     containerImage: quay.io/tripleowallabycentos9/openstack-designate-worker:current-tripleo
   designateProducer:
     containerImage: quay.io/tripleowallabycentos9/openstack-designate-producer:current-tripleo
+  designateBackendbind9:
+    containerImage: quay.io/tripleowallabycentos9/openstack-designate-backend-bind9:current-tripleo
