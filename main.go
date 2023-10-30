@@ -39,7 +39,7 @@ import (
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 
-	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
+	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/controllers"
 	//+kubebuilder:scaffold:imports
 )
@@ -53,7 +53,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(mariadbv1.AddToScheme(scheme))
 	utilruntime.Must(keystonev1.AddToScheme(scheme))
-	utilruntime.Must(designatev1.AddToScheme(scheme))
+	utilruntime.Must(designatev1beta1.AddToScheme(scheme))
 	utilruntime.Must(rabbitmqv1.AddToScheme(scheme))
 	utilruntime.Must(networkv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
@@ -190,12 +190,12 @@ func main() {
 	}
 
 	// Acquire environmental defaults and initialize operator defaults with them
-	designatev1.SetupDefaults()
+	designatev1beta1.SetupDefaults()
 
 	checker := healthz.Ping
 	// Setup webhooks if requested
 	if strings.ToLower(os.Getenv("ENABLE_WEBHOOKS")) != "false" {
-		if err = (&designatev1.Designate{}).SetupWebhookWithManager(mgr); err != nil {
+		if err = (&designatev1beta1.Designate{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Designate")
 			os.Exit(1)
 		}

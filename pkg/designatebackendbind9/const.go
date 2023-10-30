@@ -16,9 +16,6 @@ limitations under the License.
 package designatebackendbind9
 
 const (
-	// KollaConfig -
-	KollaConfig = "/var/lib/config-data/merged/designate-backendbind9-config.json"
-
 	// Component -
 	Component = "designate-backendbind9"
 )
