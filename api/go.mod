@@ -75,3 +75,6 @@ require (
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
+
+// Bump golang.org/x/net to avoid Rapid Reset CVE
+replace golang.org/x/net => golang.org/x/net v0.17.0 //allow-merging
