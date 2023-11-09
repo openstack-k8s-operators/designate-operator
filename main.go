@@ -188,6 +188,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateBackendbind9")
 		os.Exit(1)
 	}
+	// XXX do not merge this
 
 	// Acquire environmental defaults and initialize operator defaults with them
 	designatev1beta1.SetupDefaults()
