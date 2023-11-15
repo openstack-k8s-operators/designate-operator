@@ -556,12 +556,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			condition.SeverityWarning,
 			condition.ServiceConfigReadyErrorMessage,
 			err.Error()))
-		r.Log.Info("createHashOfInputHashes failed", err)
+		r.Log.Info(fmt.Sprintf("createHashOfInputHashes failed: %v", err))
 		return ctrl.Result{}, err
 	} else if hashChanged {
 		// Hash changed and instance status should be updated (which will be done by main defer func),
 		// so we need to return and reconcile again
-		r.Log.Info("input hashes have changed, restarting reconcile", err)
+		r.Log.Info("input hashes have changed, restarting reconcile")
 		return ctrl.Result{}, nil
 	}
 	// Create ConfigMaps and Secrets - end
@@ -958,6 +958,8 @@ func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, i
 		// Add in transfers from umbrella Designate (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
+		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
+		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
 		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
