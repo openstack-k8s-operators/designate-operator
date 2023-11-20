@@ -146,6 +146,10 @@ type DesignateSpec struct {
 	// +kubebuilder:validation:Required
 	// DesignateBackendbind9 - Spec definition for the Backendbind9 service of this Designate deployment
 	DesignateBackendbind9 DesignateBackendbind9Spec `json:"designateBackendbind9"`
+
+	// +kubebuilder:validation:Optional
+	// DesignateUnbound - Spec definition for the Unbound Resolver service of this Designate deployment
+	DesignateUnbound DesignateUnboundSpec `json:"designateUnbound"`
 }
 
 // DesignateStatus defines the observed state of Designate
@@ -153,8 +157,8 @@ type DesignateStatus struct {
 	// Map of hashes to track e.g. job status
 	Hash map[string]string `json:"hash,omitempty"`
 
-  // API endpoint
-  APIEndpoints map[string]string `json:"apiEndpoint,omitempty"`
+	// API endpoint
+	APIEndpoints map[string]string `json:"apiEndpoint,omitempty"`
 
 	// Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
@@ -182,6 +186,9 @@ type DesignateStatus struct {
 
 	// ReadyCount of Designate Backendbind9 instance
 	DesignateBackendbind9ReadyCount int32 `json:"designateBackendbind9ReadyCount,omitempty"`
+
+	// ReadyCount of Designate Unbound instance
+	DesignateUnboundReadyCount int32 `json:"designateUnboundReadyCount,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -213,12 +220,15 @@ func init() {
 
 // IsReady - returns true if all subresources Ready condition is true
 func (instance Designate) IsReady() bool {
+	unboundReady := *instance.Spec.DesignateUnbound.Replicas == 0 || instance.Status.Conditions.IsTrue(DesignateUnboundReadyCondition)
+
 	return instance.Status.Conditions.IsTrue(DesignateAPIReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateCentralReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateWorkerReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateMdnsReadyCondition) &&
 		instance.Status.Conditions.IsTrue(DesignateProducerReadyCondition) &&
-		instance.Status.Conditions.IsTrue(DesignateBackendbind9ReadyCondition)
+		instance.Status.Conditions.IsTrue(DesignateBackendbind9ReadyCondition) &&
+		unboundReady
 }
 
 // DesignateExtraVolMounts exposes additional parameters processed by the designate-operator
@@ -247,15 +257,15 @@ func (c *DesignateExtraVolMounts) Propagate(svc []storage.PropagationType) []sto
 
 // RbacConditionsSet - set the conditions for the rbac object
 func (instance Designate) RbacConditionsSet(c *condition.Condition) {
-   instance.Status.Conditions.Set(c)
+	instance.Status.Conditions.Set(c)
 }
 
 // RbacNamespace - return the namespace
 func (instance Designate) RbacNamespace() string {
-   return instance.Namespace
+	return instance.Namespace
 }
 
 // RbacResourceName - return the name to be used for rbac objects (serviceaccount, role, rolebinding)
 func (instance Designate) RbacResourceName() string {
-   return "designate-" + instance.Name
+	return "designate-" + instance.Name
 }

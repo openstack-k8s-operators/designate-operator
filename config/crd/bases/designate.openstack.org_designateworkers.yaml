@@ -46,8 +46,8 @@ spec:
             properties:
               None:
                 description: BackendType - Defines the backend service/configuration
-                  we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps maintain
-                  a single init container/init.sh to do container setup
+                  we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain a
+                  single init container/init.sh to do container setup
                 type: string
               backendMdnsServerProtocol:
                 description: 'BackendTypeProtocol - Defines the backend protocol to

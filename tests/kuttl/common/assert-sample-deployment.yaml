@@ -12,19 +12,20 @@ spec:
     dbInitContainer: false
   preserveJobs: false
   designateAPI:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo
     replicas: 1
     debug:
       initContainer: false
       service: false
   designateCentral:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-central:current-tripleo
+    replicas: 1
   designateMdns:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-mdns:current-tripleo
+    replicas: 1
   designateWorker:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-worker:current-tripleo
+    replicas: 1
   designateProducer:
-    containerImage: quay.io/tripleowallabycentos9/openstack-designate-producer:current-tripleo
+    replicas: 1
+  designateUnbound:
+    replicas: 1
   customServiceConfig: |
     [DEFAULT]
     debug = true
@@ -34,19 +35,46 @@ status:
   designateMdnsReadyCount: 1
   designateProducerReadyCount: 1
   designateWorkerReadyCount: 1
+  designateUnboundReadyCount: 1
+  transportURLSecret: rabbitmq-transport-url-designate-designate-transport
 ---
-# Test the status code is correct for the endpoint
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    endpoint: internal
+    service: designate
+  name: designate-internal
+spec:
+  ports:
+    - name: designate-internal
+  selector:
+    service: designate
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    endpoint: public
+    service: designate
+  name: designate-public
+spec:
+  ports:
+    - name: designate-public
+  selector:
+    service: designate
+  type: ClusterIP
+---
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-namespaced: true
 commands:
   - script: |
-      set -x
-      RETURN_CODE=0
-      PUBLIC_URL=$(oc get route -n $NAMESPACE designate-public -o jsonpath='{.status.ingress[0].host}')
-      STATUSCODE=$(curl --silent --output /dev/stderr --head --write-out "%{http_code}" $PUBLIC_URL)
-      if test $STATUSCODE -ne 200; then
-          RETURN_CODE=1
-          echo "${PUBLIC_URL} status code expected is 200 but was ${STATUSCODE}"
+      template='{{.spec.endpoints.internal}}{{":"}}{{.spec.endpoints.public}}{{"\n"}}'
+      regex="http:\/\/designate-internal.$NAMESPACE.*:http:\/\/designate-public.$NAMESPACE.*"
+      apiEndpoints=$(oc get -n $NAMESPACE KeystoneEndpoint designate -o go-template="$template")
+      matches=$(echo "$apiEndpoints" | sed -e "s?$regex??")
+      if [[ -n "$matches" ]]; then
+        exit 1
       fi
-      exit $RETURN_CODE
+      exit 0

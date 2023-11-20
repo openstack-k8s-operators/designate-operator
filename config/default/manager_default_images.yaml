@@ -12,12 +12,16 @@ spec:
       - name: manager
         env:
         - name: DESIGNATE_API_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-api:current-podified
+          value: quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo
         - name: DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-central:current-podified
+          value: quay.io/tripleowallabycentos9/openstack-designate-central:current-tripleo
         - name: DESIGNATE_MDNS_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-mdns:current-podified
+          value: quay.io/tripleowallabycentos9/openstack-designate-mdns:current-tripleo
         - name: DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-producer:current-podified
+          value: quay.io/tripleowallabycentos9/openstack-designate-producer:current-tripleo
         - name: DESIGNATE_WORKER_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-worker:current-podified
+          value: quay.io/tripleowallabycentos9/openstack-designate-worker:current-tripleo
+        - name: DESIGNATE_BACKENDBIND9_IMAGE_URL_DEFAULT
+          value: quay.io/tripleowallabycentos9/openstack-designate-backend-bind9:current-tripleo
+        - name: DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT
+          value: quay.io/tripleowallabycentos9/openstack-unbound:current-tripleo

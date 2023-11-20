@@ -106,6 +106,9 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9s,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9s/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9s/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/finalizers,verbs=update
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
@@ -270,6 +273,7 @@ func (r *DesignateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&designatev1beta1.DesignateMdns{}).
 		Owns(&designatev1beta1.DesignateProducer{}).
 		Owns(&designatev1beta1.DesignateBackendbind9{}).
+		Owns(&designatev1beta1.DesignateUnbound{}).
 		Owns(&rabbitmqv1.TransportURL{}).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.ConfigMap{}).
@@ -552,10 +556,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			condition.SeverityWarning,
 			condition.ServiceConfigReadyErrorMessage,
 			err.Error()))
+		r.Log.Info(fmt.Sprintf("createHashOfInputHashes failed: %v", err))
 		return ctrl.Result{}, err
 	} else if hashChanged {
 		// Hash changed and instance status should be updated (which will be done by main defer func),
 		// so we need to return and reconcile again
+		r.Log.Info("input hashes have changed, restarting reconcile")
 		return ctrl.Result{}, nil
 	}
 	// Create ConfigMaps and Secrets - end
@@ -774,6 +780,30 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	r.Log.Info("Deployment Backendbind9 task reconciled")
 
+	// deploy the unbound reconcilier if necessary
+	designateUnbound, op, err := r.unboundDeploymentCreateOrUpdate(ctx, instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			designatev1beta1.DesignateUnboundReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			designatev1beta1.DesignateUnboundReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, err
+	}
+	if op != controllerutil.OperationResultNone {
+		r.Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	}
+
+	instance.Status.DesignateUnboundReadyCount = designateUnbound.Status.ReadyCount
+
+	// Mirror DesignateProducer's condition status
+	c = designateUnbound.Status.Conditions.Mirror(designatev1beta1.DesignateUnboundReadyCondition)
+	if c != nil {
+		instance.Status.Conditions.Set(c)
+	}
+	r.Log.Info("Deployment Unbound task reconciled")
+
 	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
@@ -882,6 +912,7 @@ func (r *DesignateReconciler) createHashOfInputHashes(
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
 	hash, err := util.ObjectHash(mergedMapVars)
 	if err != nil {
+		r.Log.Info("XXX - Error creating hash")
 		return hash, changed, err
 	}
 	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, hash); changed {
@@ -930,6 +961,7 @@ func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, i
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
 		deployment.Spec.Secret = instance.Spec.Secret
+		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -963,6 +995,7 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
 		deployment.Spec.Secret = instance.Spec.Secret
+		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -996,6 +1029,7 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
 		deployment.Spec.Secret = instance.Spec.Secret
+		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -1029,6 +1063,7 @@ func (r *DesignateReconciler) mdnsDeploymentCreateOrUpdate(ctx context.Context, 
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
 		deployment.Spec.Secret = instance.Spec.Secret
+		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -1062,6 +1097,7 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
 		deployment.Spec.Secret = instance.Spec.Secret
+		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -1095,7 +1131,39 @@ func (r *DesignateReconciler) backendbind9DeploymentCreateOrUpdate(ctx context.C
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
 		deployment.Spec.Secret = instance.Spec.Secret
+		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
+		deployment.Spec.ServiceAccount = instance.RbacResourceName()
+		if len(deployment.Spec.NodeSelector) == 0 {
+			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
+		}
+
+		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return deployment, op, err
+}
+
+func (r *DesignateReconciler) unboundDeploymentCreateOrUpdate(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+) (*designatev1beta1.DesignateUnbound, controllerutil.OperationResult, error) {
+	deployment := &designatev1beta1.DesignateUnbound{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-unbound", instance.Name),
+			Namespace: instance.Namespace,
+		},
+	}
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
+		deployment.Spec = instance.Spec.DesignateUnbound
+		// Add in transfers from umbrella Designate CR (this instance) spec
+		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {
 			deployment.Spec.NodeSelector = instance.Spec.NodeSelector

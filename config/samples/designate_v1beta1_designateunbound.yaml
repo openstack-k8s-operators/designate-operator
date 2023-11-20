@@ -1,0 +1,6 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: DesignateUnbound
+metadata:
+  name: designate-unbound
+spec:
+  replicas: 1

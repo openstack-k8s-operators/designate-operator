@@ -9,6 +9,7 @@ resources:
 - bases/designate.openstack.org_designateworkers.yaml
 - bases/designate.openstack.org_designateproducers.yaml
 - bases/designate.openstack.org_designatebackendbind9s.yaml
+- bases/designate.openstack.org_designateunbounds.yaml
 
 #+kubebuilder:scaffold:crdkustomizeresource
 

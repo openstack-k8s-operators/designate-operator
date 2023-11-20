@@ -22,14 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// const (
-// 	// Container image fall-back defaults
-
-// 	// DesignateBackendbind9ContainerImage is the fall-back container image for DesignateBackendbind9
-// 	DesignateBackendbind9ContainerImage =
-// 		"quay.io/tripleowallabycentos9/openstack-designate-backend-bind9:current-tripleo"
-// )
-
 // DesignateBackendbind9Template defines the input parameters for the Designate Scheduler service
 type DesignateBackendbind9Template struct {
 	// Common input parameters for the Designate Backendbind9 service

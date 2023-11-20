@@ -199,6 +199,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// // designate-backendbind9
+	if err = (&controllers.UnboundReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Kclient: kclient,
+		Log:     ctrl.Log.WithName("controllers").WithName("DesignateUnbound"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DesignateUnbound")
+		os.Exit(1)
+	}
+
 	// Acquire environmental defaults and initialize operator defaults with them
 	designatev1beta1.SetupDefaults()
 

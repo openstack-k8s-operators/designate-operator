@@ -41,6 +41,9 @@ const (
 
 	// DesignateBackendbind9ReadyCondition Status=True condition which indicates if the DesignateBackendbind9 is configured and operational
 	DesignateBackendbind9ReadyCondition condition.Type = "DesignateBackendbind9Ready"
+
+	// DesignateUnboundReadyCondition Status=True condition which indicates if the DesignateUnbound is configured and operational
+	DesignateUnboundReadyCondition condition.Type = "DesignateUnboundReady"
 )
 
 // Designate Reasons used by API objects.
@@ -116,4 +119,13 @@ const (
 
 	// DesignateBackendbind9ReadyErrorMessage
 	DesignateBackendbind9ReadyErrorMessage = "DesignateBackendbind9 error occured %s"
+
+	//
+	// DesignateUnboundReady condition messages
+	//
+	// DesignateUnboundReadyInitMessage
+	DesignateUnboundReadyInitMessage = "DesignateUnbound not started"
+
+	// DesignateUnboundReadyErrorMessage
+	DesignateUnboundReadyErrorMessage = "DesignateUnbound error occured %s"
 )
