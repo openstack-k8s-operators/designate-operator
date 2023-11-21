@@ -169,13 +169,13 @@ type DesignateServiceDebug struct {
 func SetupDefaults() {
 	// Acquire environmental defaults and initialize Designate defaults with them
 	designateDefaults := DesignateDefaults{
-		APIContainerImageURL:          util.GetEnvVar("DESIGNATE_API_IMAGE_URL_DEFAULT", DesignateAPIContainerImage),
-		CentralContainerImageURL:      util.GetEnvVar("DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT", DesignateCentralContainerImage),
-		MdnsContainerImageURL:         util.GetEnvVar("DESIGNATE_MDNS_IMAGE_URL_DEFAULT", DesignateMdnsContainerImage),
-		ProducerContainerImageURL:     util.GetEnvVar("DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT", DesignateProducerContainerImage),
-		WorkerContainerImageURL:       util.GetEnvVar("DESIGNATE_WORKER_IMAGE_URL_DEFAULT", DesignateWorkerContainerImage),
-		UnboundContainerImageURL:      util.GetEnvVar("DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT", DesignateUnboundContainerImage),
-		Backendbind9ContainerImageURL: util.GetEnvVar("DESIGNATE_BACKENDBIND9_IMAGE_URL_DEFAULT", DesignateBackendbind9ContainerImage),
+		APIContainerImageURL:          util.GetEnvVar("RELATED_IMAGE_DESIGNATE_API_IMAGE_URL_DEFAULT", DesignateAPIContainerImage),
+		CentralContainerImageURL:      util.GetEnvVar("RELATED_IMAGE_DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT", DesignateCentralContainerImage),
+		MdnsContainerImageURL:         util.GetEnvVar("RELATED_IMAGE_DESIGNATE_MDNS_IMAGE_URL_DEFAULT", DesignateMdnsContainerImage),
+		ProducerContainerImageURL:     util.GetEnvVar("RELATED_IMAGE_DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT", DesignateProducerContainerImage),
+		WorkerContainerImageURL:       util.GetEnvVar("RELATED_IMAGE_DESIGNATE_WORKER_IMAGE_URL_DEFAULT", DesignateWorkerContainerImage),
+		UnboundContainerImageURL:      util.GetEnvVar("RELATED_IMAGE_DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT", DesignateUnboundContainerImage),
+		Backendbind9ContainerImageURL: util.GetEnvVar("RELATED_IMAGE_DESIGNATE_BACKENDBIND9_IMAGE_URL_DEFAULT", DesignateBackendbind9ContainerImage),
 	}
 
 	SetupDesignateDefaults(designateDefaults)
