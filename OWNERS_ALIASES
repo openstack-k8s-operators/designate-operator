@@ -1,14 +1,17 @@
 # See the OWNERS_ALIASES docs: https://git.k8s.io/community/contributors/guide/owners.md#owners_aliases
 
 aliases:
-  designate-approvers:
-  - beagles
-  - johnsom
-  - dkehn
   ci-approvers:
   - lewisdenny
   - frenzyfriday
   - viroel
+  network-approvers:
+  - beagles
+  - gthiemonge
+  - johnsom
+  - karelyatin
+  - slawqo
+  - weinimo
   openstack-approvers:
   - abays
   - dprince
