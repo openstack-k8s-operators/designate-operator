@@ -1,10 +1,10 @@
 # See the OWNERS docs at https://go.k8s.io/owners
 approvers:
-  - designate-approvers
+  - network-approvers
   - ci-approvers
   - openstack-approvers
 
 reviewers:
-  - designate-approvers
+  - network-approvers
   - ci-approvers
   - openstack-approvers
