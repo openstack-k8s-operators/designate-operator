@@ -59,24 +59,12 @@ func Deployment(
 		PeriodSeconds:       15,
 		InitialDelaySeconds: 5,
 	}
-	// args := []string{"-c"}
-	if instance.Spec.Debug.Service {
-		// args = append(args, common.DebugCommand)
-		livenessProbe.Exec = &corev1.ExecAction{
-			Command: []string{
-				"/bin/true",
-			},
-		}
-		startupProbe.Exec = livenessProbe.Exec
-	} else {
-		// args = append(args, ServiceCommand)
-		livenessProbe.Exec = &corev1.ExecAction{
-			Command: []string{
-				"/usr/bin/pgrep", "-r", "DRST", "-f", "named",
-			},
-		}
-		startupProbe.Exec = livenessProbe.Exec
+	livenessProbe.Exec = &corev1.ExecAction{
+		Command: []string{
+			"/usr/bin/pgrep", "-r", "DRST", "-f", "named",
+		},
 	}
+	startupProbe.Exec = livenessProbe.Exec
 
 	// // TODO(beagles) this can be simplified - jumped through a few hops to
 	// // avoid interfering with development in progress.
@@ -182,7 +170,6 @@ func Deployment(
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
 		VolumeMounts:         designate.GetInitVolumeMounts(),
-		Debug:                instance.Spec.Debug.InitContainer,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 

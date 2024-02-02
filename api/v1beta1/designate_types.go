@@ -92,11 +92,6 @@ type DesignateSpec struct {
 	BackendMdnsServerProtocol string `json:"backendMdnsServerProtocol"`
 
 	// +kubebuilder:validation:Optional
-	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
-	// actual action pod gets started with sleep infinity
-	Debug DesignateDebug `json:"debug,omitempty"`
-
-	// +kubebuilder:validation:Optional
 	// NodeSelector to target subset of worker nodes running this service
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 

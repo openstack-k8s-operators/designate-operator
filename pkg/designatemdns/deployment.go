@@ -55,23 +55,12 @@ func Deployment(
 		InitialDelaySeconds: 5,
 	}
 
-	args := []string{"-c"}
-	if instance.Spec.Debug.Service {
-		args = append(args, common.DebugCommand)
-		livenessProbe.Exec = &corev1.ExecAction{
-			Command: []string{
-				"/bin/true",
-			},
-		}
-		readinessProbe.Exec = livenessProbe.Exec
-	} else {
-		args = append(args, ServiceCommand)
-		livenessProbe.TCPSocket = &corev1.TCPSocketAction{
-			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(5354)},
-		}
-		readinessProbe.TCPSocket = &corev1.TCPSocketAction{
-			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(5354)},
-		}
+	args := []string{"-c", ServiceCommand}
+	livenessProbe.TCPSocket = &corev1.TCPSocketAction{
+		Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(5354)},
+	}
+	readinessProbe.TCPSocket = &corev1.TCPSocketAction{
+		Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(5354)},
 	}
 
 	envVars := map[string]env.Setter{}
@@ -147,7 +136,6 @@ func Deployment(
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
 		VolumeMounts:         designate.GetInitVolumeMounts(),
-		Debug:                instance.Spec.Debug.InitContainer,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 

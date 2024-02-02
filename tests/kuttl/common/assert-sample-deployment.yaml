@@ -7,15 +7,9 @@ spec:
   databaseUser: designate
   serviceUser: designate
   secret: osp-secret
-  debug:
-    dbSync: false
-    dbInitContainer: false
   preserveJobs: false
   designateAPI:
     replicas: 1
-    debug:
-      initContainer: false
-      service: false
   designateCentral:
     replicas: 1
   designateMdns:
