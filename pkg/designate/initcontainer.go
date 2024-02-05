@@ -34,7 +34,6 @@ type APIDetails struct {
 	BackendType          string
 	VolumeMounts         []corev1.VolumeMount
 	Privileged           bool
-	Debug                bool
 }
 
 const (

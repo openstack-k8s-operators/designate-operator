@@ -93,11 +93,6 @@ type DesignateServiceTemplate struct {
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
 	// +kubebuilder:validation:Optional
-	// Debug - enable debug for different deploy stages. If an init container is used, it runs and the
-	// actual action pod gets started with sleep infinity
-	Debug DesignateServiceDebug `json:"debug,omitempty"`
-
-	// +kubebuilder:validation:Optional
 	// CustomServiceConfig - customize the service config using this parameter to change service defaults,
 	// or overwrite rendered information using raw OpenStack config format. The content gets added to
 	// to /etc/<service>/<service>.conf.d directory as a custom config file.
@@ -136,33 +131,6 @@ type PasswordSelector struct {
 	// +kubebuilder:default="DesignatePassword"
 	// Service - Selector to get the designate service password from the Secret
 	Service string `json:"service"`
-}
-
-// DesignateDebug indicates whether certain stages of Designate deployment should
-// pause in debug mode
-type DesignateDebug struct {
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=false
-	// dbInitContainer enable debug (waits until /tmp/stop-init-container disappears)
-	DBInitContainer bool `json:"dbInitContainer"`
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=false
-	// dbSync enable debug
-	DBSync bool `json:"dbSync"`
-}
-
-// DesignateServiceDebug indicates whether certain stages of Designate service
-// deployment should pause in debug mode
-type DesignateServiceDebug struct {
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=false
-	// initContainer enable debug (waits until /tmp/stop-init-container disappears)
-	InitContainer bool `json:"initContainer"`
-
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=false
-	// service enable debug
-	Service bool `json:"service"`
 }
 
 // SetupDefaults - initializes any CRD field defaults based on environment variables (the defaulting mechanism itself is implemented via webhooks)

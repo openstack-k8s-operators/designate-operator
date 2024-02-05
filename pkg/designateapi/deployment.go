@@ -55,24 +55,13 @@ func Deployment(
 		InitialDelaySeconds: 5,
 	}
 
-	args := []string{"-c"}
-	if instance.Spec.Debug.Service {
-		args = append(args, common.DebugCommand)
-		livenessProbe.Exec = &corev1.ExecAction{
-			Command: []string{
-				"/bin/true",
-			},
-		}
-		readinessProbe.Exec = livenessProbe.Exec
-	} else {
-		args = append(args, ServiceCommand)
+	args := []string{"-c", ServiceCommand}
 
-		livenessProbe.HTTPGet = &corev1.HTTPGetAction{
-			Path: "/healthcheck",
-			Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(designate.DesignatePublicPort)},
-		}
-		readinessProbe.HTTPGet = livenessProbe.HTTPGet
+	livenessProbe.HTTPGet = &corev1.HTTPGetAction{
+		Path: "/healthcheck",
+		Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(designate.DesignatePublicPort)},
 	}
+	readinessProbe.HTTPGet = livenessProbe.HTTPGet
 
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
@@ -147,7 +136,6 @@ func Deployment(
 		DBPasswordSelector:   instance.Spec.PasswordSelectors.Database,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
 		VolumeMounts:         designate.GetInitVolumeMounts(),
-		Debug:                instance.Spec.Debug.InitContainer,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 
