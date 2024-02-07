@@ -26,6 +26,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // DesignateDefaults -
@@ -99,25 +100,25 @@ func (spec *DesignateSpec) Default() {
 var _ webhook.Validator = &Designate{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *Designate) ValidateCreate() error {
+func (r *Designate) ValidateCreate() (admission.Warnings, error) {
 	designatelog.Info("validate create", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object creation.
-	return nil
+	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *Designate) ValidateUpdate(old runtime.Object) error {
+func (r *Designate) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	designatelog.Info("validate update", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object update.
-	return nil
+	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *Designate) ValidateDelete() error {
+func (r *Designate) ValidateDelete() (admission.Warnings, error) {
 	designatelog.Info("validate delete", "name", r.Name)
 
 	// TODO(user): fill in your validation logic upon object deletion.
-	return nil
+	return nil, nil
 }
