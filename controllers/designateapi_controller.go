@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
@@ -82,15 +81,13 @@ func (r *DesignateAPIReconciler) GetLogger(ctx context.Context) logr.Logger {
 	return log.FromContext(ctx).WithName("Controllers").WithName("DesignateAPI")
 }
 
-var (
-	keystoneServices = []map[string]string{
-		{
-			"type": designate.ServiceType,
-			"name": designate.ServiceName,
-			"desc": "Designate Service",
-		},
-	}
-)
+var keystoneServices = []map[string]string{
+	{
+		"type": designate.ServiceType,
+		"name": designate.ServiceName,
+		"desc": "Designate Service",
+	},
+}
 
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis/status,verbs=get;update;patch
@@ -211,7 +208,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 	// (e.g. TransportURLSecret) are handled by the top designate controller.
 	Log := r.GetLogger(ctx)
 
-	svcSecretFn := func(o client.Object) []reconcile.Request {
+	svcSecretFn := func(ctx context.Context, o client.Object) []reconcile.Request {
 		var namespace string = o.GetNamespace()
 		var secretName string = o.GetName()
 		result := []reconcile.Request{}
@@ -246,7 +243,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 	// watch for configmap where the CM owner label AND the CR.Spec.ManagingCrName label matches
 	// Watch for changes to NADs
 	// NOTE: Dkehn/DPrince are configMap and NAD one in the same??
-	nadFn := func(o client.Object) []reconcile.Request {
+	nadFn := func(ctx context.Context, o client.Object) []reconcile.Request {
 		result := []reconcile.Request{}
 		// configMapFn := func(o client.Object) []reconcile.Request {
 		// 	result := []reconcile.Request{}
@@ -284,9 +281,9 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 		Owns(&keystonev1.KeystoneEndpoint{}).
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.Deployment{}).
-		Watches(&source.Kind{Type: &corev1.Secret{}},
+		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(svcSecretFn)).
-		Watches(&source.Kind{Type: &networkv1.NetworkAttachmentDefinition{}},
+		Watches(&networkv1.NetworkAttachmentDefinition{},
 			handler.EnqueueRequestsFromMapFunc(nadFn)).
 		Complete(r)
 }
@@ -467,7 +464,7 @@ func (r *DesignateAPIReconciler) reconcileInit(
 	if instance.Status.APIEndpoints == nil {
 		instance.Status.APIEndpoints = map[string]map[string]string{}
 	}
-	//instance.Status.APIEndpoints = apiEndpoints
+	// instance.Status.APIEndpoints = apiEndpoints
 	instance.Status.APIEndpoints[designate.ServiceName] = apiEndpoints
 
 	//
@@ -577,8 +574,8 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	parentDesignateName := designate.GetOwningDesignateName(instance)
 
 	configMaps := []string{
-		fmt.Sprintf("%s-scripts", parentDesignateName),     //ScriptsConfigMap
-		fmt.Sprintf("%s-config-data", parentDesignateName), //ConfigMap
+		fmt.Sprintf("%s-scripts", parentDesignateName),     // ScriptsConfigMap
+		fmt.Sprintf("%s-config-data", parentDesignateName), // ConfigMap
 	}
 
 	_, err = configmap.GetConfigMaps(ctx, helper, instance, configMaps, instance.Namespace, &configMapVars)
