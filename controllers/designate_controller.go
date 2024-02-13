@@ -112,6 +112,8 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts/finalizers,verbs=update
 // +kubebuilder:rbac:groups=keystone.openstack.org,resources=keystoneapis,verbs=get;list;watch
 // +kubebuilder:rbac:groups=rabbitmq.openstack.org,resources=transporturls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
@@ -268,6 +270,7 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&designatev1beta1.Designate{}).
 		Owns(&mariadbv1.MariaDBDatabase{}).
+		Owns(&mariadbv1.MariaDBAccount{}).
 		Owns(&designatev1beta1.DesignateAPI{}).
 		Owns(&designatev1beta1.DesignateCentral{}).
 		Owns(&designatev1beta1.DesignateWorker{}).
@@ -469,7 +472,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	//
 
 	transportURL, op, err := r.transportURLCreateOrUpdate(ctx, instance, serviceLabels)
-
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			designatev1beta1.DesignateRabbitMqTransportURLReadyCondition,
