@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
@@ -184,7 +183,7 @@ func (r *DesignateProducerReconciler) SetupWithManager(ctx context.Context, mgr 
 	// (e.g. TransportURLSecret) are handled by the top designate controller.
 	Log := r.GetLogger(ctx)
 
-	svcSecretFn := func(o client.Object) []reconcile.Request {
+	svcSecretFn := func(ctx context.Context, o client.Object) []reconcile.Request {
 		var namespace string = o.GetNamespace()
 		var secretName string = o.GetName()
 		result := []reconcile.Request{}
@@ -217,7 +216,7 @@ func (r *DesignateProducerReconciler) SetupWithManager(ctx context.Context, mgr 
 	}
 
 	// watch for configmap where the CM owner label AND the CR.Spec.ManagingCrName label matches
-	configMapFn := func(o client.Object) []reconcile.Request {
+	configMapFn := func(ctx context.Context, o client.Object) []reconcile.Request {
 		result := []reconcile.Request{}
 
 		// get all Producer CRs
@@ -258,10 +257,10 @@ func (r *DesignateProducerReconciler) SetupWithManager(ctx context.Context, mgr 
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		// watch the secrets we don't own
-		Watches(&source.Kind{Type: &corev1.Secret{}},
+		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(svcSecretFn)).
 		// watch the config CMs we don't own
-		Watches(&source.Kind{Type: &corev1.ConfigMap{}},
+		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(configMapFn)).
 		Complete(r)
 }
@@ -338,8 +337,8 @@ func (r *DesignateProducerReconciler) reconcileNormal(ctx context.Context, insta
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' init: parent name: %s", instance.Name, parentDesignateName))
 
 	configMaps := []string{
-		fmt.Sprintf("%s-scripts", parentDesignateName),     //ScriptsConfigMap
-		fmt.Sprintf("%s-config-data", parentDesignateName), //ConfigMap
+		fmt.Sprintf("%s-scripts", parentDesignateName),     // ScriptsConfigMap
+		fmt.Sprintf("%s-config-data", parentDesignateName), // ConfigMap
 	}
 
 	_, err = configmap.GetConfigMaps(ctx, helper, instance, configMaps, instance.Namespace, &configMapVars)
