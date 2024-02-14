@@ -4,8 +4,8 @@ go 1.20
 
 require (
 	github.com/onsi/ginkgo/v2 v2.14.0
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.3.1-0.20240110111528-21db14521cda
-	github.com/openstack-k8s-operators/lib-common/modules/storage v0.3.1-0.20231122111552-6bd6025ade37
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.3.1-0.20240214144842-5dcac51e5b36
+	github.com/openstack-k8s-operators/lib-common/modules/storage v0.3.1-0.20240214144842-5dcac51e5b36
 	k8s.io/api v0.28.3
 	k8s.io/apimachinery v0.28.3
 	k8s.io/client-go v0.28.3
