@@ -49,16 +49,15 @@ type DesignateTemplate struct {
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
-	// DatabaseUser - optional username used for designate DB, defaults to designate
-	// TODO: -> implement needs work in mariadb-operator, right now only designate
-	DatabaseUser string `json:"databaseUser"`
+	// DatabaseAccount - name of MariaDBAccount which will be used to connect.
+	DatabaseAccount string `json:"databaseAccount"`
 
 	// +kubebuilder:validation:Optional
-	// Secret containing OpenStack password information for DesignateDatabasePassword
+	// Secret containing OpenStack password information for DesignatePassword
 	Secret string `json:"secret"`
 
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
+	// +kubebuilder:default={service: DesignatePassword}
 	// PasswordSelectors - Selectors to identify the DB and ServiceUser password from the Secret
 	PasswordSelectors PasswordSelector `json:"passwordSelectors"`
 
@@ -122,11 +121,6 @@ type DesignateServiceTemplate struct {
 
 // PasswordSelector to identify the DB and AdminUser password from the Secret
 type PasswordSelector struct {
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default="DesignateDatabasePassword"
-	// Database - Selector to get the designate database user password from the Secret
-	// TODO: not used, need change in mariadb-operator
-	Database string `json:"database"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="DesignatePassword"
 	// Service - Selector to get the designate service password from the Secret

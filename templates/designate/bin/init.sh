@@ -20,10 +20,6 @@ set -ex
 #
 # Secrets are obtained from ENV variables.
 export PASSWORD=${AdminPassword:?"Please specify a AdminPassword variable."}
-export DBHOST=${DatabaseHost:?"Please specify a DatabaseHost variable."}
-export DBUSER=${DatabaseUser:?"Please specify a DatabaseUser variable."}
-export DBPASSWORD=${DatabasePassword:?"Please specify a DatabasePassword variable."}
-export DB=${DatabaseName:-"designate"}
 export TRANSPORTURL=${TransportURL:-""}
 export BACKENDURL=${BackendURL:-"redis://redis:6379/"}
 export BACKENDTYPE=${BackendType:-"None"}
@@ -94,8 +90,6 @@ for dir in /var/lib/config-data/default; do
 done
 
 # set secrets in the config-data
-crudini --set ${SVC_CFG_MERGED} database connection mysql+pymysql://${DBUSER}:${DBPASSWORD}@${DBHOST}/${DB}
-crudini --set ${SVC_CFG_MERGED} storage:sqlalchemy connection mysql+pymysql://root:${DBPASSWORD}@${DBHOST}/${DB}?charset=utf8
 crudini --set ${SVC_CFG_MERGED} keystone_authtoken password $PASSWORD
 if [ -n "$TRANSPORTURL" ]; then
     crudini --set ${SVC_CFG_MERGED} DEFAULT transport_url $TRANSPORTURL

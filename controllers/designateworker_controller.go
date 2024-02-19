@@ -39,7 +39,6 @@ import (
 	designateworker "github.com/openstack-k8s-operators/designate-operator/pkg/designateworker"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/deployment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
@@ -298,7 +297,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	//
 	// check for required OpenStack secret holding passwords for service/admin user and add hash to the vars map
 	//
-	ctrlResult, err := r.getSecret(ctx, helper, instance, instance.Spec.Secret, &configMapVars)
+	ctrlResult, err := r.getSecret(ctx, helper, instance, instance.Spec.Secret, &configMapVars, "secret-")
 	if err != nil {
 		return ctrlResult, err
 	}
@@ -307,7 +306,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	//
 	// check for required TransportURL secret holding transport URL string
 	//
-	ctrlResult, err = r.getSecret(ctx, helper, instance, instance.Spec.TransportURLSecret, &configMapVars)
+	ctrlResult, err = r.getSecret(ctx, helper, instance, instance.Spec.TransportURLSecret, &configMapVars, "secret-")
 	if err != nil {
 		return ctrlResult, err
 	}
@@ -317,7 +316,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	// check for required service secrets
 	//
 	for _, secretName := range instance.Spec.CustomServiceConfigSecrets {
-		ctrlResult, err = r.getSecret(ctx, helper, instance, secretName, &configMapVars)
+		ctrlResult, err = r.getSecret(ctx, helper, instance, secretName, &configMapVars, "secret-")
 		if err != nil {
 			return ctrlResult, err
 		}
@@ -331,29 +330,17 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	parentDesignateName := designate.GetOwningDesignateName(instance)
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' init: parent name: %s", instance.Name, parentDesignateName))
 
-	configMaps := []string{
-		fmt.Sprintf("%s-scripts", parentDesignateName),     // ScriptsConfigMap
-		fmt.Sprintf("%s-config-data", parentDesignateName), // ConfigMap
+	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-scripts", parentDesignateName), &configMapVars, "")
+	if err != nil {
+		return ctrlResult, err
+	}
+	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-config-data", parentDesignateName), &configMapVars, "")
+	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
+	// when secret is not found
+	if err != nil {
+		return ctrlResult, err
 	}
 
-	_, err = configmap.GetConfigMaps(ctx, helper, instance, configMaps, instance.Namespace, &configMapVars)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
-				condition.InputReadyWaitingMessage))
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, fmt.Errorf("Could not find all config maps for parent Designate CR %s", parentDesignateName)
-		}
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 	// run check parent Designate CR config maps - end
 
@@ -561,6 +548,7 @@ func (r *DesignateWorkerReconciler) getSecret(
 	instance *designatev1beta1.DesignateWorker,
 	secretName string,
 	envVars *map[string]env.Setter,
+	prefix string,
 ) (ctrl.Result, error) {
 	secret, hash, err := secret.GetSecret(ctx, h, secretName, instance.Namespace)
 	if err != nil {
@@ -583,7 +571,7 @@ func (r *DesignateWorkerReconciler) getSecret(
 
 	// Add a prefix to the var name to avoid accidental collision with other non-secret
 	// vars. The secret names themselves will be unique.
-	(*envVars)["secret-"+secret.Name] = env.SetValue(hash)
+	(*envVars)[prefix+secret.Name] = env.SetValue(hash)
 
 	return ctrl.Result{}, nil
 }
@@ -627,7 +615,7 @@ func (r *DesignateWorkerReconciler) generateServiceConfigMaps(
 		},
 	}
 
-	return configmap.EnsureConfigMaps(ctx, h, instance, cms, envVars)
+	return secret.EnsureSecrets(ctx, h, instance, cms, envVars)
 }
 
 // createHashOfInputHashes - creates a hash of hashes which gets added to the resources which requires a restart

@@ -38,7 +38,6 @@ import (
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/endpoint"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
@@ -295,7 +294,7 @@ func (r *DesignateReconciler) reconcileDelete(ctx context.Context, instance *des
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
 
 	// remove db finalizer first
-	db, err := mariadbv1.GetDatabaseByName(ctx, helper, instance.Name)
+	db, err := mariadbv1.GetDatabaseByNameAndAccount(ctx, helper, instance.Name, instance.Spec.DatabaseAccount, instance.Namespace)
 	if err != nil && !k8s_errors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
@@ -330,19 +329,16 @@ func (r *DesignateReconciler) reconcileInit(
 	//
 	// create service DB instance
 	//
-	db := mariadbv1.NewDatabase(
-		instance.Name,
-		instance.Spec.DatabaseUser,
-		instance.Spec.Secret,
-		map[string]string{
-			"dbName": instance.Spec.DatabaseInstance,
-		},
+	db := mariadbv1.NewDatabaseForAccount(
+		instance.Spec.DatabaseInstance, // mariadb/galera service to target
+		instance.Name,                  // name used in CREATE DATABASE in mariadb
+		instance.Name,                  // CR name for MariaDBDatabase
+		instance.Spec.DatabaseAccount,  // CR name for MariaDBAccount
+		instance.Namespace,             // namespace
 	)
+
 	// create or patch the DB
-	ctrlResult, err := db.CreateOrPatchDB(
-		ctx,
-		helper,
-	)
+	ctrlResult, err := db.CreateOrPatchAll(ctx, helper)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DBReadyCondition,
@@ -527,6 +523,32 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 	// run check OpenStack secret - end
+
+	// ensure MariaDBAccount exists.  This account record may be created by
+	// openstack-operator or the cloud operator up front without a specific
+	// MariaDBDatabase configured yet.   Otherwise, a MariaDBAccount CR is
+	// created here with a generated username as well as a secret with
+	// generated password.   The MariaDBAccount is created without being
+	// yet associated with any MariaDBDatabase.
+	_, _, err = mariadbv1.EnsureMariaDBAccount(
+		ctx, helper, instance.Spec.DatabaseAccount,
+		instance.Namespace, false, "designate",
+	)
+
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			mariadbv1.MariaDBAccountReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			mariadbv1.MariaDBAccountNotReadyMessage,
+			err.Error()))
+
+		return ctrl.Result{}, err
+	}
+	instance.Status.Conditions.MarkTrue(
+		mariadbv1.MariaDBAccountReadyCondition,
+		mariadbv1.MariaDBAccountReadyMessage,
+	)
 
 	//
 	// Create ConfigMaps and Secrets required as input for the Service and calculate an overall hash of hashes
@@ -812,6 +834,11 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	Log.Info("Deployment Unbound task reconciled")
 
+	err = mariadbv1.DeleteUnusedMariaDBAccountFinalizers(ctx, helper, instance.Name, instance.Spec.DatabaseAccount, instance.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil
 }
@@ -840,7 +867,7 @@ func (r *DesignateReconciler) reconcileUpgrade(ctx context.Context, instance *de
 	return ctrl.Result{}, nil
 }
 
-// generateServiceConfigMaps - create create configmaps which hold scripts and service configuration
+// generateServiceConfigMaps - create secrets which hold scripts and service configuration
 // TODO add DefaultConfigOverwrite
 func (r *DesignateReconciler) generateServiceConfigMaps(
 	ctx context.Context,
@@ -880,10 +907,22 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	if err != nil {
 		return err
 	}
+
+	databaseAccount, dbSecret, err := mariadbv1.GetAccountAndSecret(ctx, h, instance.Spec.DatabaseAccount, instance.Namespace)
+	if err != nil {
+		return err
+	}
+
 	templateParameters := make(map[string]interface{})
 	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
 	templateParameters["KeystoneInternalURL"] = keystoneInternalURL
 	templateParameters["KeystonePublicURL"] = keystonePublicURL
+	templateParameters["DatabaseConnection"] = fmt.Sprintf("mysql+pymysql://%s:%s@%s/%s",
+		databaseAccount.Spec.UserName,
+		string(dbSecret.Data[mariadbv1.DatabasePasswordSelector]),
+		instance.Status.DatabaseHostname,
+		instance.Name,
+	)
 
 	cms := []util.Template{
 		// ScriptsConfigMap
@@ -907,7 +946,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 		},
 	}
 
-	return configmap.EnsureConfigMaps(ctx, h, instance, cms, envVars)
+	return secret.EnsureSecrets(ctx, h, instance, cms, envVars)
 }
 
 // createHashOfInputHashes - creates a hash of hashes which gets added to the resources which requires a restart
@@ -973,7 +1012,7 @@ func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, i
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
+		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
@@ -1007,7 +1046,7 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
+		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
@@ -1041,7 +1080,7 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
+		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
@@ -1075,7 +1114,7 @@ func (r *DesignateReconciler) mdnsDeploymentCreateOrUpdate(ctx context.Context, 
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
+		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
@@ -1109,7 +1148,7 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
+		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
@@ -1143,7 +1182,7 @@ func (r *DesignateReconciler) backendbind9DeploymentCreateOrUpdate(ctx context.C
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseUser = instance.Spec.DatabaseUser
+		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret

@@ -44,11 +44,9 @@ func Deployment(instance *designatev1beta1.DesignateUnbound,
 		{
 			Name: configVolume,
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
+				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &configMode,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "designate-unbound-config-data",
-					},
+					SecretName:  "designate-unbound-config-data",
 				},
 			},
 		},
