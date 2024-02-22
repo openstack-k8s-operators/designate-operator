@@ -65,11 +65,10 @@ var _ webhook.Defaulter = &Designate{}
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Designate) Default() {
 	designatelog.Info("default", "name", r.Name)
-
 	r.Spec.Default()
 }
 
-// Default - set defaults for this Designate spec
+// Default  set defaults for this Designate spec
 func (spec *DesignateSpec) Default() {
 	if spec.DesignateAPI.ContainerImage == "" {
 		spec.DesignateAPI.ContainerImage = designateDefaults.APIContainerImageURL
@@ -92,6 +91,10 @@ func (spec *DesignateSpec) Default() {
 	if spec.DesignateUnbound.ContainerImage == "" {
 		spec.DesignateUnbound.ContainerImage = designateDefaults.UnboundContainerImageURL
 	}
+}
+
+func (spec *DesignateSpecCore) Default() {
+	// validations go here for the ControlPlane
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.

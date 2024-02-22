@@ -26,6 +26,30 @@ import (
 type DesignateAPITemplate struct {
 	// Common input parameters for the Designate API service
 	DesignateServiceTemplate `json:",inline"`
+}
+
+// DesignateAPISpecCore this version has no containerImage for use with the OpenStackControlplane
+type DesignateAPISpecCore struct {
+
+	// Common input parameters for all Designate services
+	DesignateAPISpecBase `json:",inline"`
+
+	DesignateServiceTemplateCore `json:",inline"`
+}
+
+// DesignateAPISpec defines the desired state of DesignateAPI
+type DesignateAPISpec struct {
+
+	// Common input parameters for all Designate services
+	DesignateAPISpecBase `json:",inline"`
+
+	DesignateServiceTemplate `json:",inline"`
+}
+
+// DesignateAPISpecBase -
+type DesignateAPISpecBase struct {
+	// Common input parameters for all Designate services
+	DesignateTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
@@ -33,15 +57,6 @@ type DesignateAPITemplate struct {
 	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate API Replicas
 	Replicas *int32 `json:"replicas"`
-}
-
-// DesignateAPISpec defines the desired state of DesignateAPI
-type DesignateAPISpec struct {
-	// Common input parameters for all Designate services
-	DesignateTemplate `json:",inline"`
-
-	// Input parameters for the Designate Scheduler service
-	DesignateAPITemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname

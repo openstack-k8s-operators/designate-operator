@@ -82,10 +82,7 @@ type DesignateTemplate struct {
 
 // DesignateServiceTemplate defines the input parameters that can be defined for a given
 // Designate service
-type DesignateServiceTemplate struct {
-	// +kubebuilder:validation:Required
-	// ContainerImage - Designate Container Image URL (will be set to environmental default if empty)
-	ContainerImage string `json:"containerImage"`
+type DesignateServiceTemplateCore struct {
 
 	// +kubebuilder:validation:Optional
 	// NodeSelector to target subset of worker nodes running this service. Setting here overrides
@@ -118,6 +115,16 @@ type DesignateServiceTemplate struct {
 	// +kubebuilder:validation:Optional
 	// NetworkAttachments is a list of NetworkAttachment resource names to expose the services to the given network
 	NetworkAttachments []string `json:"networkAttachments,omitempty"`
+}
+
+// DesignateServiceTemplate defines the input parameters that can be defined for a given
+// Designate service
+type DesignateServiceTemplate struct {
+	// +kubebuilder:validation:Required
+	// ContainerImage - Designate Container Image URL (will be set to environmental default if empty)
+	ContainerImage string `json:"containerImage"`
+
+	DesignateServiceTemplateCore `json:",inline"`
 }
 
 // PasswordSelector to identify the DB and AdminUser password from the Secret

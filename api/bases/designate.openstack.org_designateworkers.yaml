@@ -42,7 +42,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: DesignateWorkerSpec defines the desired state of DesignateWorker
+            description: DesignateWorkerSpec the desired state of DesignateWorker
             properties:
               None:
                 description: BackendType - Defines the backend service/configuration

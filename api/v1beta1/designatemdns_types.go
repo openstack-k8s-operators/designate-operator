@@ -21,10 +21,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DesignateMdnsTemplate defines the input parameters for the Designate Mdns service
-type DesignateMdnsTemplate struct {
+// DesignateMdnsSpecCore -
+type DesignateMdnsSpecCore struct {
+	// Common input parameters for the Designate Mdns service
+	DesignateServiceTemplateCore `json:",inline"`
+
+	DesignateMdnsSpecBase `json:",inline"`
+}
+
+// DesignateMdnsSpec defines the input parameters for the Designate Mdns service
+type DesignateMdnsSpec struct {
 	// Common input parameters for the Designate Mdns service
 	DesignateServiceTemplate `json:",inline"`
+
+	DesignateMdnsSpecBase `json:",inline"`
+}
+
+// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// DesignateMdnsSpecBase -
+type DesignateMdnsSpecBase struct {
+	// Common input parameters for all Designate services
+	DesignateTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
@@ -32,17 +50,6 @@ type DesignateMdnsTemplate struct {
 	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate Mdns Replicas
 	Replicas *int32 `json:"replicas"`
-}
-
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// DesignateMdnsSpec defines the desired state of DesignateMdns
-type DesignateMdnsSpec struct {
-	// Common input parameters for all Designate services
-	DesignateTemplate `json:",inline"`
-
-	// Input parameters for the Designate Scheduler service
-	DesignateMdnsTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname
