@@ -46,7 +46,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: DesignateProducerSpec defines the desired state of DesignateProducer
+            description: DesignateProducerSpec the desired state of DesignateProducer
             properties:
               None:
                 description: BackendType - Defines the backend service/configuration

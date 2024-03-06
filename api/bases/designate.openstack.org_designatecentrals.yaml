@@ -46,7 +46,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: DesignateCentralSpec defines the desired state of DesignateCentral
+            description: DesignateCentralSpec defines the input parameters for the
+              Designate Central service
             properties:
               None:
                 description: BackendType - Defines the backend service/configuration

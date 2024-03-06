@@ -21,10 +21,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DesignateWorkerTemplate defines the input parameters for the Designate Scheduler service
-type DesignateWorkerTemplate struct {
+// DesignateWorkerSpecCore - this version has no containerImage for use with the OpenStackControlplane
+type DesignateWorkerSpecCore struct {
+	// Common input parameters for the Designate Worker service
+	DesignateServiceTemplateCore `json:",inline"`
+
+	DesignateWorkerSpecBase `json:",inline"`
+}
+
+// DesignateWorkerSpec the desired state of DesignateWorker
+type DesignateWorkerSpec struct {
 	// Common input parameters for the Designate Worker service
 	DesignateServiceTemplate `json:",inline"`
+
+	DesignateWorkerSpecBase `json:",inline"`
+}
+
+// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// DesignateWorkerSpecBase -
+type DesignateWorkerSpecBase struct {
+	// Common input parameters for all Designate services
+	DesignateTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
@@ -32,17 +50,6 @@ type DesignateWorkerTemplate struct {
 	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate Worker Replicas
 	Replicas *int32 `json:"replicas"`
-}
-
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// DesignateWorkerSpec defines the desired state of DesignateWorker
-type DesignateWorkerSpec struct {
-	// Common input parameters for all Designate services
-	DesignateTemplate `json:",inline"`
-
-	// Input parameters for the Designate Worker service
-	DesignateWorkerTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname

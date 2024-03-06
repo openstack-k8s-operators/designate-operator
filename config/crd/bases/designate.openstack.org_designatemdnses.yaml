@@ -46,7 +46,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: DesignateMdnsSpec defines the desired state of DesignateMdns
+            description: DesignateMdnsSpec defines the input parameters for the Designate
+              Mdns service
             properties:
               None:
                 description: BackendType - Defines the backend service/configuration

@@ -42,7 +42,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: DesignateSpec defines the desired state of Designate
+            description: DesignateAPISpec defines the desired state of DesignateAPI
             properties:
               None:
                 description: BackendType - Defines the backend service/configuration

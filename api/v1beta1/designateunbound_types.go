@@ -21,10 +21,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// DesignateUnboundSpecCore - this version has no containerImage for use with the OpenStackControlplane
+type DesignateUnboundSpecCore struct {
+	// Common input parameters for the Designate Unbound service
+	DesignateServiceTemplateCore `json:",inline"`
+
+	DesignateUnboundSpecBase `json:",inline"`
+}
+
 // DesignateUnboundSpec defines the desired state of DesignateUnbound
 type DesignateUnboundSpec struct {
 	// Common input parameters for the Designate Unbound service
 	DesignateServiceTemplate `json:",inline"`
+
+	DesignateUnboundSpecBase `json:",inline"`
+}
+
+// DesignateUnboundSpecBase -
+type DesignateUnboundSpecBase struct {
 
 	// +kubebuilder:validation:Optional
 	// ServiceAccount - service account name used internally to provide Designate services the default SA name

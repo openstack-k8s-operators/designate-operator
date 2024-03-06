@@ -21,10 +21,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DesignateProducerTemplate defines the input parameters for the Designate Scheduler service
-type DesignateProducerTemplate struct {
+// DesignateProducerSpecCore - this version has no containerImage for use with the OpenStackControlplane
+type DesignateProducerSpecCore struct {
+	// Common input parameters for the Designate Producer service
+	DesignateServiceTemplateCore `json:",inline"`
+
+	DesignateProducerSpecBase `json:",inline"`
+}
+
+// DesignateProducerSpec the desired state of DesignateProducer
+type DesignateProducerSpec struct {
 	// Common input parameters for the Designate Producer service
 	DesignateServiceTemplate `json:",inline"`
+
+	DesignateProducerSpecBase `json:",inline"`
+}
+
+// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// DesignateProducerSpec defines the desired state of DesignateProducer
+type DesignateProducerSpecBase struct {
+	// Common input parameters for all Designate services
+	DesignateTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
@@ -32,17 +50,6 @@ type DesignateProducerTemplate struct {
 	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate Producer Replicas
 	Replicas *int32 `json:"replicas"`
-}
-
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// DesignateProducerSpec defines the desired state of DesignateProducer
-type DesignateProducerSpec struct {
-	// Common input parameters for all Designate services
-	DesignateTemplate `json:",inline"`
-
-	// Input parameters for the Designate Scheduler service
-	DesignateProducerTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname

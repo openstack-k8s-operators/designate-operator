@@ -21,10 +21,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DesignateCentralTemplate defines the input parameters for the Designate Scheduler service
-type DesignateCentralTemplate struct {
+// DesignateCentralSpecCore - this version has no containerImage for use with the OpenStackControlplane
+type DesignateCentralSpecCore struct {
+	// Common input parameters for the Designate Central service
+	DesignateServiceTemplateCore `json:",inline"`
+
+	DesignateCentralSpecBase `json:",inline"`
+}
+
+// DesignateCentralSpec defines the input parameters for the Designate Central service
+type DesignateCentralSpec struct {
 	// Common input parameters for the Designate Central service
 	DesignateServiceTemplate `json:",inline"`
+
+	DesignateCentralSpecBase `json:",inline"`
+}
+
+// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// DesignateCentralSpecBase -
+type DesignateCentralSpecBase struct {
+	// Common input parameters for all Designate services
+	DesignateTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
@@ -32,17 +50,6 @@ type DesignateCentralTemplate struct {
 	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate Central Replicas
 	Replicas *int32 `json:"replicas"`
-}
-
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// DesignateCentralSpec defines the desired state of DesignateCentral
-type DesignateCentralSpec struct {
-	// Common input parameters for all Designate services
-	DesignateTemplate `json:",inline"`
-
-	// Input parameters for the Designate Central service
-	DesignateCentralTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname

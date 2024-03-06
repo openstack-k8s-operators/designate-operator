@@ -22,10 +22,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DesignateBackendbind9Template defines the input parameters for the Designate Scheduler service
-type DesignateBackendbind9Template struct {
+// DesignateBackendbind9SpecCore - this version has no containerImage for use with the OpenStackControlplane
+type DesignateBackendbind9SpecCore struct {
+	// Common input parameters for the Designate Backendbind9 service
+	DesignateServiceTemplateCore `json:",inline"`
+
+	DesignateBackendbind9SpecBase `json:",inline"`
+}
+
+// DesignateBackendbind9Spec defines the desired state of DesignateBackendbind9
+type DesignateBackendbind9Spec struct {
 	// Common input parameters for the Designate Backendbind9 service
 	DesignateServiceTemplate `json:",inline"`
+
+	DesignateBackendbind9SpecBase `json:",inline"`
+}
+
+// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// DesignateBackendbind9SpecBase -
+type DesignateBackendbind9SpecBase struct {
+	// Common input parameters for all Designate services
+	DesignateTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
@@ -33,17 +51,6 @@ type DesignateBackendbind9Template struct {
 	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate Backendbind9 Replicas
 	Replicas *int32 `json:"replicas"`
-}
-
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// DesignateBackendbind9Spec defines the desired state of DesignateBackendbind9
-type DesignateBackendbind9Spec struct {
-	// Common input parameters for all Designate services
-	DesignateTemplate `json:",inline"`
-
-	// Input parameters for the Designate Backendbind9 service
-	DesignateBackendbind9Template `json:",inline"`
 
 	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname

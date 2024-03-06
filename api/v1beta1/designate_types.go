@@ -31,10 +31,74 @@ const (
 	DeploymentHash = "deployment"
 )
 
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// DesignateAPISpecCore - this version has no containerImage for use with the OpenStackControlplane
+type DesignateSpecCore struct {
+	DesignateSpecBase `json:",inline"`
 
-// DesignateSpec defines the desired state of Designate
+	// +kubebuilder:validation:Required
+	// DesignateAPI - Spec definition for the API service of this Designate deployment
+	DesignateAPI DesignateAPISpecCore `json:"designateAPI"`
+
+	// +kubebuilder:validation:Required
+	// DesignateCentral - Spec definition for the Central service of this Designate deployment
+	DesignateCentral DesignateCentralSpecCore `json:"designateCentral"`
+
+	// +kubebuilder:validation:Required
+	// DesignateWorker - Spec definition for the Worker service of this Designate deployment
+	DesignateWorker DesignateWorkerSpecCore `json:"designateWorker"`
+
+	// +kubebuilder:validation:Required
+	// DesignateMdns - Spec definition for the Mdns service of this Designate deployment
+	DesignateMdns DesignateMdnsSpecCore `json:"designateMdns"`
+
+	// +kubebuilder:validation:Required
+	// DesignateProducer - Spec definition for the Producer service of this Designate deployment
+	DesignateProducer DesignateProducerSpecCore `json:"designateProducer"`
+
+	// +kubebuilder:validation:Required
+	// DesignateBackendbind9 - Spec definition for the Backendbind9 service of this Designate deployment
+	DesignateBackendbind9 DesignateBackendbind9SpecCore `json:"designateBackendbind9"`
+
+	// +kubebuilder:validation:Optional
+	// DesignateUnbound - Spec definition for the Unbound Resolver service of this Designate deployment
+	DesignateUnbound DesignateUnboundSpecCore `json:"designateUnbound"`
+}
+
+// DesignateAPISpec defines the desired state of DesignateAPI
 type DesignateSpec struct {
+	DesignateSpecBase `json:",inline"`
+
+	// +kubebuilder:validation:Required
+	// DesignateAPI - Spec definition for the API service of this Designate deployment
+	DesignateAPI DesignateAPISpec `json:"designateAPI"`
+
+	// +kubebuilder:validation:Required
+	// DesignateCentral - Spec definition for the Central service of this Designate deployment
+	DesignateCentral DesignateCentralSpec `json:"designateCentral"`
+
+	// +kubebuilder:validation:Required
+	// DesignateWorker - Spec definition for the Worker service of this Designate deployment
+	DesignateWorker DesignateWorkerSpec `json:"designateWorker"`
+
+	// +kubebuilder:validation:Required
+	// DesignateMdns - Spec definition for the Mdns service of this Designate deployment
+	DesignateMdns DesignateMdnsSpec `json:"designateMdns"`
+
+	// +kubebuilder:validation:Required
+	// DesignateProducer - Spec definition for the Producer service of this Designate deployment
+	DesignateProducer DesignateProducerSpec `json:"designateProducer"`
+
+	// +kubebuilder:validation:Required
+	// DesignateBackendbind9 - Spec definition for the Backendbind9 service of this Designate deployment
+	DesignateBackendbind9 DesignateBackendbind9Spec `json:"designateBackendbind9"`
+
+	// +kubebuilder:validation:Optional
+	// DesignateUnbound - Spec definition for the Unbound Resolver service of this Designate deployment
+	DesignateUnbound DesignateUnboundSpec `json:"designateUnbound"`
+}
+
+// DesignateSpecBase -
+type DesignateSpecBase struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -116,34 +180,6 @@ type DesignateSpec struct {
 	// Resources - Compute Resources required by this service (Limits/Requests).
 	// https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// +kubebuilder:validation:Required
-	// DesignateAPI - Spec definition for the API service of this Designate deployment
-	DesignateAPI DesignateAPISpec `json:"designateAPI"`
-
-	// +kubebuilder:validation:Required
-	// DesignateCentral - Spec definition for the Central service of this Designate deployment
-	DesignateCentral DesignateCentralSpec `json:"designateCentral"`
-
-	// +kubebuilder:validation:Required
-	// DesignateWorker - Spec definition for the Worker service of this Designate deployment
-	DesignateWorker DesignateWorkerSpec `json:"designateWorker"`
-
-	// +kubebuilder:validation:Required
-	// DesignateMdns - Spec definition for the Mdns service of this Designate deployment
-	DesignateMdns DesignateMdnsSpec `json:"designateMdns"`
-
-	// +kubebuilder:validation:Required
-	// DesignateProducer - Spec definition for the Producer service of this Designate deployment
-	DesignateProducer DesignateProducerSpec `json:"designateProducer"`
-
-	// +kubebuilder:validation:Required
-	// DesignateBackendbind9 - Spec definition for the Backendbind9 service of this Designate deployment
-	DesignateBackendbind9 DesignateBackendbind9Spec `json:"designateBackendbind9"`
-
-	// +kubebuilder:validation:Optional
-	// DesignateUnbound - Spec definition for the Unbound Resolver service of this Designate deployment
-	DesignateUnbound DesignateUnboundSpec `json:"designateUnbound"`
 }
 
 // DesignateStatus defines the observed state of Designate
