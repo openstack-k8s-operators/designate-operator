@@ -55,9 +55,8 @@ type DesignateSpec struct {
 
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=designate
-	// DatabaseUser - optional username used for designate DB, defaults to designate
-	// TODO: -> implement needs work in mariadb-operator, right now only designate
-	DatabaseUser string `json:"databaseUser"`
+	// DatabaseAccount - name of MariaDBAccount which will be used to connect.
+	DatabaseAccount string `json:"databaseAccount"`
 
 	// +kubebuilder:validation:Required
 	// +kubebuilder:default=rabbitmq
@@ -66,11 +65,11 @@ type DesignateSpec struct {
 	RabbitMqClusterName string `json:"rabbitMqClusterName"`
 
 	// +kubebuilder:validation:Required
-	// Secret containing OpenStack password information for designate DesignateDatabasePassword, AdminPassword
+	// Secret containing OpenStack password information for designate AdminPassword
 	Secret string `json:"secret"`
 
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default={database: DesignateDatabasePassword, service: DesignatePassword}
+	// +kubebuilder:default={service: DesignatePassword}
 	// PasswordSelectors - Selectors to identify the DB and AdminUser password from the Secret
 	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
 

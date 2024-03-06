@@ -36,22 +36,18 @@ func GetVolumes(baseConfigMapName string) []corev1.Volume {
 		{
 			Name: scriptVolume,
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
+				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &scriptMode,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: baseConfigMapName + "-scripts",
-					},
+					SecretName:  baseConfigMapName + "-scripts",
 				},
 			},
 		},
 		{
 			Name: configVolume,
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
+				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &configMode,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: baseConfigMapName + "-config-data",
-					},
+					SecretName:  baseConfigMapName + "-config-data",
 				},
 			},
 		},
@@ -118,22 +114,18 @@ func getVolumes(name string) []corev1.Volume {
 		{
 			Name: "scripts",
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
+				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &scriptsVolumeDefaultMode,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name + "-scripts",
-					},
+					SecretName:  name + "-scripts",
 				},
 			},
 		},
 		{
 			Name: "config-data",
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
+				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &config0640AccessMode,
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: name + "-config-data",
-					},
+					SecretName:  name + "-config-data",
 				},
 			},
 		},

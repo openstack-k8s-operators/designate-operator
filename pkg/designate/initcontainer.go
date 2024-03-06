@@ -25,11 +25,9 @@ import (
 type APIDetails struct {
 	ContainerImage       string
 	DatabaseHost         string
-	DatabaseUser         string
 	DatabaseName         string
 	OSPSecret            string
 	TransportURLSecret   string
-	DBPasswordSelector   string
 	UserPasswordSelector string
 	BackendType          string
 	VolumeMounts         []corev1.VolumeMount
@@ -52,22 +50,10 @@ func InitContainer(init APIDetails) []corev1.Container {
 
 	envVars := map[string]env.Setter{}
 	envVars["DatabaseHost"] = env.SetValue(init.DatabaseHost)
-	envVars["DatabaseUser"] = env.SetValue(init.DatabaseUser)
 	envVars["DatabaseName"] = env.SetValue(init.DatabaseName)
 	envVars["BackendType"] = env.SetValue(init.BackendType)
 
 	envs := []corev1.EnvVar{
-		{
-			Name: "DatabasePassword",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: init.OSPSecret,
-					},
-					Key: init.DBPasswordSelector,
-				},
-			},
-		},
 		{
 			Name: "AdminPassword",
 			ValueFrom: &corev1.EnvVarSource{

@@ -35,12 +35,12 @@ import (
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/deployment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 )
@@ -422,7 +422,7 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 			Labels:        cmLabels,
 		},
 	}
-	err := configmap.EnsureConfigMaps(ctx, h, instance, cms, envVars)
+	err := secret.EnsureSecrets(ctx, h, instance, cms, envVars)
 
 	if err != nil {
 		r.Log.Error(err, "uanble to process config map")

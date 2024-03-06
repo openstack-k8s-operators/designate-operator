@@ -10,7 +10,7 @@ spec:
     [DEFAULT]
     debug = true
   databaseInstance: openstack
-  databaseUser: designate
+  databaseAccount: designate
   rabbitMqClusterName: rabbitmq
   designateAPI:
     replicas: 1

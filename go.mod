@@ -5,13 +5,13 @@ go 1.20
 require (
 	github.com/go-logr/logr v1.4.1
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.4.0
-	github.com/onsi/ginkgo/v2 v2.14.0
-	github.com/onsi/gomega v1.30.0
+	github.com/onsi/ginkgo/v2 v2.15.0
+	github.com/onsi/gomega v1.31.1
 	github.com/openstack-k8s-operators/designate-operator/api v0.0.0-00010101000000-000000000000
 	github.com/openstack-k8s-operators/infra-operator/apis v0.3.1-0.20240219072823-a587b364203f
 	github.com/openstack-k8s-operators/keystone-operator/api v0.3.1-0.20240219094943-9bbb46c9afba
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.3.1-0.20240216173409-86913e6d5885
-	github.com/openstack-k8s-operators/mariadb-operator/api v0.3.1-0.20240219072536-62f6b4dc7798
+	github.com/openstack-k8s-operators/mariadb-operator/api v0.3.1-0.20240303091826-438dde8600d3
 	k8s.io/api v0.28.3
 	k8s.io/apimachinery v0.28.3
 	k8s.io/client-go v0.28.3

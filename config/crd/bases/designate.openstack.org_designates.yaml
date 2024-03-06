@@ -69,16 +69,15 @@ spec:
                   added to to /etc/<service>/<service>.conf.d directory as custom.conf
                   file.
                 type: string
+              databaseAccount:
+                default: designate
+                description: DatabaseAccount - name of MariaDBAccount which will be
+                  used to connect.
+                type: string
               databaseInstance:
                 description: MariaDB instance name Right now required by the maridb-operator
                   to get the credentials from the instance to create the DB Might
                   not be required in future
-                type: string
-              databaseUser:
-                default: designate
-                description: 'DatabaseUser - optional username used for designate
-                  DB, defaults to designate TODO: -> implement needs work in mariadb-operator,
-                  right now only designate'
                 type: string
               defaultConfigOverwrite:
                 additionalProperties:
@@ -129,14 +128,13 @@ spec:
                     items:
                       type: string
                     type: array
+                  databaseAccount:
+                    default: designate
+                    description: DatabaseAccount - name of MariaDBAccount which will
+                      be used to connect.
+                    type: string
                   databaseHostname:
                     description: DatabaseHostname - Designate Database Hostname
-                    type: string
-                  databaseUser:
-                    default: designate
-                    description: 'DatabaseUser - optional username used for designate
-                      DB, defaults to designate TODO: -> implement needs work in mariadb-operator,
-                      right now only designate'
                     type: string
                   defaultConfigOverwrite:
                     additionalProperties:
@@ -343,17 +341,10 @@ spec:
                     type: object
                   passwordSelectors:
                     default:
-                      database: DesignateDatabasePassword
                       service: DesignatePassword
                     description: PasswordSelectors - Selectors to identify the DB
                       and ServiceUser password from the Secret
                     properties:
-                      database:
-                        default: DesignateDatabasePassword
-                        description: 'Database - Selector to get the designate database
-                          user password from the Secret TODO: not used, need change
-                          in mariadb-operator'
-                        type: string
                       service:
                         default: DesignatePassword
                         description: Service - Selector to get the designate service
@@ -419,7 +410,7 @@ spec:
                     type: object
                   secret:
                     description: Secret containing OpenStack password information
-                      for DesignateDatabasePassword
+                      for DesignatePassword
                     type: string
                   serviceAccount:
                     description: ServiceAccount - service account name used internally
@@ -477,14 +468,13 @@ spec:
                     items:
                       type: string
                     type: array
+                  databaseAccount:
+                    default: designate
+                    description: DatabaseAccount - name of MariaDBAccount which will
+                      be used to connect.
+                    type: string
                   databaseHostname:
                     description: DatabaseHostname - Designate Database Hostname
-                    type: string
-                  databaseUser:
-                    default: designate
-                    description: 'DatabaseUser - optional username used for designate
-                      DB, defaults to designate TODO: -> implement needs work in mariadb-operator,
-                      right now only designate'
                     type: string
                   defaultConfigOverwrite:
                     additionalProperties:
@@ -509,17 +499,10 @@ spec:
                     type: object
                   passwordSelectors:
                     default:
-                      database: DesignateDatabasePassword
                       service: DesignatePassword
                     description: PasswordSelectors - Selectors to identify the DB
                       and ServiceUser password from the Secret
                     properties:
-                      database:
-                        default: DesignateDatabasePassword
-                        description: 'Database - Selector to get the designate database
-                          user password from the Secret TODO: not used, need change
-                          in mariadb-operator'
-                        type: string
                       service:
                         default: DesignatePassword
                         description: Service - Selector to get the designate service
@@ -585,7 +568,7 @@ spec:
                     type: object
                   secret:
                     description: Secret containing OpenStack password information
-                      for DesignateDatabasePassword
+                      for DesignatePassword
                     type: string
                   serviceAccount:
                     description: ServiceAccount - service account name used internally
@@ -643,14 +626,13 @@ spec:
                     items:
                       type: string
                     type: array
+                  databaseAccount:
+                    default: designate
+                    description: DatabaseAccount - name of MariaDBAccount which will
+                      be used to connect.
+                    type: string
                   databaseHostname:
                     description: DatabaseHostname - Designate Database Hostname
-                    type: string
-                  databaseUser:
-                    default: designate
-                    description: 'DatabaseUser - optional username used for designate
-                      DB, defaults to designate TODO: -> implement needs work in mariadb-operator,
-                      right now only designate'
                     type: string
                   defaultConfigOverwrite:
                     additionalProperties:
@@ -675,17 +657,10 @@ spec:
                     type: object
                   passwordSelectors:
                     default:
-                      database: DesignateDatabasePassword
                       service: DesignatePassword
                     description: PasswordSelectors - Selectors to identify the DB
                       and ServiceUser password from the Secret
                     properties:
-                      database:
-                        default: DesignateDatabasePassword
-                        description: 'Database - Selector to get the designate database
-                          user password from the Secret TODO: not used, need change
-                          in mariadb-operator'
-                        type: string
                       service:
                         default: DesignatePassword
                         description: Service - Selector to get the designate service
@@ -751,7 +726,7 @@ spec:
                     type: object
                   secret:
                     description: Secret containing OpenStack password information
-                      for DesignateDatabasePassword
+                      for DesignatePassword
                     type: string
                   serviceAccount:
                     description: ServiceAccount - service account name used internally
@@ -809,14 +784,13 @@ spec:
                     items:
                       type: string
                     type: array
+                  databaseAccount:
+                    default: designate
+                    description: DatabaseAccount - name of MariaDBAccount which will
+                      be used to connect.
+                    type: string
                   databaseHostname:
                     description: DatabaseHostname - Designate Database Hostname
-                    type: string
-                  databaseUser:
-                    default: designate
-                    description: 'DatabaseUser - optional username used for designate
-                      DB, defaults to designate TODO: -> implement needs work in mariadb-operator,
-                      right now only designate'
                     type: string
                   defaultConfigOverwrite:
                     additionalProperties:
@@ -841,17 +815,10 @@ spec:
                     type: object
                   passwordSelectors:
                     default:
-                      database: DesignateDatabasePassword
                       service: DesignatePassword
                     description: PasswordSelectors - Selectors to identify the DB
                       and ServiceUser password from the Secret
                     properties:
-                      database:
-                        default: DesignateDatabasePassword
-                        description: 'Database - Selector to get the designate database
-                          user password from the Secret TODO: not used, need change
-                          in mariadb-operator'
-                        type: string
                       service:
                         default: DesignatePassword
                         description: Service - Selector to get the designate service
@@ -917,7 +884,7 @@ spec:
                     type: object
                   secret:
                     description: Secret containing OpenStack password information
-                      for DesignateDatabasePassword
+                      for DesignatePassword
                     type: string
                   serviceAccount:
                     description: ServiceAccount - service account name used internally
@@ -975,14 +942,13 @@ spec:
                     items:
                       type: string
                     type: array
+                  databaseAccount:
+                    default: designate
+                    description: DatabaseAccount - name of MariaDBAccount which will
+                      be used to connect.
+                    type: string
                   databaseHostname:
                     description: DatabaseHostname - Designate Database Hostname
-                    type: string
-                  databaseUser:
-                    default: designate
-                    description: 'DatabaseUser - optional username used for designate
-                      DB, defaults to designate TODO: -> implement needs work in mariadb-operator,
-                      right now only designate'
                     type: string
                   defaultConfigOverwrite:
                     additionalProperties:
@@ -1007,17 +973,10 @@ spec:
                     type: object
                   passwordSelectors:
                     default:
-                      database: DesignateDatabasePassword
                       service: DesignatePassword
                     description: PasswordSelectors - Selectors to identify the DB
                       and ServiceUser password from the Secret
                     properties:
-                      database:
-                        default: DesignateDatabasePassword
-                        description: 'Database - Selector to get the designate database
-                          user password from the Secret TODO: not used, need change
-                          in mariadb-operator'
-                        type: string
                       service:
                         default: DesignatePassword
                         description: Service - Selector to get the designate service
@@ -1083,7 +1042,7 @@ spec:
                     type: object
                   secret:
                     description: Secret containing OpenStack password information
-                      for DesignateDatabasePassword
+                      for DesignatePassword
                     type: string
                   serviceAccount:
                     description: ServiceAccount - service account name used internally
@@ -1250,14 +1209,13 @@ spec:
                     items:
                       type: string
                     type: array
+                  databaseAccount:
+                    default: designate
+                    description: DatabaseAccount - name of MariaDBAccount which will
+                      be used to connect.
+                    type: string
                   databaseHostname:
                     description: DatabaseHostname - Designate Database Hostname
-                    type: string
-                  databaseUser:
-                    default: designate
-                    description: 'DatabaseUser - optional username used for designate
-                      DB, defaults to designate TODO: -> implement needs work in mariadb-operator,
-                      right now only designate'
                     type: string
                   defaultConfigOverwrite:
                     additionalProperties:
@@ -1282,17 +1240,10 @@ spec:
                     type: object
                   passwordSelectors:
                     default:
-                      database: DesignateDatabasePassword
                       service: DesignatePassword
                     description: PasswordSelectors - Selectors to identify the DB
                       and ServiceUser password from the Secret
                     properties:
-                      database:
-                        default: DesignateDatabasePassword
-                        description: 'Database - Selector to get the designate database
-                          user password from the Secret TODO: not used, need change
-                          in mariadb-operator'
-                        type: string
                       service:
                         default: DesignatePassword
                         description: Service - Selector to get the designate service
@@ -1358,7 +1309,7 @@ spec:
                     type: object
                   secret:
                     description: Secret containing OpenStack password information
-                      for DesignateDatabasePassword
+                      for DesignatePassword
                     type: string
                   serviceAccount:
                     description: ServiceAccount - service account name used internally
@@ -1383,17 +1334,10 @@ spec:
                 type: object
               passwordSelectors:
                 default:
-                  database: DesignateDatabasePassword
                   service: DesignatePassword
                 description: PasswordSelectors - Selectors to identify the DB and
                   AdminUser password from the Secret
                 properties:
-                  database:
-                    default: DesignateDatabasePassword
-                    description: 'Database - Selector to get the designate database
-                      user password from the Secret TODO: not used, need change in
-                      mariadb-operator'
-                    type: string
                   service:
                     default: DesignatePassword
                     description: Service - Selector to get the designate service password
@@ -1461,7 +1405,7 @@ spec:
                 type: object
               secret:
                 description: Secret containing OpenStack password information for
-                  designate DesignateDatabasePassword, AdminPassword
+                  designate AdminPassword
                 type: string
               serviceUser:
                 default: designate

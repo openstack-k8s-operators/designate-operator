@@ -84,14 +84,13 @@ spec:
                 items:
                   type: string
                 type: array
+              databaseAccount:
+                default: designate
+                description: DatabaseAccount - name of MariaDBAccount which will be
+                  used to connect.
+                type: string
               databaseHostname:
                 description: DatabaseHostname - Designate Database Hostname
-                type: string
-              databaseUser:
-                default: designate
-                description: 'DatabaseUser - optional username used for designate
-                  DB, defaults to designate TODO: -> implement needs work in mariadb-operator,
-                  right now only designate'
                 type: string
               defaultConfigOverwrite:
                 additionalProperties:
@@ -290,17 +289,10 @@ spec:
                 type: object
               passwordSelectors:
                 default:
-                  database: DesignateDatabasePassword
                   service: DesignatePassword
                 description: PasswordSelectors - Selectors to identify the DB and
                   ServiceUser password from the Secret
                 properties:
-                  database:
-                    default: DesignateDatabasePassword
-                    description: 'Database - Selector to get the designate database
-                      user password from the Secret TODO: not used, need change in
-                      mariadb-operator'
-                    type: string
                   service:
                     default: DesignatePassword
                     description: Service - Selector to get the designate service password
@@ -365,7 +357,7 @@ spec:
                 type: object
               secret:
                 description: Secret containing OpenStack password information for
-                  DesignateDatabasePassword
+                  DesignatePassword
                 type: string
               serviceAccount:
                 description: ServiceAccount - service account name used internally

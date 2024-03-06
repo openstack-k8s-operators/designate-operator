@@ -4,7 +4,7 @@ metadata:
   name: designate
 spec:
   databaseInstance: openstack
-  databaseUser: designate
+  databaseAccount: designate
   serviceUser: designate
   secret: osp-secret
   preserveJobs: false
