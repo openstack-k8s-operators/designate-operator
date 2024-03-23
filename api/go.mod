@@ -12,7 +12,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.16.4
 )
 
-require github.com/onsi/gomega v1.31.1
+require github.com/onsi/gomega v1.32.0
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -61,7 +61,7 @@ require (
 	golang.org/x/tools v0.18.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.31.0 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
