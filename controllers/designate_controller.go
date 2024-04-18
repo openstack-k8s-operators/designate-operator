@@ -197,7 +197,6 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateBackendbind9ReadyCondition, condition.InitReason, designatev1beta1.DesignateBackendbind9ReadyInitMessage),
-		condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
 		condition.UnknownCondition(condition.NetworkAttachmentsReadyCondition, condition.InitReason, condition.NetworkAttachmentsReadyInitMessage),
 		// service account, role, rolebinding conditions
 		condition.UnknownCondition(condition.ServiceAccountReadyCondition, condition.InitReason, condition.ServiceAccountReadyInitMessage),
@@ -1409,15 +1408,15 @@ func (r *DesignateReconciler) checkDesignateWorkerGeneration(
 	instance *designatev1beta1.Designate,
 ) (bool, error) {
 	Log := r.GetLogger(context.Background())
-	central := &designatev1beta1.DesignateWorkerList{}
+	worker := &designatev1beta1.DesignateWorkerList{}
 	listOpts := []client.ListOption{
 		client.InNamespace(instance.Namespace),
 	}
-	if err := r.Client.List(context.Background(), central, listOpts...); err != nil {
+	if err := r.Client.List(context.Background(), worker, listOpts...); err != nil {
 		Log.Error(err, "Unable to retrieve DesignateWorker %w")
 		return false, err
 	}
-	for _, item := range central.Items {
+	for _, item := range worker.Items {
 		if item.Generation != item.Status.ObservedGeneration {
 			return false, nil
 		}
