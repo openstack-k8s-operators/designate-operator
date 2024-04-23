@@ -682,7 +682,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpdate(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -690,7 +690,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	}
 
 	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -775,7 +775,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateAPIReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateAPI, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateAPIReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateAPI) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
@@ -787,7 +787,7 @@ func (r *DesignateAPIReconciler) reconcileUpdate(ctx context.Context, instance *
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateAPIReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateAPI, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateAPIReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateAPI) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))

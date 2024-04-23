@@ -140,7 +140,7 @@ func (r *UnboundReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	}
 
 	if !instance.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, instance, helper)
+		return r.reconcileDelete(instance, helper)
 	}
 
 	return r.reconcileNormal(ctx, instance, helper)
@@ -157,7 +157,7 @@ func (r *UnboundReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *UnboundReconciler) reconcileDelete(ctx context.Context, instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
+func (r *UnboundReconciler) reconcileDelete(instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
 	util.LogForObject(helper, "Reconciling Service delete", instance)
 	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
 
@@ -165,13 +165,13 @@ func (r *UnboundReconciler) reconcileDelete(ctx context.Context, instance *desig
 	return ctrl.Result{}, nil
 }
 
-func (r *UnboundReconciler) reconcileUpdate(ctx context.Context, instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
+func (r *UnboundReconciler) reconcileUpdate(instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
 	util.LogForObject(helper, "Reconciling service update", instance)
 	util.LogForObject(helper, "Service updated successfully", instance)
 	return ctrl.Result{}, nil
 }
 
-func (r *UnboundReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
+func (r *UnboundReconciler) reconcileUpgrade(instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
 	util.LogForObject(helper, "Reconciling service update", instance)
 	util.LogForObject(helper, "Service updated successfully", instance)
 	return ctrl.Result{}, nil
@@ -255,7 +255,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
-	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
+	inputHash, hashChanged, err := r.createHashOfInputHashes(instance, configMapVars)
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if hashChanged {
@@ -295,7 +295,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpdate(instance, helper)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -303,7 +303,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	}
 
 	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpgrade(instance, helper)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -382,10 +382,10 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 			condition.ReadyCondition, condition.ReadyMessage)
 	}
 	r.Log.Info("Reconciled Service successfully")
-	return r.onIPChange(ctx, instance, helper)
+	return r.onIPChange()
 }
 
-func (r *UnboundReconciler) onIPChange(ctx context.Context, instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
+func (r *UnboundReconciler) onIPChange() (ctrl.Result, error) {
 	//
 	// TODO(beagles): neutron should be configured with the unbound POD
 	// endpoints. If these change we'll need to update neutron configuration.
@@ -437,7 +437,6 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 }
 
 func (r *UnboundReconciler) createHashOfInputHashes(
-	ctx context.Context,
 	instance *designatev1.DesignateUnbound,
 	envVars map[string]env.Setter,
 ) (string, bool, error) {

@@ -286,8 +286,6 @@ func (r *DesignateMdnsReconciler) reconcileDelete(ctx context.Context, instance 
 func (r *DesignateMdnsReconciler) reconcileInit(
 	ctx context.Context,
 	instance *designatev1beta1.DesignateMdns,
-	helper *helper.Helper,
-	serviceLabels map[string]string,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
@@ -435,7 +433,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	}
 
 	// Handle service init
-	ctrlResult, err = r.reconcileInit(ctx, instance, helper, serviceLabels)
+	ctrlResult, err = r.reconcileInit(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -443,7 +441,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpdate(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -451,7 +449,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	}
 
 	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -536,7 +534,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateMdnsReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateMdns, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateMdnsReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateMdns) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
@@ -548,7 +546,7 @@ func (r *DesignateMdnsReconciler) reconcileUpdate(ctx context.Context, instance 
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateMdnsReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateMdns, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateMdnsReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateMdns) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
