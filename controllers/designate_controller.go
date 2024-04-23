@@ -393,7 +393,7 @@ func (r *DesignateReconciler) reconcileInit(
 	// run Designate db sync
 	//
 	dbSyncHash := instance.Status.Hash[designatev1beta1.DbSyncHash]
-	jobDef := designate.DbSyncJob(instance, serviceLabels)
+	jobDef := designate.DbSyncJob(instance, serviceLabels, serviceAnnotations)
 
 	dbSyncjob := job.NewJob(
 		jobDef,

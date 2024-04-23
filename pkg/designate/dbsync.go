@@ -32,6 +32,7 @@ const (
 func DbSyncJob(
 	instance *designatev1beta1.Designate,
 	labels map[string]string,
+	annotations map[string]string,
 ) *batchv1.Job {
 	runAsUser := int64(0)
 	initVolumeMounts := getInitVolumeMounts()
@@ -51,6 +52,9 @@ func DbSyncJob(
 		},
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: annotations,
+				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyOnFailure,
 					ServiceAccountName: instance.RbacResourceName(),
