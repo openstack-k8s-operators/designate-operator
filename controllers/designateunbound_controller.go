@@ -161,10 +161,6 @@ func (r *UnboundReconciler) reconcileDelete(ctx context.Context, instance *desig
 	util.LogForObject(helper, "Reconciling Service delete", instance)
 	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
 
-	if err := r.Update(ctx, instance); err != nil && !k8s_errors.IsNotFound(err) {
-		return ctrl.Result{}, err
-	}
-
 	util.LogForObject(helper, "Service deleted successfully", instance)
 	return ctrl.Result{}, nil
 }
@@ -184,12 +180,9 @@ func (r *UnboundReconciler) reconcileUpgrade(ctx context.Context, instance *desi
 func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
 	util.LogForObject(helper, "Reconciling Service", instance)
 
-	if !controllerutil.ContainsFinalizer(instance, helper.GetFinalizer()) {
-		controllerutil.AddFinalizer(instance, helper.GetFinalizer())
-		err := r.Update(ctx, instance)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+	if controllerutil.AddFinalizer(instance, helper.GetFinalizer()) {
+		// Return to persist the finalizer immediately
+		return ctrl.Result{}, nil
 	}
 
 	exportLabels := labels.GetLabels(instance, designateunbound.ServiceName, map[string]string{
