@@ -197,15 +197,14 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateBackendbind9ReadyCondition, condition.InitReason, designatev1beta1.DesignateBackendbind9ReadyInitMessage),
-		condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
 		condition.UnknownCondition(condition.NetworkAttachmentsReadyCondition, condition.InitReason, condition.NetworkAttachmentsReadyInitMessage),
 		// service account, role, rolebinding conditions
 		condition.UnknownCondition(condition.ServiceAccountReadyCondition, condition.InitReason, condition.ServiceAccountReadyInitMessage),
 		condition.UnknownCondition(condition.RoleReadyCondition, condition.InitReason, condition.RoleReadyInitMessage),
 		condition.UnknownCondition(condition.RoleBindingReadyCondition, condition.InitReason, condition.RoleBindingReadyInitMessage),
 	)
-
 	instance.Status.Conditions.Init(&cl)
+	instance.Status.ObservedGeneration = instance.Generation
 
 	// If we're not deleting this and the service object doesn't have our finalizer, add it.
 	if instance.DeletionTimestamp.IsZero() && controllerutil.AddFinalizer(instance, helper.GetFinalizer()) || isNewInstance {
@@ -680,17 +679,34 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	if op != controllerutil.OperationResultNone {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	apiObsGen, err := r.checkDesignateAPIGeneration(instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			designatev1beta1.DesignateAPIReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			designatev1beta1.DesignateAPIReadyErrorMessage,
+			err.Error()))
+		return ctrlResult, nil
+	}
+	if !apiObsGen {
+		instance.Status.Conditions.Set(condition.UnknownCondition(
+			designatev1beta1.DesignateAPIReadyCondition,
+			condition.InitReason,
+			designatev1beta1.DesignateAPIReadyInitMessage,
+		))
+	} else {
+		// Mirror DesignateAPI status' ReadyCount to this parent CR
+		instance.Status.DesignateAPIReadyCount = designateAPI.Status.ReadyCount
+		// Mirror DesignateAPI's condition status
+		c := designateAPI.Status.Conditions.Mirror(designatev1beta1.DesignateAPIReadyCondition)
+		if c != nil {
+			instance.Status.Conditions.Set(c)
+		}
 	}
 
-	// Mirror DesignateAPI status' ReadyCount to this parent CR
-	instance.Status.DesignateAPIReadyCount = designateAPI.Status.ReadyCount
-
-	// Mirror DesignateAPI's condition status
-	c := designateAPI.Status.Conditions.Mirror(designatev1beta1.DesignateAPIReadyCondition)
-	if c != nil {
-		instance.Status.Conditions.Set(c)
+	if op != controllerutil.OperationResultNone && apiObsGen {
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 	Log.Info("Deployment API task reconciled")
 
@@ -705,18 +721,35 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	if op != controllerutil.OperationResultNone {
+	ctrObsGen, err := r.checkDesignateCentralGeneration(instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			designatev1beta1.DesignateCentralReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			designatev1beta1.DesignateCentralReadyErrorMessage,
+			err.Error()))
+		return ctrlResult, nil
+	}
+	if !ctrObsGen {
+		instance.Status.Conditions.Set(condition.UnknownCondition(
+			designatev1beta1.DesignateCentralReadyCondition,
+			condition.InitReason,
+			designatev1beta1.DesignateCentralReadyInitMessage,
+		))
+	} else {
+		// Mirror DesignateCentral status' ReadyCount to this parent CR
+		instance.Status.DesignateCentralReadyCount = designateCentral.Status.ReadyCount
+		// Mirror DesignateCentral's condition status
+		c := designateCentral.Status.Conditions.Mirror(designatev1beta1.DesignateCentralReadyCondition)
+		if c != nil {
+			instance.Status.Conditions.Set(c)
+		}
+	}
+	if op != controllerutil.OperationResultNone && ctrObsGen {
 		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 
-	// Mirror DesignateCentral status' ReadyCount to this parent CR
-	instance.Status.DesignateCentralReadyCount = designateCentral.Status.ReadyCount
-
-	// Mirror DesignateCentral's condition status
-	c = designateCentral.Status.Conditions.Mirror(designatev1beta1.DesignateCentralReadyCondition)
-	if c != nil {
-		instance.Status.Conditions.Set(c)
-	}
 	Log.Info("Deployment Central task reconciled")
 
 	// deploy designate-worker
@@ -730,17 +763,33 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	if op != controllerutil.OperationResultNone {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	workerObsGen, err := r.checkDesignateWorkerGeneration(instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			designatev1beta1.DesignateWorkerReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			designatev1beta1.DesignateWorkerReadyErrorMessage,
+			err.Error()))
+		return ctrlResult, nil
 	}
-
-	// Mirror DesignateWorker status' ReadyCount to this parent CR
-	instance.Status.DesignateWorkerReadyCount = designateWorker.Status.ReadyCount
-
-	// Mirror DesignateWorker's condition status
-	c = designateWorker.Status.Conditions.Mirror(designatev1beta1.DesignateWorkerReadyCondition)
-	if c != nil {
-		instance.Status.Conditions.Set(c)
+	if !workerObsGen {
+		instance.Status.Conditions.Set(condition.UnknownCondition(
+			designatev1beta1.DesignateWorkerReadyCondition,
+			condition.InitReason,
+			designatev1beta1.DesignateWorkerReadyInitMessage,
+		))
+	} else {
+		// Mirror DesignateWorker status' ReadyCount to this parent CR
+		instance.Status.DesignateWorkerReadyCount = designateWorker.Status.ReadyCount
+		// Mirror DesignateWorker's condition status
+		c := designateWorker.Status.Conditions.Mirror(designatev1beta1.DesignateWorkerReadyCondition)
+		if c != nil {
+			instance.Status.Conditions.Set(c)
+		}
+	}
+	if op != controllerutil.OperationResultNone && workerObsGen {
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 	Log.Info("Deployment Worker task reconciled")
 
@@ -755,17 +804,33 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	if op != controllerutil.OperationResultNone {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	mdnsObsGen, err := r.checkDesignateMdnsGeneration(instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			designatev1beta1.DesignateMdnsReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			designatev1beta1.DesignateMdnsReadyErrorMessage,
+			err.Error()))
+		return ctrlResult, nil
 	}
-
-	// Mirror DesignateMdns status' ReadyCount to this parent CR
-	instance.Status.DesignateMdnsReadyCount = designateMdns.Status.ReadyCount
-
-	// Mirror DesignateMdns's condition status
-	c = designateMdns.Status.Conditions.Mirror(designatev1beta1.DesignateMdnsReadyCondition)
-	if c != nil {
-		instance.Status.Conditions.Set(c)
+	if !mdnsObsGen {
+		instance.Status.Conditions.Set(condition.UnknownCondition(
+			designatev1beta1.DesignateMdnsReadyCondition,
+			condition.InitReason,
+			designatev1beta1.DesignateMdnsReadyInitMessage,
+		))
+	} else {
+		// Mirror DesignateMdns status' ReadyCount to this parent CR
+		instance.Status.DesignateMdnsReadyCount = designateMdns.Status.ReadyCount
+		// Mirror DesignateMdns's condition status
+		c := designateMdns.Status.Conditions.Mirror(designatev1beta1.DesignateMdnsReadyCondition)
+		if c != nil {
+			instance.Status.Conditions.Set(c)
+		}
+	}
+	if op != controllerutil.OperationResultNone && mdnsObsGen {
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 	Log.Info("Deployment Mdns task reconciled")
 
@@ -780,17 +845,33 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	if op != controllerutil.OperationResultNone {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	prodObsGen, err := r.checkDesignateProducerGeneration(instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			designatev1beta1.DesignateProducerReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			designatev1beta1.DesignateProducerReadyErrorMessage,
+			err.Error()))
+		return ctrlResult, nil
 	}
-
-	// Mirror DesignateProducer status' ReadyCount to this parent CR
-	instance.Status.DesignateProducerReadyCount = designateProducer.Status.ReadyCount
-
-	// Mirror DesignateProducer's condition status
-	c = designateProducer.Status.Conditions.Mirror(designatev1beta1.DesignateProducerReadyCondition)
-	if c != nil {
-		instance.Status.Conditions.Set(c)
+	if !prodObsGen {
+		instance.Status.Conditions.Set(condition.UnknownCondition(
+			designatev1beta1.DesignateProducerReadyCondition,
+			condition.InitReason,
+			designatev1beta1.DesignateProducerReadyInitMessage,
+		))
+	} else {
+		// Mirror DesignateProducer status' ReadyCount to this parent CR
+		instance.Status.DesignateProducerReadyCount = designateProducer.Status.ReadyCount
+		// Mirror DesignateProducer's condition status
+		c := designateProducer.Status.Conditions.Mirror(designatev1beta1.DesignateProducerReadyCondition)
+		if c != nil {
+			instance.Status.Conditions.Set(c)
+		}
+	}
+	if op != controllerutil.OperationResultNone && prodObsGen {
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 	Log.Info("Deployment Producer task reconciled")
 
@@ -805,17 +886,33 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	if op != controllerutil.OperationResultNone {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	bindObsGen, err := r.checkDesignateBindGeneration(instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			designatev1beta1.DesignateBackendbind9ReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			designatev1beta1.DesignateBackendbind9ReadyErrorMessage,
+			err.Error()))
+		return ctrlResult, nil
 	}
-
-	// Mirror DesignateBackendbind9 status' ReadyCount to this parent CR
-	instance.Status.DesignateBackendbind9ReadyCount = designateBackendbind9.Status.ReadyCount
-
-	// Mirror DesignateBackendbind9's condition status
-	c = designateBackendbind9.Status.Conditions.Mirror(designatev1beta1.DesignateBackendbind9ReadyCondition)
-	if c != nil {
-		instance.Status.Conditions.Set(c)
+	if !bindObsGen {
+		instance.Status.Conditions.Set(condition.UnknownCondition(
+			designatev1beta1.DesignateBackendbind9ReadyCondition,
+			condition.InitReason,
+			designatev1beta1.DesignateBackendbind9ReadyInitMessage,
+		))
+	} else {
+		// Mirror DesignateBackendbind9 status' ReadyCount to this parent CR
+		instance.Status.DesignateBackendbind9ReadyCount = designateBackendbind9.Status.ReadyCount
+		// Mirror DesignateBackendbind9's condition status
+		c := designateBackendbind9.Status.Conditions.Mirror(designatev1beta1.DesignateBackendbind9ReadyCondition)
+		if c != nil {
+			instance.Status.Conditions.Set(c)
+		}
+	}
+	if op != controllerutil.OperationResultNone && bindObsGen {
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 	Log.Info("Deployment Backendbind9 task reconciled")
 
@@ -830,16 +927,32 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	if op != controllerutil.OperationResultNone {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	unbObsGen, err := r.checkDesignateUnboundGeneration(instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			designatev1beta1.DesignateUnboundReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			designatev1beta1.DesignateUnboundReadyErrorMessage,
+			err.Error()))
+		return ctrlResult, nil
 	}
-
-	instance.Status.DesignateUnboundReadyCount = designateUnbound.Status.ReadyCount
-
-	// Mirror DesignateProducer's condition status
-	c = designateUnbound.Status.Conditions.Mirror(designatev1beta1.DesignateUnboundReadyCondition)
-	if c != nil {
-		instance.Status.Conditions.Set(c)
+	if !unbObsGen {
+		instance.Status.Conditions.Set(condition.UnknownCondition(
+			designatev1beta1.DesignateUnboundReadyCondition,
+			condition.InitReason,
+			designatev1beta1.DesignateUnboundReadyInitMessage,
+		))
+	} else {
+		instance.Status.DesignateUnboundReadyCount = designateUnbound.Status.ReadyCount
+		// Mirror DesignateProducer's condition status
+		c := designateUnbound.Status.Conditions.Mirror(designatev1beta1.DesignateUnboundReadyCondition)
+		if c != nil {
+			instance.Status.Conditions.Set(c)
+		}
+	}
+	if op != controllerutil.OperationResultNone && unbObsGen {
+		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 	Log.Info("Deployment Unbound task reconciled")
 
@@ -850,7 +963,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 
 	// We reached the end of the Reconcile, update the Ready condition based on
 	// the sub conditions
-	instance.Status.ObservedGeneration = instance.Generation
 	if instance.Status.Conditions.AllSubConditionIsTrue() {
 		instance.Status.Conditions.MarkTrue(
 			condition.ReadyCondition, condition.ReadyMessage)
@@ -1247,4 +1359,151 @@ func (r *DesignateReconciler) unboundDeploymentCreateOrUpdate(
 	})
 
 	return deployment, op, err
+}
+
+// checkDesignateAPIGeneration -
+func (r *DesignateReconciler) checkDesignateAPIGeneration(
+	instance *designatev1beta1.Designate,
+) (bool, error) {
+	Log := r.GetLogger(context.Background())
+	api := &designatev1beta1.DesignateAPIList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(instance.Namespace),
+	}
+	if err := r.Client.List(context.Background(), api, listOpts...); err != nil {
+		Log.Error(err, "Unable to retrieve DesignateAPI %w")
+		return false, err
+	}
+	for _, item := range api.Items {
+		if item.Generation != item.Status.ObservedGeneration {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// checkDesignateCentralGeneration -
+func (r *DesignateReconciler) checkDesignateCentralGeneration(
+	instance *designatev1beta1.Designate,
+) (bool, error) {
+	Log := r.GetLogger(context.Background())
+	central := &designatev1beta1.DesignateCentralList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(instance.Namespace),
+	}
+	if err := r.Client.List(context.Background(), central, listOpts...); err != nil {
+		Log.Error(err, "Unable to retrieve DesignateCentral %w")
+		return false, err
+	}
+	for _, item := range central.Items {
+		if item.Generation != item.Status.ObservedGeneration {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// checkDesignateWorkerGeneration -
+func (r *DesignateReconciler) checkDesignateWorkerGeneration(
+	instance *designatev1beta1.Designate,
+) (bool, error) {
+	Log := r.GetLogger(context.Background())
+	worker := &designatev1beta1.DesignateWorkerList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(instance.Namespace),
+	}
+	if err := r.Client.List(context.Background(), worker, listOpts...); err != nil {
+		Log.Error(err, "Unable to retrieve DesignateWorker %w")
+		return false, err
+	}
+	for _, item := range worker.Items {
+		if item.Generation != item.Status.ObservedGeneration {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// checkDesignateMdnsGeneration -
+func (r *DesignateReconciler) checkDesignateMdnsGeneration(
+	instance *designatev1beta1.Designate,
+) (bool, error) {
+	Log := r.GetLogger(context.Background())
+	mdns := &designatev1beta1.DesignateMdnsList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(instance.Namespace),
+	}
+	if err := r.Client.List(context.Background(), mdns, listOpts...); err != nil {
+		Log.Error(err, "Unable to retrieve DesignateWorker %w")
+		return false, err
+	}
+	for _, item := range mdns.Items {
+		if item.Generation != item.Status.ObservedGeneration {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// checkDesignateProducerGeneration -
+func (r *DesignateReconciler) checkDesignateProducerGeneration(
+	instance *designatev1beta1.Designate,
+) (bool, error) {
+	Log := r.GetLogger(context.Background())
+	prd := &designatev1beta1.DesignateProducerList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(instance.Namespace),
+	}
+	if err := r.Client.List(context.Background(), prd, listOpts...); err != nil {
+		Log.Error(err, "Unable to retrieve DesignateProducer %w")
+		return false, err
+	}
+	for _, item := range prd.Items {
+		if item.Generation != item.Status.ObservedGeneration {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// checkDesignateBindGeneration -
+func (r *DesignateReconciler) checkDesignateBindGeneration(
+	instance *designatev1beta1.Designate,
+) (bool, error) {
+	Log := r.GetLogger(context.Background())
+	prd := &designatev1beta1.DesignateBackendbind9List{}
+	listOpts := []client.ListOption{
+		client.InNamespace(instance.Namespace),
+	}
+	if err := r.Client.List(context.Background(), prd, listOpts...); err != nil {
+		Log.Error(err, "Unable to retrieve DesignateBind %w")
+		return false, err
+	}
+	for _, item := range prd.Items {
+		if item.Generation != item.Status.ObservedGeneration {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// checkDesignateUnboundGeneration -
+func (r *DesignateReconciler) checkDesignateUnboundGeneration(
+	instance *designatev1beta1.Designate,
+) (bool, error) {
+	Log := r.GetLogger(context.Background())
+	prd := &designatev1beta1.DesignateUnboundList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(instance.Namespace),
+	}
+	if err := r.Client.List(context.Background(), prd, listOpts...); err != nil {
+		Log.Error(err, "Unable to retrieve DesignateUnbound %w")
+		return false, err
+	}
+	for _, item := range prd.Items {
+		if item.Generation != item.Status.ObservedGeneration {
+			return false, nil
+		}
+	}
+	return true, nil
 }
