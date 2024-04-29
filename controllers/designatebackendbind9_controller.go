@@ -173,7 +173,7 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 
 	// Handle service delete
 	if !instance.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, instance, helper)
+		return r.reconcileDelete(instance, helper)
 	}
 
 	// Handle non-deleted clusters
@@ -320,7 +320,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 		Complete(r)
 }
 
-func (r *DesignateBackendbind9Reconciler) reconcileDelete(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateBackendbind9Reconciler) reconcileDelete(instance *designatev1beta1.DesignateBackendbind9, helper *helper.Helper) (ctrl.Result, error) {
 	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
 
 	// We did all the cleanup on the objects we created so we can remove the
@@ -332,10 +332,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileDelete(ctx context.Context, i
 }
 
 func (r *DesignateBackendbind9Reconciler) reconcileInit(
-	ctx context.Context,
 	instance *designatev1beta1.DesignateBackendbind9,
-	helper *helper.Helper,
-	serviceLabels map[string]string,
 ) (ctrl.Result, error) {
 	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
 
@@ -427,7 +424,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
-	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
+	inputHash, hashChanged, err := r.createHashOfInputHashes(instance, configMapVars)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -479,7 +476,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	}
 
 	// Handle service init
-	ctrlResult, err = r.reconcileInit(ctx, instance, helper, serviceLabels)
+	ctrlResult, err = r.reconcileInit(instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -487,7 +484,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpdate(instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -495,7 +492,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	}
 
 	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpgrade(instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -580,7 +577,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateBackendbind9Reconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateBackendbind9Reconciler) reconcileUpdate(instance *designatev1beta1.DesignateBackendbind9) (ctrl.Result, error) {
 	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
 
 	// TODO: should have minor update tasks if required
@@ -590,7 +587,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileUpdate(ctx context.Context, i
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateBackendbind9Reconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateBackendbind9Reconciler) reconcileUpgrade(instance *designatev1beta1.DesignateBackendbind9) (ctrl.Result, error) {
 	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
 
 	// TODO: should have major version upgrade tasks
@@ -682,7 +679,6 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 //
 // returns the hash, whether the hash changed (as a bool) and any error
 func (r *DesignateBackendbind9Reconciler) createHashOfInputHashes(
-	ctx context.Context,
 	instance *designatev1beta1.DesignateBackendbind9,
 	envVars map[string]env.Setter,
 ) (string, bool, error) {

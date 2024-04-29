@@ -288,8 +288,6 @@ func (r *DesignateCentralReconciler) reconcileDelete(ctx context.Context, instan
 func (r *DesignateCentralReconciler) reconcileInit(
 	ctx context.Context,
 	instance *designatev1beta1.DesignateCentral,
-	helper *helper.Helper,
-	serviceLabels map[string]string,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
@@ -437,7 +435,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	}
 
 	// Handle service init
-	ctrlResult, err = r.reconcileInit(ctx, instance, helper, serviceLabels)
+	ctrlResult, err = r.reconcileInit(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -445,7 +443,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpdate(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -453,7 +451,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	}
 
 	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -538,7 +536,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateCentralReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateCentral, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateCentralReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateCentral) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
@@ -550,7 +548,7 @@ func (r *DesignateCentralReconciler) reconcileUpdate(ctx context.Context, instan
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateCentralReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateCentral, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateCentralReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateCentral) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))

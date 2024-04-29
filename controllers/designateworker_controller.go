@@ -285,8 +285,6 @@ func (r *DesignateWorkerReconciler) reconcileDelete(ctx context.Context, instanc
 func (r *DesignateWorkerReconciler) reconcileInit(
 	ctx context.Context,
 	instance *designatev1beta1.DesignateWorker,
-	helper *helper.Helper,
-	serviceLabels map[string]string,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
@@ -432,7 +430,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	}
 
 	// Handle service init
-	ctrlResult, err = r.reconcileInit(ctx, instance, helper, serviceLabels)
+	ctrlResult, err = r.reconcileInit(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -440,7 +438,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpdate(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -448,7 +446,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	}
 
 	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -533,7 +531,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateWorkerReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateWorker, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateWorkerReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateWorker) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
 
@@ -544,7 +542,7 @@ func (r *DesignateWorkerReconciler) reconcileUpdate(ctx context.Context, instanc
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateWorkerReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateWorker, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateWorkerReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateWorker) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
 

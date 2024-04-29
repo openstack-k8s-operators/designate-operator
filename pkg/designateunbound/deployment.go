@@ -25,6 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -37,7 +38,6 @@ func Deployment(instance *designatev1beta1.DesignateUnbound,
 	labels map[string]string,
 	annotations map[string]string,
 ) *appsv1.Deployment {
-	var rootUser int64 = 0
 	var configMode int32 = 0640
 
 	volumes := []corev1.Volume{
@@ -123,7 +123,7 @@ func Deployment(instance *designatev1beta1.DesignateUnbound,
 							"-p",
 						},
 						SecurityContext: &corev1.SecurityContext{
-							RunAsUser: &rootUser,
+							RunAsUser: ptr.To[int64](0),
 						},
 						Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
 						VolumeMounts:   mounts,

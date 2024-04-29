@@ -393,7 +393,7 @@ func (r *DesignateReconciler) reconcileInit(
 	// run Designate db sync
 	//
 	dbSyncHash := instance.Status.Hash[designatev1beta1.DbSyncHash]
-	jobDef := designate.DbSyncJob(instance, serviceLabels)
+	jobDef := designate.DbSyncJob(instance, serviceLabels, serviceAnnotations)
 
 	dbSyncjob := job.NewJob(
 		jobDef,
@@ -649,7 +649,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpdate(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -657,7 +657,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(ctx, instance, helper)
+	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -859,7 +859,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.Designate) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
@@ -871,7 +871,7 @@ func (r *DesignateReconciler) reconcileUpdate(ctx context.Context, instance *des
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {
+func (r *DesignateReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.Designate) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
