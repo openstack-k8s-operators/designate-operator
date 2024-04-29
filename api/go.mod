@@ -75,4 +75,4 @@ require (
 )
 
 // Bump golang.org/x/net to avoid Rapid Reset CVE
-replace golang.org/x/net => golang.org/x/net v0.18.0 //allow-merging
+replace golang.org/x/net => golang.org/x/net v0.24.0 //allow-merging
