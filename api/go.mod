@@ -12,7 +12,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.16.5
 )
 
-require github.com/onsi/gomega v1.33.0
+require github.com/onsi/gomega v1.33.1
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
