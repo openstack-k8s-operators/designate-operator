@@ -25,19 +25,19 @@ const (
 	// Container image fall-back defaults
 
 	// DesignateAPIContainerImage is the fall-back container image for DesignateAPI
-	DesignateAPIContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-api:current-tripleo"
+	DesignateAPIContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-api:current-podified"
 	// DesignateCentralContainerImage is the fall-back container image for DesignateCentral
-	DesignateCentralContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-central:current-tripleo"
+	DesignateCentralContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-central:current-podified"
 	// DesignateMdnsContainerImage is the fall-back container image for DesignateMdns
-	DesignateMdnsContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-mdns:current-tripleo"
+	DesignateMdnsContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-mdns:current-podified"
 	// DesignateProducerContainerImage is the fall-back container image for DesignateProducer
-	DesignateProducerContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-producer:current-tripleo"
+	DesignateProducerContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-producer:current-podified"
 	// DesignateWorkerContainerImage is the fall-back container image for DesignateWorker
-	DesignateWorkerContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-worker:current-tripleo"
+	DesignateWorkerContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-worker:current-podified"
 	// DesignateUnboundContainerImage is the fall-back container image for DesignateUnbound
-	DesignateUnboundContainerImage = "quay.io/tripleowallabycentos9/openstack-unbound:current-tripleo"
+	DesignateUnboundContainerImage = "quay.io/podified-antelope-centos9/openstack-unbound:current-podified"
 	// DesignateBackendbind9ContainerImage is the fall-back container image for DesignateUnbound
-	DesignateBackendbind9ContainerImage = "quay.io/tripleowallabycentos9/openstack-designate-backend-bind9:current-tripleo"
+	DesignateBackendbind9ContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-backend-bind9:current-podified"
 )
 
 // DesignateTemplate defines common input parameters used by all Designate services
