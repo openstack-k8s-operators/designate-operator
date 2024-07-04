@@ -78,7 +78,7 @@ func (r *DesignateCentralReconciler) GetLogger(ctx context.Context) logr.Logger 
 
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentrals,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentrals/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentrals/finalizers,verbs=update
+//+kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentrals/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;patch;delete;watch
