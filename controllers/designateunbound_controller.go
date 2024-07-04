@@ -55,7 +55,7 @@ type UnboundReconciler struct {
 
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/finalizers,verbs=update
+//+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/finalizers,verbs=update;patch
 //+kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
 
 // Reconcile implementation for designate's Unbound resolver

@@ -25,6 +25,7 @@ rules:
   - create
   - get
   - list
+  - patch
   - update
   - watch
 - apiGroups:
@@ -111,6 +112,7 @@ rules:
   resources:
   - designateapis/finalizers
   verbs:
+  - patch
   - update
 - apiGroups:
   - designate.openstack.org
@@ -137,6 +139,7 @@ rules:
   resources:
   - designatebackendbind9s/finalizers
   verbs:
+  - patch
   - update
 - apiGroups:
   - designate.openstack.org
@@ -163,6 +166,7 @@ rules:
   resources:
   - designatecentrals/finalizers
   verbs:
+  - patch
   - update
 - apiGroups:
   - designate.openstack.org
@@ -189,6 +193,7 @@ rules:
   resources:
   - designatemdnses/finalizers
   verbs:
+  - patch
   - update
 - apiGroups:
   - designate.openstack.org
@@ -215,6 +220,7 @@ rules:
   resources:
   - designateproducers/finalizers
   verbs:
+  - patch
   - update
 - apiGroups:
   - designate.openstack.org
@@ -241,6 +247,7 @@ rules:
   resources:
   - designates/finalizers
   verbs:
+  - patch
   - update
 - apiGroups:
   - designate.openstack.org
@@ -267,6 +274,7 @@ rules:
   resources:
   - designateunbounds/finalizers
   verbs:
+  - patch
   - update
 - apiGroups:
   - designate.openstack.org
@@ -293,6 +301,7 @@ rules:
   resources:
   - designateworkers/finalizers
   verbs:
+  - patch
   - update
 - apiGroups:
   - designate.openstack.org
@@ -359,6 +368,7 @@ rules:
   resources:
   - mariadbaccounts/finalizers
   verbs:
+  - patch
   - update
 - apiGroups:
   - mariadb.openstack.org
@@ -392,6 +402,7 @@ rules:
   - create
   - get
   - list
+  - patch
   - update
   - watch
 - apiGroups:
@@ -402,6 +413,7 @@ rules:
   - create
   - get
   - list
+  - patch
   - update
   - watch
 - apiGroups:
