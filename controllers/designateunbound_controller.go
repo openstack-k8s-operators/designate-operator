@@ -418,6 +418,16 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	templateParameters["ExternalNetCidr"] = "0.0.0.0/0"
 
 	cms := []util.Template{
+		// ScriptsConfigMap
+		{
+			Name:               fmt.Sprintf("%s-scripts", instance.Name),
+			Namespace:          instance.Namespace,
+			Type:               util.TemplateTypeScripts,
+			InstanceType:       instance.Kind,
+			AdditionalTemplate: map[string]string{"common.sh": "/common/common.sh"},
+			Labels:             cmLabels,
+		},
+		// ConfigMap
 		{
 			Name:          fmt.Sprintf("%s-config-data", instance.Name),
 			Namespace:     instance.Namespace,

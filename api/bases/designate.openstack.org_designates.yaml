@@ -1413,6 +1413,7 @@ spec:
                   to register in designate
                 type: string
             required:
+            - databaseInstance
             - designateAPI
             - designateBackendbind9
             - designateCentral
@@ -1474,7 +1475,7 @@ spec:
                   type: object
                 type: array
               databaseHostname:
-                description: Designate Database Hostname
+                description: DatabaseHostname - Designate Database Hostname
                 type: string
               designateAPIReadyCount:
                 description: ReadyCount of Designate API instance
