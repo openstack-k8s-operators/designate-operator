@@ -144,6 +144,14 @@ spec:
                 description: ServiceAccount - service account name used internally
                   to provide Designate services the default SA name
                 type: string
+              tls:
+                description: TLS - Parameters related to the TLS
+                properties:
+                  caBundleSecretName:
+                    description: CaBundleSecretName - holding the CA certs in a pre-created
+                      bundle file
+                    type: string
+                type: object
             required:
             - containerImage
             type: object

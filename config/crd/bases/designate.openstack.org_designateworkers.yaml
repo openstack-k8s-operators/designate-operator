@@ -190,6 +190,14 @@ spec:
                 description: ServiceUser - optional username used for this service
                   to register in designate
                 type: string
+              tls:
+                description: TLS - Parameters related to the TLS
+                properties:
+                  caBundleSecretName:
+                    description: CaBundleSecretName - holding the CA certs in a pre-created
+                      bundle file
+                    type: string
+                type: object
               transportURLSecret:
                 description: Secret containing RabbitMq transport URL
                 type: string

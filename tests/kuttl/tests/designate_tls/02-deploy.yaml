@@ -1,0 +1,91 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+spec:
+  databaseInstance: openstack
+  databaseAccount: designate
+  serviceUser: designate
+  rabbitMqClusterName: rabbitmq
+  secret: osp-secret
+  preserveJobs: false
+  customServiceConfig: |
+    [DEFAULT]
+    debug = true
+  designateBackendbind9:
+    databaseInstance: openstack
+    databaseAccount: designate
+    serviceUser: designate
+    serviceAccount: designate
+    secret: osp-secret
+    preserveJobs: false
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateCentral:
+    databaseInstance: openstack
+    databaseAccount: designate
+    serviceUser: designate
+    serviceAccount: designate
+    secret: osp-secret
+    preserveJobs: false
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateMdns:
+    databaseInstance: openstack
+    databaseAccount: designate
+    serviceUser: designate
+    serviceAccount: designate
+    secret: osp-secret
+    preserveJobs: false
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateProducer:
+    databaseInstance: openstack
+    databaseAccount: designate
+    serviceUser: designate
+    serviceAccount: designate
+    secret: osp-secret
+    preserveJobs: false
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateWorker:
+    databaseInstance: openstack
+    databaseAccount: designate
+    serviceUser: designate
+    serviceAccount: designate
+    secret: osp-secret
+    preserveJobs: false
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateAPI:
+    databaseInstance: openstack
+    databaseAccount: designate
+    serviceUser: designate
+    serviceAccount: designate
+    secret: osp-secret
+    preserveJobs: false
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      api:
+        internal:
+          secretName: cert-designate-internal-svc
+        public:
+          secretName: cert-designate-public-svc
+      caBundleSecretName: combined-ca-bundle

@@ -23,6 +23,13 @@ const (
 	// DatabaseName -
 	DatabaseName = "designate"
 
+	// DatabaseCRName - Name of the MariaDBDatabase CR
+	DatabaseCRName = "designate"
+
+	// DatabaseUsernamePrefix - used by EnsureMariaDBAccount when a new username
+	// is to be generated, e.g. "designate_e5a4", "designate_78bc", etc
+	DatabaseUsernamePrefix = "designate"
+
 	// DesignatePublicPort -
 	DesignatePublicPort int32 = 9001
 	// DesignateInternalPort -
