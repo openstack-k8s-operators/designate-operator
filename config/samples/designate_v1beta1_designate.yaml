@@ -11,3 +11,53 @@ spec:
   databaseInstance: openstack
   databaseAccount: designate
   rabbitMqClusterName: rabbitmq
+  designateAPI:
+    secret: osp-secret
+    serviceUser: designate
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    rabbitMqClusterName: rabbitmq
+  designateBackendbind9:
+    secret: osp-secret
+    serviceUser: designate
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    rabbitMqClusterName: rabbitmq
+  designateCentral:
+    secret: osp-secret
+    serviceUser: designate
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    rabbitMqClusterName: rabbitmq
+  designateMdns:
+    secret: osp-secret
+    serviceUser: designate
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    rabbitMqClusterName: rabbitmq
+  designateProducer:
+    secret: osp-secret
+    serviceUser: designate
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    rabbitMqClusterName: rabbitmq
+  designateWorker:
+    secret: osp-secret
+    serviceUser: designate
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    rabbitMqClusterName: rabbitmq
+  designateUnbound:
+    replicas: 1

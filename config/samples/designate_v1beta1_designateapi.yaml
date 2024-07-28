@@ -1,6 +1,0 @@
-apiVersion: designate.openstack.org/v1beta1
-kind: DesignateAPI
-metadata:
-  name: designateapi
-spec:
-  # TODO(user): Add fields here

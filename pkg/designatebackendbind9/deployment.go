@@ -171,55 +171,5 @@ func Deployment(
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 
-	// TODO: Clean up this hack
-	// Add custom config for the API Service
-	envVars = map[string]env.Setter{}
-	envVars["CustomConf"] = env.SetValue(common.CustomServiceConfigFileName)
-	deployment.Spec.Template.Spec.InitContainers[0].Env = env.MergeEnvs(deployment.Spec.Template.Spec.InitContainers[0].Env, envVars)
-
 	return deployment
 }
-
-// 	envVars := map[string]env.Setter{}
-// 	envVars["KOLLA_CONFIG_FILE"] = env.SetValue(KollaConfig)
-// 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
-// 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
-
-// 	deployment := &appsv1.Deployment{
-// 		ObjectMeta: metav1.ObjectMeta{
-// 			Name:      instance.Name,
-// 			Namespace: instance.Namespace,
-// 		},
-// 		Spec: appsv1.DeploymentSpec{
-// 			Replicas: instance.Spec.Replicas,
-// 			Selector: &metav1.LabelSelector{
-// 				MatchLabels: matchls,
-// 			},
-// 			Template: corev1.PodTemplateSpec{
-// 				ObjectMeta: metav1.ObjectMeta{
-// 					Labels: ls,
-// 				},
-// 				Spec: corev1.PodSpec{
-// 					ServiceAccountName: instance.RbacResourceName(),
-// 					Containers: []corev1.Container{{
-// 						Image:   instance.Spec.ContainerImage,
-// 						Name:    "designatebackendbind9",
-// 						Command: command,
-// 						Args:    args,
-// 						Ports: []corev1.ContainerPort{{
-// 							ContainerPort: 6379,
-// 							Name:          "designatebackendbind9",
-// 						}},
-// 						Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-// 						VolumeMounts:   designate.GetServiceVolumeMounts("designate-backendbind9"),
-// 						Resources:      instance.Spec.Resources,
-// 						ReadinessProbe: readinessProbe,
-// 						LivenessProbe:  livenessProbe,
-// 					}},
-// 				},
-// 			},
-// 		},
-// 	}
-
-// 	return deployment
-// }

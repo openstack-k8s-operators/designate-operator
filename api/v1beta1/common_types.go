@@ -64,7 +64,7 @@ type DesignateTemplate struct {
 	// +kubebuilder:validation:Optional
 	// BackendType - Defines the backend service/configuration we are using, i.e. bind9, PowerDNS, BYO, etc..
 	// Helps maintain a single init container/init.sh to do container setup
-	BackendType string `json:"None"`
+	BackendType string `json:"backendType"`
 
 	// +kubebuilder:validation:Optional
 	// BackendTypeProtocol - Defines the backend protocol to be used between the designate-worker &

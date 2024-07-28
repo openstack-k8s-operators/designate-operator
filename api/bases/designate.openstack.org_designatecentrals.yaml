@@ -49,16 +49,16 @@ spec:
             description: DesignateCentralSpec defines the input parameters for the
               Designate Central service
             properties:
-              None:
-                description: BackendType - Defines the backend service/configuration
-                  we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain a
-                  single init container/init.sh to do container setup
-                type: string
               backendMdnsServerProtocol:
                 description: 'BackendTypeProtocol - Defines the backend protocol to
                   be used between the designate-worker & designate_mdns to/from the
                   DNS server. Acceptable values are: "UDP", "TCP" Please Note: this
                   MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                type: string
+              backendType:
+                description: BackendType - Defines the backend service/configuration
+                  we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain a
+                  single init container/init.sh to do container setup
                 type: string
               backendWorkerServerProtocol:
                 description: 'BackendTypeProtocol - Defines the backend protocol to
