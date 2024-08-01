@@ -1,0 +1,73 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+spec:
+  databaseInstance: openstack
+  databaseAccount: designate
+  serviceUser: designate
+  rabbitMqClusterName: rabbitmq
+  secret: osp-secret
+  preserveJobs: false
+  customServiceConfig: |
+    [DEFAULT]
+    debug = true
+  designateProducer:
+    databaseAccount: designate
+    serviceUser: designate
+    secret: osp-secret
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateMdns:
+    databaseAccount: designate
+    serviceUser: designate
+    secret: osp-secret
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateBackendbind9:
+    databaseAccount: designate
+    serviceUser: designate
+    secret: osp-secret
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateCentral:
+    databaseAccount: designate
+    serviceUser: designate
+    secret: osp-secret
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateWorker:
+    databaseAccount: designate
+    serviceUser: designate
+    secret: osp-secret
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateAPI:
+    databaseAccount: designate
+    serviceUser: designate
+    secret: osp-secret
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    tls:
+      api:
+        internal:
+          secretName: cert-designate-internal-svc
+        public:
+          secretName: cert-designate-public-svc
+      caBundleSecretName: combined-ca-bundle

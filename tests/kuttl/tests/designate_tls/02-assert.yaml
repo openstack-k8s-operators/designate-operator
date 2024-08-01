@@ -1,0 +1,71 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+spec:
+  customServiceConfig: |
+    [DEFAULT]
+    debug = true
+  databaseInstance: openstack
+  databaseAccount: designate
+  preserveJobs: false
+  secret: osp-secret
+  serviceUser: designate
+  designateAPI:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    replicas: 1
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      api:
+        internal:
+          secretName: cert-designate-internal-svc
+        public:
+          secretName: cert-designate-public-svc
+      caBundleSecretName: combined-ca-bundle
+  designateProducer:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateMdns:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateBackendbind9:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+  designateCentral:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateWorker:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
