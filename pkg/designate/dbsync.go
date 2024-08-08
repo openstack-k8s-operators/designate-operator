@@ -35,14 +35,20 @@ func DbSyncJob(
 	annotations map[string]string,
 ) *batchv1.Job {
 	runAsUser := int64(0)
-	initVolumeMounts := getInitVolumeMounts()
-	volumeMounts := GetServiceVolumeMounts("db-sync")
-	volumes := getVolumes(instance.Name)
+	initVolumeMounts := GetInitVolumeMounts()
+	volumeMounts := GetVolumeMounts("db-sync")
+	volumes := GetVolumes(instance.Name)
 
 	args := []string{"-c", DBSyncCommand}
 
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
+
+	// add CA cert if defined
+	if instance.Spec.DesignateAPI.TLS.CaBundleSecretName != "" {
+		volumes = append(volumes, instance.Spec.DesignateAPI.TLS.CreateVolume())
+		volumeMounts = append(volumeMounts, instance.Spec.DesignateAPI.TLS.CreateVolumeMounts(nil)...)
+	}
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

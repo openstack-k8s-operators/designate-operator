@@ -30,15 +30,6 @@ spec:
       debug = true
     tls:
       caBundleSecretName: combined-ca-bundle
-  designateBackendbind9:
-    databaseAccount: designate
-    serviceUser: designate
-    secret: osp-secret
-    customServiceConfig: |
-      [DEFAULT]
-      debug = true
-    tls:
-      caBundleSecretName: combined-ca-bundle
   designateCentral:
     databaseAccount: designate
     serviceUser: designate
