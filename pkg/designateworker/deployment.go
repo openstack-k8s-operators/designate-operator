@@ -136,11 +136,5 @@ func Deployment(
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 
-	// TODO: Clean up this hack
-	// Add custom config for the API Service
-	envVars = map[string]env.Setter{}
-	envVars["CustomConf"] = env.SetValue(common.CustomServiceConfigFileName)
-	deployment.Spec.Template.Spec.InitContainers[0].Env = env.MergeEnvs(deployment.Spec.Template.Spec.InitContainers[0].Env, envVars)
-
 	return deployment
 }

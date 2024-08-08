@@ -3,61 +3,69 @@ kind: Designate
 metadata:
   name: designate
 spec:
-  secret: osp-secret
-  serviceUser: designate
   customServiceConfig: |
     [DEFAULT]
     debug = true
   databaseInstance: openstack
   databaseAccount: designate
-  rabbitMqClusterName: rabbitmq
+  preserveJobs: false
+  secret: osp-secret
+  serviceUser: designate
   designateAPI:
-    secret: osp-secret
-    serviceUser: designate
     customServiceConfig: |
       [DEFAULT]
       debug = true
     databaseAccount: designate
-    rabbitMqClusterName: rabbitmq
-  designateBackendbind9:
-    secret: osp-secret
-    serviceUser: designate
-    customServiceConfig: |
-      [DEFAULT]
-      debug = true
-    databaseAccount: designate
-    rabbitMqClusterName: rabbitmq
-  designateCentral:
-    secret: osp-secret
-    serviceUser: designate
-    customServiceConfig: |
-      [DEFAULT]
-      debug = true
-    databaseAccount: designate
-    rabbitMqClusterName: rabbitmq
-  designateMdns:
-    secret: osp-secret
-    serviceUser: designate
-    customServiceConfig: |
-      [DEFAULT]
-      debug = true
-    databaseAccount: designate
-    rabbitMqClusterName: rabbitmq
-  designateProducer:
-    secret: osp-secret
-    serviceUser: designate
-    customServiceConfig: |
-      [DEFAULT]
-      debug = true
-    databaseAccount: designate
-    rabbitMqClusterName: rabbitmq
-  designateWorker:
-    secret: osp-secret
-    serviceUser: designate
-    customServiceConfig: |
-      [DEFAULT]
-      debug = true
-    databaseAccount: designate
-    rabbitMqClusterName: rabbitmq
-  designateUnbound:
     replicas: 1
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      api:
+        internal:
+          secretName: cert-designate-internal-svc
+        public:
+          secretName: cert-designate-public-svc
+      caBundleSecretName: combined-ca-bundle
+  designateProducer:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateMdns:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateBackendbind9:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+  designateCentral:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateWorker:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle

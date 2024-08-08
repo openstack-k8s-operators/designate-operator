@@ -107,10 +107,6 @@ type DesignateSpecBase struct {
 	// ServiceUser - optional username used for this service to register in designate
 	ServiceUser string `json:"serviceUser"`
 
-	// +kubebuilder:validation:Optional
-	// DatabaseHostname - Designate Database Hostname
-	// DatabaseHostname string `json:"databaseHostname,omitempty"`
-
 	// +kubebuilder:validation:Required
 	// MariaDB instance name
 	// Right now required by the maridb-operator to get the credentials from the instance to create the DB
@@ -135,12 +131,12 @@ type DesignateSpecBase struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default={service: DesignatePassword}
 	// PasswordSelectors - Selectors to identify the DB and AdminUser password from the Secret
-	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
+	PasswordSelectors PasswordSelector `json:"passwordSelectors"`
 
 	// +kubebuilder:validation:Optional
 	// BackendType - Defines the backend service/configuration we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc..
 	// Helps maintain a single init container/init.sh to do container setup
-	BackendType string `json:"None"`
+	BackendType string `json:"backendType"`
 
 	// +kubebuilder:validation:Optional
 	// BackendTypeProtocol - Defines the backend protocol to be used between the designate-worker &
@@ -193,7 +189,8 @@ type DesignateStatus struct {
 	// Conditions
 	Conditions condition.Conditions `json:"conditions,omitempty" optional:"true"`
 
-	// Designate Database Hostname
+	// +kubebuilder:validation:Optional
+	// DatabaseHostname - Designate Database Hostname
 	DatabaseHostname string `json:"databaseHostname,omitempty"`
 
 	// TransportURLSecret - Secret containing RabbitMQ transportURL

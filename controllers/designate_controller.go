@@ -45,7 +45,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
 	common_rbac "github.com/openstack-k8s-operators/lib-common/modules/common/rbac"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
+	oko_secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 
@@ -84,42 +84,42 @@ type DesignateReconciler struct {
 
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designates/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designates/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designates/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateapis/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentrals,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentrals/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentrals/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatecentrals/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducers/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateproducers/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworkers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworkers/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworkers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateworkers/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9s,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9s/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9s/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9s/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/finalizers,verbs=update
+// +kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbdatabases,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts/finalizers,verbs=update
+// +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=keystone.openstack.org,resources=keystoneapis,verbs=get;list;watch
 // +kubebuilder:rbac:groups=rabbitmq.openstack.org,resources=transporturls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
 
 // service account, role, rolebinding
-// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=roles,verbs=get;list;watch;create;update
-// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=get;list;watch;create;update
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=roles,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=get;list;watch;create;update;patch
 // service account permissions that are needed to grant permission to the above
 // +kubebuilder:rbac:groups="security.openshift.io",resourceNames=anyuid;privileged,resources=securitycontextconstraints,verbs=use
 // +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
@@ -302,13 +302,13 @@ func (r *DesignateReconciler) reconcileDelete(ctx context.Context, instance *des
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
 
 	// remove db finalizer first
-	db, err := mariadbv1.GetDatabaseByNameAndAccount(ctx, helper, instance.Name, instance.Spec.DatabaseAccount, instance.Namespace)
+	designateDb, err := mariadbv1.GetDatabaseByNameAndAccount(ctx, helper, designate.DatabaseCRName, instance.Spec.DatabaseAccount, instance.Namespace)
 	if err != nil && !k8s_errors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
 
 	if !k8s_errors.IsNotFound(err) {
-		if err := db.DeleteFinalizer(ctx, helper); err != nil {
+		if err := designateDb.DeleteFinalizer(ctx, helper); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -334,59 +334,98 @@ func (r *DesignateReconciler) reconcileInit(
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
 
-	//
-	// create service DB instance
-	//
-	db := mariadbv1.NewDatabaseForAccount(
-		instance.Spec.DatabaseInstance, // mariadb/galera service to target
-		instance.Name,                  // name used in CREATE DATABASE in mariadb
-		instance.Name,                  // CR name for MariaDBDatabase
-		instance.Spec.DatabaseAccount,  // CR name for MariaDBAccount
-		instance.Namespace,             // namespace
-	)
+	// ConfigMap
+	configMapVars := make(map[string]env.Setter)
 
-	// create or patch the DB
-	ctrlResult, err := db.CreateOrPatchAll(ctx, helper)
+	//
+	// check for required OpenStack secret holding passwords for service/admin user and add hash to the vars map
+	//
+	ospSecret, hash, err := oko_secret.GetSecret(ctx, helper, instance.Spec.Secret, instance.Namespace)
 	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			Log.Info(fmt.Sprintf("OpenStack secret %s not found", instance.Spec.Secret))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+		}
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.DBReadyCondition,
+			condition.InputReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			condition.DBReadyErrorMessage,
+			condition.InputReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	if (ctrlResult != ctrl.Result{}) {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.DBReadyCondition,
-			condition.RequestedReason,
-			condition.SeverityInfo,
-			condition.DBReadyRunningMessage))
-		return ctrlResult, nil
-	}
-	// wait for the DB to be setup
-	ctrlResult, err = db.WaitForDBCreated(ctx, helper)
+
+	configMapVars[ospSecret.Name] = env.SetValue(hash)
+
+	transportURLSecret, hash, err := oko_secret.GetSecret(ctx, helper, instance.Status.TransportURLSecret, instance.Namespace)
 	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			Log.Info(fmt.Sprintf("TransportURL secret %s not found", instance.Status.TransportURLSecret))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+		}
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.DBReadyCondition,
+			condition.InputReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			condition.DBReadyErrorMessage,
+			condition.InputReadyErrorMessage,
 			err.Error()))
-		return ctrlResult, err
+		return ctrl.Result{}, err
 	}
-	if (ctrlResult != ctrl.Result{}) {
+	configMapVars[transportURLSecret.Name] = env.SetValue(hash)
+
+	designateDb, result, err := r.ensureDB(ctx, helper, instance)
+	if err != nil {
+		return ctrl.Result{}, err
+	} else if (result != ctrl.Result{}) {
+		return result, nil
+	}
+
+	//
+	// create Configmap required for designate input
+	// - %-scripts configmap holding scripts to e.g. bootstrap the service
+	// - %-config configmap holding minimal designate config required to get the service up, user can add additional files to be added to the service
+	// - parameters which has passwords gets added from the OpenStack secret via the init container
+	//
+	Log.Info("pre generateConfigMap ....")
+
+	err = r.generateServiceConfigMaps(ctx, helper, instance, &configMapVars, designateDb)
+	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.DBReadyCondition,
-			condition.RequestedReason,
-			condition.SeverityInfo,
-			condition.DBReadyRunningMessage))
-		return ctrlResult, nil
+			condition.ServiceConfigReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.ServiceConfigReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, err
 	}
-	// update Status.DatabaseHostname, used to config the service
-	instance.Status.DatabaseHostname = db.GetDatabaseHostname()
-	instance.Status.Conditions.MarkTrue(condition.DBReadyCondition, condition.DBReadyMessage)
-	// create service DB - end
+	Log.Info("post generateConfigMap ....")
+
+	//
+	// create hash over all the different input resources to identify if any those changed
+	// and a restart/recreate is required.
+	//
+	_, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
+	if err != nil {
+		return ctrl.Result{}, err
+	} else if hashChanged {
+		// Hash changed and instance status should be updated (which will be done by main defer func),
+		// so we need to return and reconcile again
+		Log.Info("input hashes have changed, restarting reconcile")
+		return ctrl.Result{}, nil
+	}
+	// Create ConfigMaps and Secrets - end
+
+	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
 
 	//
 	// run Designate db sync
@@ -394,6 +433,7 @@ func (r *DesignateReconciler) reconcileInit(
 	dbSyncHash := instance.Status.Hash[designatev1beta1.DbSyncHash]
 	jobDef := designate.DbSyncJob(instance, serviceLabels, serviceAnnotations)
 
+	Log.Info("Initializing db sync job")
 	dbSyncjob := job.NewJob(
 		jobDef,
 		designatev1beta1.DbSyncHash,
@@ -401,7 +441,7 @@ func (r *DesignateReconciler) reconcileInit(
 		time.Duration(5)*time.Second,
 		dbSyncHash,
 	)
-	ctrlResult, err = dbSyncjob.DoJob(
+	ctrlResult, err := dbSyncjob.DoJob(
 		ctx,
 		helper,
 	)
@@ -428,13 +468,102 @@ func (r *DesignateReconciler) reconcileInit(
 	}
 	instance.Status.Conditions.MarkTrue(condition.DBSyncReadyCondition, condition.DBSyncReadyMessage)
 
-	// when job passed, mark NetworkAttachmentsReadyCondition ready
-	instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
-
 	// run Designate db sync - end
 
 	Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
 	return ctrl.Result{}, nil
+}
+
+// ensureDB - set up the main database, and then drives the ability to generate the config
+func (r *DesignateReconciler) ensureDB(
+	ctx context.Context,
+	helper *helper.Helper,
+	instance *designatev1beta1.Designate,
+) (*mariadbv1.Database, ctrl.Result, error) {
+
+	// ensure MariaDBAccount exists.  This account record may be created by
+	// openstack-operator or the cloud operator up front without a specific
+	// MariaDBDatabase configured yet.   Otherwise, a MariaDBAccount CR is
+	// created here with a generated username as well as a secret with
+	// generated password.   The MariaDBAccount is created without being
+	// yet associated with any MariaDBDatabase.
+
+	_, _, err := mariadbv1.EnsureMariaDBAccount(
+		ctx, helper, instance.Spec.DatabaseAccount,
+		instance.Namespace, false, designate.DatabaseUsernamePrefix,
+	)
+
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			mariadbv1.MariaDBAccountReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			mariadbv1.MariaDBAccountNotReadyMessage,
+			err.Error()))
+
+		return nil, ctrl.Result{}, err
+	}
+
+	instance.Status.Conditions.MarkTrue(
+		mariadbv1.MariaDBAccountReadyCondition,
+		mariadbv1.MariaDBAccountReadyMessage)
+
+	//
+	// create service DB instance
+	//
+	designateDb := mariadbv1.NewDatabaseForAccount(
+		instance.Spec.DatabaseInstance, // mariadb/galera service to target
+		designate.DatabaseName,         // name used in CREATE DATABASE in mariadb
+		designate.DatabaseCRName,       // CR name for MariaDBDatabase
+		instance.Spec.DatabaseAccount,  // CR name for MariaDBAccount
+		instance.Namespace,             // namespace
+	)
+
+	// create or patch the DB
+	ctrlResult, err := designateDb.CreateOrPatchAll(ctx, helper)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DBReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.DBReadyErrorMessage,
+			err.Error()))
+		return designateDb, ctrl.Result{}, err
+	}
+	if (ctrlResult != ctrl.Result{}) {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DBReadyCondition,
+			condition.RequestedReason,
+			condition.SeverityInfo,
+			condition.DBReadyRunningMessage))
+		return designateDb, ctrlResult, nil
+	}
+	// wait for the DB to be setup
+	ctrlResult, err = designateDb.WaitForDBCreated(ctx, helper)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DBReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.DBReadyErrorMessage,
+			err.Error()))
+		return designateDb, ctrlResult, nil
+	}
+	if (ctrlResult != ctrl.Result{}) {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DBReadyCondition,
+			condition.RequestedReason,
+			condition.SeverityInfo,
+			condition.DBReadyRunningMessage))
+		return designateDb, ctrlResult, nil
+	}
+
+	// update Status.DatabaseHostname, used to config the service
+	instance.Status.DatabaseHostname = designateDb.GetDatabaseHostname()
+	instance.Status.Conditions.MarkTrue(condition.DBReadyCondition, condition.DBReadyMessage)
+
+	return designateDb, ctrl.Result{}, nil
+	// create service DB - end
 }
 
 func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {
@@ -463,18 +592,11 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return rbacResult, nil
 	}
 
-	serviceLabels := map[string]string{
-		common.AppSelector: designate.ServiceName,
-	}
-
-	// ConfigMap
-	configMapVars := make(map[string]env.Setter)
-
 	//
 	// create RabbitMQ transportURL CR and get the actual URL from the associated secret that is created
 	//
 
-	transportURL, op, err := r.transportURLCreateOrUpdate(ctx, instance, serviceLabels)
+	transportURL, op, err := r.transportURLCreateOrUpdate(ctx, instance)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			designatev1beta1.DesignateRabbitMqTransportURLReadyCondition,
@@ -494,10 +616,10 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if instance.Status.TransportURLSecret == "" {
 		Log.Info(fmt.Sprintf("Waiting for TransportURL %s secret to be created", transportURL.Name))
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateRabbitMqTransportURLReadyCondition,
+			condition.InputReadyCondition,
 			condition.RequestedReason,
 			condition.SeverityInfo,
-			designatev1beta1.DesignateRabbitMqTransportURLReadyRunningMessage))
+			condition.InputReadyWaitingMessage))
 		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	}
 
@@ -505,123 +627,30 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 
 	// end transportURL
 
-	//
-	// check for required OpenStack secret holding passwords for service/admin user and add hash to the vars map
-	//
-	ospSecret, hash, err := secret.GetSecret(ctx, helper, instance.Spec.Secret, instance.Namespace)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
-				condition.InputReadyWaitingMessage))
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, fmt.Errorf("OpenStack secret %s not found", instance.Spec.Secret)
-		}
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	// Add a prefix to the var name to avoid accidental collision with other non-secret vars.
-	configMapVars["secret-"+ospSecret.Name] = env.SetValue(hash)
-
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
-	// run check OpenStack secret - end
-
-	// ensure MariaDBAccount exists.  This account record may be created by
-	// openstack-operator or the cloud operator up front without a specific
-	// MariaDBDatabase configured yet.   Otherwise, a MariaDBAccount CR is
-	// created here with a generated username as well as a secret with
-	// generated password.   The MariaDBAccount is created without being
-	// yet associated with any MariaDBDatabase.
-	_, _, err = mariadbv1.EnsureMariaDBAccount(
-		ctx, helper, instance.Spec.DatabaseAccount,
-		instance.Namespace, false, "designate",
-	)
-
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			mariadbv1.MariaDBAccountReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			mariadbv1.MariaDBAccountNotReadyMessage,
-			err.Error()))
-
-		return ctrl.Result{}, err
-	}
-	instance.Status.Conditions.MarkTrue(
-		mariadbv1.MariaDBAccountReadyCondition,
-		mariadbv1.MariaDBAccountReadyMessage,
-	)
-
-	//
-	// Create ConfigMaps and Secrets required as input for the Service and calculate an overall hash of hashes
-	//
-
-	//
-	// create Configmap required for designate input
-	// - %-scripts configmap holding scripts to e.g. bootstrap the service
-	// - %-config configmap holding minimal designate config required to get the service up, user can add additional files to be added to the service
-	// - parameters which has passwords gets added from the OpenStack secret via the init container
-	//
-	Log.Info("pre generateConfigMap ....")
-
-	err = r.generateServiceConfigMaps(ctx, helper, instance, &configMapVars, serviceLabels)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.ServiceConfigReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.ServiceConfigReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	Log.Info("post generateConfigMap ....")
-
-	//
-	// create hash over all the different input resources to identify if any those changed
-	// and a restart/recreate is required.
-	//
-	_, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.ServiceConfigReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.ServiceConfigReadyErrorMessage,
-			err.Error()))
-		Log.Info(fmt.Sprintf("createHashOfInputHashes failed: %v", err))
-		return ctrl.Result{}, err
-	} else if hashChanged {
-		// Hash changed and instance status should be updated (which will be done by main defer func),
-		// so we need to return and reconcile again
-		Log.Info("input hashes have changed, restarting reconcile")
-		return ctrl.Result{}, nil
-	}
-	// Create ConfigMaps and Secrets - end
-
-	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
 
 	//
 	// TODO check when/if Init, Update, or Upgrade should/could be skipped
 	//
+
+	serviceLabels := map[string]string{
+		common.AppSelector: designate.ServiceName,
+	}
+
 	// Note: Dkehn - this will remain in the code base until determination of DNS server connections are determined.
 	// networks to attach to
 	for _, netAtt := range instance.Spec.DesignateAPI.NetworkAttachments {
 		_, err := nad.GetNADWithName(ctx, helper, netAtt, instance.Namespace)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
+				Log.Info(fmt.Sprintf("network-attachment-definition %s not found", netAtt))
 				instance.Status.Conditions.Set(condition.FalseCondition(
 					condition.NetworkAttachmentsReadyCondition,
 					condition.RequestedReason,
 					condition.SeverityInfo,
 					condition.NetworkAttachmentsReadyWaitingMessage,
 					netAtt))
-				return ctrl.Result{RequeueAfter: time.Second * 10}, fmt.Errorf("network-attachment-definition %s not found", netAtt)
+				return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 			}
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.NetworkAttachmentsReadyCondition,
@@ -646,6 +675,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	} else if (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, nil
 	}
+	instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
 
 	// Handle service update
 	ctrlResult, err = r.reconcileUpdate(ctx, instance)
@@ -956,7 +986,8 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	Log.Info("Deployment Unbound task reconciled")
 
-	err = mariadbv1.DeleteUnusedMariaDBAccountFinalizers(ctx, helper, instance.Name, instance.Spec.DatabaseAccount, instance.Namespace)
+	// remove finalizers from unused MariaDBAccount records
+	err = mariadbv1.DeleteUnusedMariaDBAccountFinalizers(ctx, helper, designate.DatabaseCRName, instance.Spec.DatabaseAccount, instance.Namespace)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1002,7 +1033,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	h *helper.Helper,
 	instance *designatev1beta1.Designate,
 	envVars *map[string]env.Setter,
-	serviceLabels map[string]string,
+	designateDb *mariadbv1.Database,
 ) error {
 	//
 	// create Configmap/Secret required for designate input
@@ -1011,7 +1042,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	// - parameters which has passwords gets added from the ospSecret via the init container
 	//
 
-	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), serviceLabels)
+	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), map[string]string{})
 
 	// customData hold any customization for the service.
 	// custom.conf is going to /etc/<service>/<service>.conf.d
@@ -1022,6 +1053,9 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	for key, data := range instance.Spec.DefaultConfigOverwrite {
 		customData[key] = data
 	}
+
+	databaseAccount := designateDb.GetAccount()
+	dbSecret := designateDb.GetSecret()
 
 	keystoneAPI, err := keystonev1.GetKeystoneAPI(ctx, h, instance.Namespace, map[string]string{})
 	if err != nil {
@@ -1036,20 +1070,15 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 		return err
 	}
 
-	databaseAccount, dbSecret, err := mariadbv1.GetAccountAndSecret(ctx, h, instance.Spec.DatabaseAccount, instance.Namespace)
-	if err != nil {
-		return err
-	}
-
 	templateParameters := make(map[string]interface{})
 	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
 	templateParameters["KeystoneInternalURL"] = keystoneInternalURL
 	templateParameters["KeystonePublicURL"] = keystonePublicURL
-	templateParameters["DatabaseConnection"] = fmt.Sprintf("mysql+pymysql://%s:%s@%s/%s",
+	templateParameters["DatabaseConnection"] = fmt.Sprintf("mysql+pymysql://%s:%s@%s/%s?read_default_file=/etc/my.cnf",
 		databaseAccount.Spec.UserName,
 		string(dbSecret.Data[mariadbv1.DatabasePasswordSelector]),
 		instance.Status.DatabaseHostname,
-		instance.Name,
+		designate.DatabaseName,
 	)
 
 	cms := []util.Template{
@@ -1074,7 +1103,12 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 		},
 	}
 
-	return secret.EnsureSecrets(ctx, h, instance, cms, envVars)
+	err = oko_secret.EnsureSecrets(ctx, h, instance, cms, envVars)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // createHashOfInputHashes - creates a hash of hashes which gets added to the resources which requires a restart
@@ -1106,13 +1140,11 @@ func (r *DesignateReconciler) createHashOfInputHashes(
 func (r *DesignateReconciler) transportURLCreateOrUpdate(
 	ctx context.Context,
 	instance *designatev1beta1.Designate,
-	serviceLabels map[string]string,
 ) (*rabbitmqv1.TransportURL, controllerutil.OperationResult, error) {
 	transportURL := &rabbitmqv1.TransportURL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-designate-transport", instance.Name),
 			Namespace: instance.Namespace,
-			Labels:    serviceLabels,
 		},
 	}
 
@@ -1142,7 +1174,6 @@ func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, i
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -1176,7 +1207,6 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -1210,7 +1240,6 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -1244,7 +1273,6 @@ func (r *DesignateReconciler) mdnsDeploymentCreateOrUpdate(ctx context.Context, 
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -1278,7 +1306,6 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {
@@ -1312,7 +1339,6 @@ func (r *DesignateReconciler) backendbind9DeploymentCreateOrUpdate(ctx context.C
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
 		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		if len(deployment.Spec.NodeSelector) == 0 {

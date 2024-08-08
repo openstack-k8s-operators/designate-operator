@@ -44,16 +44,16 @@ spec:
           spec:
             description: DesignateAPISpec defines the desired state of DesignateAPI
             properties:
-              None:
-                description: BackendType - Defines the backend service/configuration
-                  we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps maintain
-                  a single init container/init.sh to do container setup
-                type: string
               backendMdnsServerProtocol:
                 description: 'BackendTypeProtocol - Defines the backend protocol to
                   be used between the designate-worker & designate_mdns to/from the
                   DNS server. Acceptable values are: "UDP", "TCP" Please Note: this
                   MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                type: string
+              backendType:
+                description: BackendType - Defines the backend service/configuration
+                  we are using, i.e. bind9, unhbound, PowerDNS, BYO, etc.. Helps maintain
+                  a single init container/init.sh to do container setup
                 type: string
               backendWorkerServerProtocol:
                 description: 'BackendTypeProtocol - Defines the backend protocol to
@@ -91,16 +91,16 @@ spec:
                 description: DesignateAPI - Spec definition for the API service of
                   this Designate deployment
                 properties:
-                  None:
-                    description: BackendType - Defines the backend service/configuration
-                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
-                      a single init container/init.sh to do container setup
-                    type: string
                   backendMdnsServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
                       to be used between the designate-worker & designate_mdns to/from
                       the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
                       this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendType:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
+                      a single init container/init.sh to do container setup
                     type: string
                   backendWorkerServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
@@ -421,6 +421,36 @@ spec:
                     description: ServiceUser - optional username used for this service
                       to register in designate
                     type: string
+                  tls:
+                    description: TLS - Parameters related to the TLS
+                    properties:
+                      api:
+                        description: API tls type which encapsulates for API services
+                        properties:
+                          internal:
+                            description: Internal GenericService - holds the secret
+                              for the internal endpoint
+                            properties:
+                              secretName:
+                                description: SecretName - holding the cert, key for
+                                  the service
+                                type: string
+                            type: object
+                          public:
+                            description: Public GenericService - holds the secret
+                              for the public endpoint
+                            properties:
+                              secretName:
+                                description: SecretName - holding the cert, key for
+                                  the service
+                                type: string
+                            type: object
+                        type: object
+                      caBundleSecretName:
+                        description: CaBundleSecretName - holding the CA certs in
+                          a pre-created bundle file
+                        type: string
+                    type: object
                   transportURLSecret:
                     description: Secret containing RabbitMq transport URL
                     type: string
@@ -431,16 +461,16 @@ spec:
                 description: DesignateBackendbind9 - Spec definition for the Backendbind9
                   service of this Designate deployment
                 properties:
-                  None:
-                    description: BackendType - Defines the backend service/configuration
-                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
-                      a single init container/init.sh to do container setup
-                    type: string
                   backendMdnsServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
                       to be used between the designate-worker & designate_mdns to/from
                       the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
                       this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendType:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
+                      a single init container/init.sh to do container setup
                     type: string
                   backendWorkerServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
@@ -589,16 +619,16 @@ spec:
                 description: DesignateCentral - Spec definition for the Central service
                   of this Designate deployment
                 properties:
-                  None:
-                    description: BackendType - Defines the backend service/configuration
-                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
-                      a single init container/init.sh to do container setup
-                    type: string
                   backendMdnsServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
                       to be used between the designate-worker & designate_mdns to/from
                       the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
                       this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendType:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
+                      a single init container/init.sh to do container setup
                     type: string
                   backendWorkerServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
@@ -737,6 +767,14 @@ spec:
                     description: ServiceUser - optional username used for this service
                       to register in designate
                     type: string
+                  tls:
+                    description: TLS - Parameters related to the TLS
+                    properties:
+                      caBundleSecretName:
+                        description: CaBundleSecretName - holding the CA certs in
+                          a pre-created bundle file
+                        type: string
+                    type: object
                   transportURLSecret:
                     description: Secret containing RabbitMq transport URL
                     type: string
@@ -747,16 +785,16 @@ spec:
                 description: DesignateMdns - Spec definition for the Mdns service
                   of this Designate deployment
                 properties:
-                  None:
-                    description: BackendType - Defines the backend service/configuration
-                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
-                      a single init container/init.sh to do container setup
-                    type: string
                   backendMdnsServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
                       to be used between the designate-worker & designate_mdns to/from
                       the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
                       this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendType:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
+                      a single init container/init.sh to do container setup
                     type: string
                   backendWorkerServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
@@ -895,6 +933,14 @@ spec:
                     description: ServiceUser - optional username used for this service
                       to register in designate
                     type: string
+                  tls:
+                    description: TLS - Parameters related to the TLS
+                    properties:
+                      caBundleSecretName:
+                        description: CaBundleSecretName - holding the CA certs in
+                          a pre-created bundle file
+                        type: string
+                    type: object
                   transportURLSecret:
                     description: Secret containing RabbitMq transport URL
                     type: string
@@ -905,16 +951,16 @@ spec:
                 description: DesignateProducer - Spec definition for the Producer
                   service of this Designate deployment
                 properties:
-                  None:
-                    description: BackendType - Defines the backend service/configuration
-                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
-                      a single init container/init.sh to do container setup
-                    type: string
                   backendMdnsServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
                       to be used between the designate-worker & designate_mdns to/from
                       the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
                       this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendType:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
+                      a single init container/init.sh to do container setup
                     type: string
                   backendWorkerServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
@@ -1053,6 +1099,14 @@ spec:
                     description: ServiceUser - optional username used for this service
                       to register in designate
                     type: string
+                  tls:
+                    description: TLS - Parameters related to the TLS
+                    properties:
+                      caBundleSecretName:
+                        description: CaBundleSecretName - holding the CA certs in
+                          a pre-created bundle file
+                        type: string
+                    type: object
                   transportURLSecret:
                     description: Secret containing RabbitMq transport URL
                     type: string
@@ -1172,16 +1226,16 @@ spec:
                 description: DesignateWorker - Spec definition for the Worker service
                   of this Designate deployment
                 properties:
-                  None:
-                    description: BackendType - Defines the backend service/configuration
-                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
-                      a single init container/init.sh to do container setup
-                    type: string
                   backendMdnsServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
                       to be used between the designate-worker & designate_mdns to/from
                       the DNS server. Acceptable values are: "UDP", "TCP" Please Note:
                       this MUST match what is in the /etc/designate.conf [''service:mdns'']'
+                    type: string
+                  backendType:
+                    description: BackendType - Defines the backend service/configuration
+                      we are using, i.e. bind9, PowerDNS, BYO, etc.. Helps maintain
+                      a single init container/init.sh to do container setup
                     type: string
                   backendWorkerServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
@@ -1320,6 +1374,14 @@ spec:
                     description: ServiceUser - optional username used for this service
                       to register in designate
                     type: string
+                  tls:
+                    description: TLS - Parameters related to the TLS
+                    properties:
+                      caBundleSecretName:
+                        description: CaBundleSecretName - holding the CA certs in
+                          a pre-created bundle file
+                        type: string
+                    type: object
                   transportURLSecret:
                     description: Secret containing RabbitMq transport URL
                     type: string
@@ -1413,6 +1475,7 @@ spec:
                   to register in designate
                 type: string
             required:
+            - databaseInstance
             - designateAPI
             - designateBackendbind9
             - designateCentral
@@ -1474,7 +1537,7 @@ spec:
                   type: object
                 type: array
               databaseHostname:
-                description: Designate Database Hostname
+                description: DatabaseHostname - Designate Database Hostname
                 type: string
               designateAPIReadyCount:
                 description: ReadyCount of Designate API instance
