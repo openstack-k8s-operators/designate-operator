@@ -16,6 +16,8 @@ limitations under the License.
 package designatecentral
 
 import (
+	"fmt"
+
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	designate "github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
@@ -46,6 +48,11 @@ func Deployment(
 	// designateUser := int64(42411)
 	// designateGroup := int64(42411)
 
+	volumes := designate.GetVolumes(
+		designate.GetOwningDesignateName(instance),
+	)
+	volumeMounts := designate.GetVolumeMounts("designate-central")
+
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
 		TimeoutSeconds:      10,
@@ -70,6 +77,14 @@ func Deployment(
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
+	serviceName := fmt.Sprintf("%s-central", designate.ServiceName)
+
+	// Add the CA bundle
+	if instance.Spec.TLS.CaBundleSecretName != "" {
+		volumes = append(volumes, instance.Spec.TLS.CreateVolume())
+		volumeMounts = append(volumeMounts, instance.Spec.TLS.CreateVolumeMounts(nil)...)
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Name,
@@ -88,12 +103,10 @@ func Deployment(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.Spec.ServiceAccount,
-					Volumes: designate.GetVolumes(
-						designate.GetOwningDesignateName(instance),
-					),
+					Volumes:            volumes,
 					Containers: []corev1.Container{
 						{
-							Name: designate.ServiceName + "-central",
+							Name: serviceName,
 							Command: []string{
 								"/bin/bash",
 							},
@@ -103,7 +116,7 @@ func Deployment(
 								RunAsUser: &rootUser,
 							},
 							Env:           env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:  designate.GetServiceVolumeMounts("designate-central"),
+							VolumeMounts:  volumeMounts,
 							Resources:     instance.Spec.Resources,
 							StartupProbe:  startupProbe,
 							LivenessProbe: livenessProbe,
@@ -121,7 +134,7 @@ func Deployment(
 	deployment.Spec.Template.Spec.Affinity = affinity.DistributePods(
 		common.AppSelector,
 		[]string{
-			designate.ServiceName,
+			serviceName,
 		},
 		corev1.LabelHostname,
 	)

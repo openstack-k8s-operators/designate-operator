@@ -95,7 +95,7 @@ func InitContainer(init APIDetails) []corev1.Container {
 			},
 			Args:         args,
 			Env:          envs,
-			VolumeMounts: getInitVolumeMounts(),
+			VolumeMounts: GetInitVolumeMounts(),
 		},
 	}
 }
