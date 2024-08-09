@@ -27,6 +27,10 @@ spec:
       debug = true
     databaseAccount: designate
     rabbitMqClusterName: rabbitmq
+    storageRequest: 1G
+    storageClass: local-storage
+    networkAttachments:
+      - designate
   designateCentral:
     secret: osp-secret
     serviceUser: designate
@@ -43,6 +47,8 @@ spec:
       debug = true
     databaseAccount: designate
     rabbitMqClusterName: rabbitmq
+    networkAttachments:
+      - designate
   designateProducer:
     secret: osp-secret
     serviceUser: designate
@@ -59,5 +65,7 @@ spec:
       debug = true
     databaseAccount: designate
     rabbitMqClusterName: rabbitmq
+    networkAttachments:
+      - designate
   designateUnbound:
     replicas: 1

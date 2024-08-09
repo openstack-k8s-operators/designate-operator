@@ -38,12 +38,12 @@ import (
 	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/pkg/designatebackendbind9"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/deployment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 )
@@ -180,60 +180,6 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 
 	// Handle non-deleted clusters
 	return r.reconcileNormal(ctx, instance, helper)
-
-	// //
-	// // Create/Update all the resources associated to this designatebackendbind9 instance
-	// //
-
-	// // Service account, role, binding
-	// rbacRules := []rbacv1.PolicyRule{
-	// 	{
-	// 		APIGroups:     []string{"security.openshift.io"},
-	// 		ResourceNames: []string{"anyuid"},
-	// 		Resources:     []string{"securitycontextconstraints"},
-	// 		Verbs:         []string{"use"},
-	// 	},
-	// 	{
-	// 		APIGroups: []string{""},
-	// 		Resources: []string{"pods"},
-	// 		Verbs:     []string{"create", "get", "list", "watch", "update", "patch", "delete"},
-	// 	},
-	// }
-	// rbacResult, err := common_rbac.ReconcileRbac(ctx, helper, instance, rbacRules)
-	// if err != nil {
-	// 	return rbacResult, err
-	// } else if (rbacResult != ctrl.Result{}) {
-	// 	return rbacResult, nil
-	// }
-
-	// // Service to expose designatebackendbind9 pods
-	// commonsvc, _ := commonservice.NewService(designatebackendbind9.Service(instance),
-	// 	time.Duration(5)*time.Second, &commonservice.OverrideSpec{})
-	// sres, serr := commonsvc.CreateOrPatch(ctx, helper)
-	// if serr != nil {
-	// 	instance.Status.Conditions.Set(condition.FalseCondition(
-	// 		condition.ExposeServiceReadyCondition,
-	// 		condition.ErrorReason,
-	// 		condition.SeverityWarning,
-	// 		condition.ExposeServiceReadyErrorMessage,
-	// 		err.Error()))
-	// 	return sres, serr
-	// }
-	// instance.Status.Conditions.MarkTrue(condition.ExposeServiceReadyCondition, condition.ExposeServiceReadyMessage)
-
-	// // Deployment
-	// commondeployment := commondeployment.NewDeployment(designatebackendbind9.Deployment(instance), time.Duration(5)*time.Second)
-	// sfres, sferr := commondeployment.CreateOrPatch(ctx, helper)
-	// if sferr != nil {
-	// 	return sfres, sferr
-	// }
-	// deployment := commondeployment.GetDeployment()
-
-	// if deployment.Status.ReadyReplicas > 0 {
-	// 	instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
-	// }
-
-	// return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -311,7 +257,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&designatev1beta1.DesignateBackendbind9{}).
-		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		// watch the secrets we don't own
 		Watches(&corev1.Secret{},
@@ -506,9 +452,9 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	// normal reconcile tasks
 	//
 
-	// Define a new Deployment object
-	deplDef := designatebackendbind9.Deployment(instance, inputHash, serviceLabels, serviceAnnotations)
-	depl := deployment.NewDeployment(
+	// Define a new StatefulSet object
+	deplDef := designatebackendbind9.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations)
+	depl := statefulset.NewStatefulSet(
 		deplDef,
 		time.Duration(5)*time.Second,
 	)
@@ -530,8 +476,8 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 			condition.DeploymentReadyRunningMessage))
 		return ctrlResult, nil
 	}
-	if depl.GetDeployment().Generation == depl.GetDeployment().Status.ObservedGeneration {
-		instance.Status.ReadyCount = depl.GetDeployment().Status.ReadyReplicas
+	if depl.GetStatefulSet().Generation == depl.GetStatefulSet().Status.ObservedGeneration {
+		instance.Status.ReadyCount = depl.GetStatefulSet().Status.ReadyReplicas
 
 		// verify if network attachment matches expectations
 		networkReady := false
@@ -570,7 +516,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 		}
 	}
-	// create Deployment - end
+	// create StatefulSet - end
 
 	// We reached the end of the Reconcile, update the Ready condition based on
 	// the sub conditions
@@ -692,6 +638,70 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 		),
 	}
 
+	var nadInfo *designate.NADConfig
+	for _, netAtt := range instance.Spec.NetworkAttachments {
+		nad, err := nad.GetNADWithName(ctx, h, netAtt, instance.Namespace)
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				r.Log.Info(fmt.Sprintf("network-attachment-definition %s not found, cannot configure pod", netAtt))
+				instance.Status.Conditions.Set(condition.FalseCondition(
+					condition.NetworkAttachmentsReadyCondition,
+					condition.RequestedReason,
+					condition.SeverityWarning, // Severity is just warning because while we expect it, we will retry.
+					condition.NetworkAttachmentsReadyErrorMessage,
+					netAtt))
+				return nil
+			}
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.NetworkAttachmentsReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityError, // We cannot proceed with a broken network attachment.
+				condition.NetworkAttachmentsReadyErrorMessage,
+				err.Error()))
+			return err
+		}
+		if nad.Name == instance.Spec.ControlNetworkName {
+			nadInfo, err = designate.GetNADConfig(nad)
+			if err != nil {
+				instance.Status.Conditions.Set(condition.FalseCondition(
+					condition.NetworkAttachmentsReadyCondition,
+					condition.ErrorReason,
+					condition.SeverityError, // We cannot proceed with a broken network attachment.
+					condition.NetworkAttachmentsReadyErrorMessage,
+					err.Error()))
+				return err
+			}
+			break
+		}
+	}
+	if nadInfo == nil {
+		return fmt.Errorf("Unable to locate network attachment %s", instance.Spec.ControlNetworkName)
+	}
+
+	cidr := nadInfo.IPAM.CIDR.String()
+	if cidr == "" {
+		err = fmt.Errorf("designate control network attachment not configured, check NetworkAttachments and ControlNetworkName")
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.NetworkAttachmentsReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityError,
+			condition.NetworkAttachmentsReadyErrorMessage,
+			err))
+		return err
+	}
+	if nadInfo.IPAM.CIDR.Addr().Is4() {
+		templateParameters["IPVersion"] = "4"
+	} else {
+		templateParameters["IPVersion"] = "6"
+	}
+	templateParameters["AllowCIDR"] = cidr
+	// This will need to be replaced by custom config for named.
+	templateParameters["EnableQueryLogging"] = false
+	templateParameters["CustomBindOptions"] = instance.Spec.CustomBindOptions
+
+	// TODO: we need the rndc key value and pod addr but those are going to be supplied by the init container and
+	// information mounted into the init container.
+
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
@@ -709,6 +719,14 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 			Type:          util.TemplateTypeConfig,
 			InstanceType:  instance.Kind,
 			CustomData:    customData,
+			ConfigOptions: templateParameters,
+			Labels:        cmLabels,
+		},
+		{
+			Name:          fmt.Sprintf("%s-config-named", instance.Name),
+			Namespace:     instance.Namespace,
+			Type:          "config-named",
+			InstanceType:  instance.Kind,
 			ConfigOptions: templateParameters,
 			Labels:        cmLabels,
 		},

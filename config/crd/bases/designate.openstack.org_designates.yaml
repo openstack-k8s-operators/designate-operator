@@ -482,6 +482,16 @@ spec:
                     description: ContainerImage - Designate Container Image URL (will
                       be set to environmental default if empty)
                     type: string
+                  controlNetworkName:
+                    default: designate
+                    description: ControlNetworkName - specify which network attachment
+                      is to be used for control, notifys and zone transfers.
+                    type: string
+                  customBindOptions:
+                    description: CustomBindOptions - custom bind9 options
+                    items:
+                      type: string
+                    type: array
                   customServiceConfig:
                     description: CustomServiceConfig - customize the service config
                       using this parameter to change service defaults, or overwrite
@@ -609,11 +619,19 @@ spec:
                     description: ServiceUser - optional username used for this service
                       to register in designate
                     type: string
+                  storageClass:
+                    description: StorageClass
+                    type: string
+                  storageRequest:
+                    description: StorageRequest
+                    type: string
                   transportURLSecret:
                     description: Secret containing RabbitMq transport URL
                     type: string
                 required:
                 - containerImage
+                - controlNetworkName
+                - storageRequest
                 type: object
               designateCentral:
                 description: DesignateCentral - Spec definition for the Central service

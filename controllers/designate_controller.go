@@ -116,6 +116,7 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=rabbitmq.openstack.org,resources=transporturls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list
+// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;create;update;patch;delete;watch
 
 // service account, role, rolebinding
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch
@@ -986,7 +987,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	Log.Info("Deployment Producer task reconciled")
 
 	// deploy designate-backendbind9
-	designateBackendbind9, op, err := r.backendbind9DeploymentCreateOrUpdate(ctx, instance)
+	designateBackendbind9, op, err := r.backendbind9StatefulSetCreateOrUpdate(ctx, instance)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			designatev1beta1.DesignateBackendbind9ReadyCondition,
@@ -1503,29 +1504,27 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 	return deployment, op, err
 }
 
-func (r *DesignateReconciler) backendbind9DeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateBackendbind9, controllerutil.OperationResult, error) {
-	deployment := &designatev1beta1.DesignateBackendbind9{
+func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateBackendbind9, controllerutil.OperationResult, error) {
+	statefulSet := &designatev1beta1.DesignateBackendbind9{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-backendbind9", instance.Name),
 			Namespace: instance.Namespace,
 		},
 	}
 
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateBackendbind9
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
+		statefulSet.Spec = instance.Spec.DesignateBackendbind9
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
-		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
-		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
-		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
+		statefulSet.Spec.ServiceUser = instance.Spec.ServiceUser
+		statefulSet.Spec.Secret = instance.Spec.Secret
+		statefulSet.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
+		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
+		if len(statefulSet.Spec.NodeSelector) == 0 {
+			statefulSet.Spec.NodeSelector = instance.Spec.NodeSelector
 		}
 
-		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
+		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
 			return err
 		}
@@ -1533,7 +1532,7 @@ func (r *DesignateReconciler) backendbind9DeploymentCreateOrUpdate(ctx context.C
 		return nil
 	})
 
-	return deployment, op, err
+	return statefulSet, op, err
 }
 
 func (r *DesignateReconciler) unboundDeploymentCreateOrUpdate(

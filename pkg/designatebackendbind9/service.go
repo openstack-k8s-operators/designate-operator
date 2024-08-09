@@ -7,25 +7,31 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Service exposes DesignateBackendbind9 pods for a designate CR
 func Service(m *designatev1beta1.DesignateBackendbind9) *corev1.Service {
 	labels := labels.GetLabels(m, "designatebackendbind9", map[string]string{
 		"owner": "designate",
 		"cr":    m.GetName(),
 		"app":   "designatebackendbind9",
 	})
+	servicePorts := make([]corev1.ServicePort, 2)
+	servicePorts[0] = corev1.ServicePort{
+		Name:     "named",
+		Port:     53,
+		Protocol: corev1.ProtocolUDP,
+	}
+	servicePorts[1] = corev1.ServicePort{
+		Name:     "named",
+		Port:     53,
+		Protocol: corev1.ProtocolTCP,
+	}
 	details := &service.GenericServiceDetails{
 		Name:      m.GetName(),
 		Namespace: m.GetNamespace(),
 		Labels:    labels,
 		Selector: map[string]string{
-			"app": "rndc",
+			"app": "bind",
 		},
-		Port: service.GenericServicePort{
-			Name:     "rndc",
-			Port:     953,
-			Protocol: "TCP",
-		},
+		Ports:     servicePorts,
 		ClusterIP: "None",
 	}
 

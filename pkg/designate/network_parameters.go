@@ -40,7 +40,7 @@ type NADIpam struct {
 	RangeEnd   netip.Addr   `json:"range_end"`
 }
 
-func getConfigFromNAD(
+func GetNADConfig(
 	nad *networkv1.NetworkAttachmentDefinition,
 ) (*NADConfig, error) {
 	nadConfig := &NADConfig{}
@@ -49,7 +49,6 @@ func getConfigFromNAD(
 	if err != nil {
 		return nil, err
 	}
-
 	return nadConfig, nil
 }
 
@@ -59,7 +58,7 @@ func GetNetworkParametersFromNAD(
 ) (*NetworkParameters, error) {
 	networkParameters := &NetworkParameters{}
 
-	nadConfig, err := getConfigFromNAD(nad)
+	nadConfig, err := GetNADConfig(nad)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read network parameters: %w", err)
 	}

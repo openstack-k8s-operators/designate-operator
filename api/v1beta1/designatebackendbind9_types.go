@@ -38,8 +38,6 @@ type DesignateBackendbind9Spec struct {
 	DesignateBackendbind9SpecBase `json:",inline"`
 }
 
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // DesignateBackendbind9SpecBase -
 type DesignateBackendbind9SpecBase struct {
 	// Common input parameters for all Designate services
@@ -63,6 +61,22 @@ type DesignateBackendbind9SpecBase struct {
 	// +kubebuilder:validation:Optional
 	// ServiceAccount - service account name used internally to provide Designate services the default SA name
 	ServiceAccount string `json:"serviceAccount"`
+
+	// +kubebuilder:validation:Optional
+	// CustomBindOptions - custom bind9 options
+	CustomBindOptions []string `json:"customBindOptions,omitempty"`
+
+	// +kubebuilder:default="designate"
+	// ControlNetworkName - specify which network attachment is to be used for control, notifys and zone transfers.
+	ControlNetworkName string `json:"controlNetworkName"`
+
+	// +kubebuilder:validation:Optional
+	// StorageClass
+	StorageClass string `json:"storageClass,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// StorageRequest
+	StorageRequest string `json:"storageRequest"`
 }
 
 // DesignateBackendbind9Status defines the observed state of DesignateBackendbind9
