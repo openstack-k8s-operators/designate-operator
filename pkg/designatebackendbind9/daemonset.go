@@ -34,13 +34,13 @@ const (
 	ServiceCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
 )
 
-// Deployment func
-func Deployment(
+// DaemonSet func
+func DaemonSet(
 	instance *designatev1beta1.DesignateBackendbind9,
 	configHash string,
 	labels map[string]string,
 	annotations map[string]string,
-) *appsv1.Deployment {
+) *appsv1.DaemonSet {
 	rootUser := int64(0)
 	// Designate's uid and gid magic numbers come from the 'designate-user' in
 	// https://github.com/openstack/kolla/blob/master/kolla/common/users.py
@@ -96,17 +96,16 @@ func Deployment(
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
-	deployment := &appsv1.Deployment{
+	daemonset := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Name,
 			Namespace: instance.Namespace,
 			Labels:    labels,
 		},
-		Spec: appsv1.DeploymentSpec{
+		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			Replicas: instance.Spec.Replicas,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: annotations,
@@ -149,7 +148,7 @@ func Deployment(
 	// If possible two pods of the same service should not
 	// run on the same worker node. If this is not possible
 	// the get still created on the same worker node.
-	deployment.Spec.Template.Spec.Affinity = affinity.DistributePods(
+	daemonset.Spec.Template.Spec.Affinity = affinity.DistributePods(
 		common.AppSelector,
 		[]string{
 			designate.ServiceName,
@@ -157,7 +156,7 @@ func Deployment(
 		corev1.LabelHostname,
 	)
 	if instance.Spec.NodeSelector != nil && len(instance.Spec.NodeSelector) > 0 {
-		deployment.Spec.Template.Spec.NodeSelector = instance.Spec.NodeSelector
+		daemonset.Spec.Template.Spec.NodeSelector = instance.Spec.NodeSelector
 	}
 
 	initContainerDetails := designate.APIDetails{
@@ -169,7 +168,7 @@ func Deployment(
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
 		VolumeMounts:         designate.GetInitVolumeMounts(),
 	}
-	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
+	daemonset.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 
-	return deployment
+	return daemonset
 }

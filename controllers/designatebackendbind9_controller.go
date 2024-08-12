@@ -38,7 +38,7 @@ import (
 	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/pkg/designatebackendbind9"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/deployment"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/daemonset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
@@ -311,7 +311,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&designatev1beta1.DesignateBackendbind9{}).
-		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.DaemonSet{}).
 		Owns(&corev1.Service{}).
 		// watch the secrets we don't own
 		Watches(&corev1.Secret{},
@@ -506,14 +506,17 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	// normal reconcile tasks
 	//
 
-	// Define a new Deployment object
-	deplDef := designatebackendbind9.Deployment(instance, inputHash, serviceLabels, serviceAnnotations)
-	depl := deployment.NewDeployment(
-		deplDef,
-		time.Duration(5)*time.Second,
+	// Define a new DaemonSet object
+	dset := daemonset.NewDaemonSet(
+		designatebackendbind9.DaemonSet(
+			instance,
+			inputHash,
+			serviceLabels,
+			serviceAnnotations),
+		5,
 	)
 
-	ctrlResult, err = depl.CreateOrPatch(ctx, helper)
+	ctrlResult, err = dset.CreateOrPatch(ctx, helper)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DeploymentReadyCondition,
@@ -530,25 +533,21 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 			condition.DeploymentReadyRunningMessage))
 		return ctrlResult, nil
 	}
-	if depl.GetDeployment().Generation == depl.GetDeployment().Status.ObservedGeneration {
-		instance.Status.ReadyCount = depl.GetDeployment().Status.ReadyReplicas
+	if dset.GetDaemonSet().Generation == dset.GetDaemonSet().Status.ObservedGeneration {
+		instance.Status.DesiredNumberScheduled = dset.GetDaemonSet().Status.DesiredNumberScheduled
+		// TODO(oschwart) change for NumberReady?
+		instance.Status.ReadyCount = dset.GetDaemonSet().Status.NumberReady
 
 		// verify if network attachment matches expectations
-		networkReady := false
-		networkAttachmentStatus := map[string][]string{}
-		if *(instance.Spec.Replicas) > 0 {
-			networkReady, networkAttachmentStatus, err = nad.VerifyNetworkStatusFromAnnotation(
-				ctx,
-				helper,
-				instance.Spec.NetworkAttachments,
-				serviceLabels,
-				instance.Status.ReadyCount,
-			)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-		} else {
-			networkReady = true
+		networkReady, networkAttachmentStatus, err := nad.VerifyNetworkStatusFromAnnotation(
+			ctx,
+			helper,
+			instance.Spec.NetworkAttachments,
+			serviceLabels,
+			instance.Status.ReadyCount,
+		)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 
 		instance.Status.NetworkAttachments = networkAttachmentStatus
@@ -563,20 +562,22 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 				condition.NetworkAttachmentsReadyErrorMessage,
 				err.Error()))
 
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: time.Duration(1) * time.Second}, nil
 		}
 
-		if instance.Status.ReadyCount == *instance.Spec.Replicas {
+		if instance.Status.ReadyCount == instance.Status.DesiredNumberScheduled {
 			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 		}
 	}
-	// create Deployment - end
+	// create DaemonSet - end
 
 	// We reached the end of the Reconcile, update the Ready condition based on
 	// the sub conditions
 	if instance.Status.Conditions.AllSubConditionIsTrue() {
 		instance.Status.Conditions.MarkTrue(
 			condition.ReadyCondition, condition.ReadyMessage)
+	} else {
+		r.Log.Info("Not all conditions are ready for Bind9 controller")
 	}
 	r.Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil

@@ -906,7 +906,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	Log.Info("Deployment Producer task reconciled")
 
 	// deploy designate-backendbind9
-	designateBackendbind9, op, err := r.backendbind9DeploymentCreateOrUpdate(ctx, instance)
+	designateBackendbind9, op, err := r.backendbind9DaemonSetCreateOrUpdate(ctx, instance)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			designatev1beta1.DesignateBackendbind9ReadyCondition,
@@ -1323,29 +1323,29 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 	return deployment, op, err
 }
 
-func (r *DesignateReconciler) backendbind9DeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateBackendbind9, controllerutil.OperationResult, error) {
-	deployment := &designatev1beta1.DesignateBackendbind9{
+func (r *DesignateReconciler) backendbind9DaemonSetCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateBackendbind9, controllerutil.OperationResult, error) {
+	daemonset := &designatev1beta1.DesignateBackendbind9{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-backendbind9", instance.Name),
 			Namespace: instance.Namespace,
 		},
 	}
 
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateBackendbind9
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, daemonset, func() error {
+		daemonset.Spec = instance.Spec.DesignateBackendbind9
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
-		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
-		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
-		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
+		daemonset.Spec.ServiceUser = instance.Spec.ServiceUser
+		daemonset.Spec.DatabaseHostname = instance.Status.DatabaseHostname
+		daemonset.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
+		daemonset.Spec.Secret = instance.Spec.Secret
+		daemonset.Spec.TransportURLSecret = instance.Status.TransportURLSecret
+		daemonset.Spec.ServiceAccount = instance.RbacResourceName()
+		if len(daemonset.Spec.NodeSelector) == 0 {
+			daemonset.Spec.NodeSelector = instance.Spec.NodeSelector
 		}
 
-		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
+		err := controllerutil.SetControllerReference(instance, daemonset, r.Scheme)
 		if err != nil {
 			return err
 		}
@@ -1353,7 +1353,7 @@ func (r *DesignateReconciler) backendbind9DeploymentCreateOrUpdate(ctx context.C
 		return nil
 	})
 
-	return deployment, op, err
+	return daemonset, op, err
 }
 
 func (r *DesignateReconciler) unboundDeploymentCreateOrUpdate(
