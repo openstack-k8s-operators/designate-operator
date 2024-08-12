@@ -844,7 +844,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	Log.Info("Deployment Worker task reconciled")
 
 	// deploy designate-mdns
-	designateMdns, op, err := r.mdnsDeploymentCreateOrUpdate(ctx, instance)
+	designateMdns, op, err := r.mdnsDaemonSetCreateOrUpdate(ctx, instance)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			designatev1beta1.DesignateMdnsReadyCondition,
@@ -1288,30 +1288,30 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 	return deployment, op, err
 }
 
-func (r *DesignateReconciler) mdnsDeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateMdns, controllerutil.OperationResult, error) {
-	deployment := &designatev1beta1.DesignateMdns{
+func (r *DesignateReconciler) mdnsDaemonSetCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateMdns, controllerutil.OperationResult, error) {
+	daemonset := &designatev1beta1.DesignateMdns{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-mdns", instance.Name),
 			Namespace: instance.Namespace,
 		},
 	}
 
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateMdns
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, daemonset, func() error {
+		daemonset.Spec = instance.Spec.DesignateMdns
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
-		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
-		deployment.Spec.Secret = instance.Spec.Secret
-		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
-		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
+		daemonset.Spec.ServiceUser = instance.Spec.ServiceUser
+		daemonset.Spec.DatabaseHostname = instance.Status.DatabaseHostname
+		daemonset.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
+		daemonset.Spec.Secret = instance.Spec.Secret
+		daemonset.Spec.TransportURLSecret = instance.Status.TransportURLSecret
+		daemonset.Spec.ServiceAccount = instance.RbacResourceName()
+		daemonset.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
+		if len(daemonset.Spec.NodeSelector) == 0 {
+			daemonset.Spec.NodeSelector = instance.Spec.NodeSelector
 		}
 
-		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
+		err := controllerutil.SetControllerReference(instance, daemonset, r.Scheme)
 		if err != nil {
 			return err
 		}
@@ -1319,7 +1319,7 @@ func (r *DesignateReconciler) mdnsDeploymentCreateOrUpdate(ctx context.Context, 
 		return nil
 	})
 
-	return deployment, op, err
+	return daemonset, op, err
 }
 
 func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateProducer, controllerutil.OperationResult, error) {
