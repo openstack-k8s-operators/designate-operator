@@ -494,7 +494,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 		// verify if network attachment matches expectations
 		networkReady := false
 		networkAttachmentStatus := map[string][]string{}
-		if *(instance.Spec.Replicas) > 0 {
+		if instance.Spec.Replicas != nil && *(instance.Spec.Replicas) > 0 {
 			networkReady, networkAttachmentStatus, err = nad.VerifyNetworkStatusFromAnnotation(
 				ctx,
 				helper,
@@ -524,7 +524,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 			return ctrl.Result{}, err
 		}
 
-		if instance.Status.ReadyCount == *instance.Spec.Replicas {
+		if instance.Spec.Replicas != nil && instance.Status.ReadyCount == *instance.Spec.Replicas {
 			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 		}
 	}
