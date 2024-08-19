@@ -22,7 +22,6 @@ set -ex
 export PASSWORD=${AdminPassword:?"Please specify a AdminPassword variable."}
 export TRANSPORTURL=${TransportURL:-""}
 export BACKENDURL=${BackendURL:-"redis://redis:6379/"}
-export BACKENDTYPE=${BackendType:-"None"}
 
 VERBOSE="True"
 
@@ -96,38 +95,6 @@ if [ -n "$TRANSPORTURL" ]; then
 fi
 if [ -n "$BACKENDURL" ]; then
     crudini --set ${SVC_CFG_MERGED} coordination backend_url $BACKENDURL
-fi
-
-# Determine what the backend we are using and initialize accordingly.
-if [ "$BACKENDTYPE" == "bind9" ]; then
-    msgout "INFO" "bind9 setup"
-    # setup some critical env vars
-    BIND_SERVICE_NAME=named
-    BIND_CFG_DIR=/etc/named
-    BIND_CFG_FILE=/etc/named/named.conf
-    BIND_VAR_DIR=/var/named
-    BIND_CACHE_DIR=/var/cache/named
-    BIND_USER=named
-    BIND_GROUP=named
-    BIND_PORT=53
-    RNDC_PORT=953
-    MYIPADDR=$(hostname --ip-address)
-
-    setup_bind9
-
-    # change the tags to values
-    sudo sed -i 's/IPV4ADDR/'$MYIPADDR'/g' $BIND_CFG_FILE
-    sudo sed -i 's/BINDPORT/'$BIND_PORT'/g' $BIND_CFG_FILE
-    sudo sed -i 's/RNDCPORT/'$RNDC_PORT'/g' $BIND_CFG_FILE
-
-    sed -i 's/IPV4ADDR/'$MYIPADDR'/g' $BIND_CFG_DIR/rndc.conf
-    sed -i 's/RNDCPORT/'$RNDC_PORT'/g' $BIND_CFG_DIR/rndc.conf
-
-
-elif [ "$BACKENDTYPE" = "unbound" ]; then
-    msgout "INFO" "unbound setup ****UNDER CONSTRUCTION***"
-elif [ "$BACKENDTYPE" = "byo" ]; then
-    msgout "INFO" "BYO server setup ****UNDER CONSTRUCTION***"
 fi
 
 # NOTE:dkehn - REMOVED because Kolla_set & start copy eveyrthing.
