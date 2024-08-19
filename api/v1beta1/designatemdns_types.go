@@ -46,13 +46,6 @@ type DesignateMdnsSpecBase struct {
 	DesignateTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:default=1
-	// +kubebuilder:validation:Maximum=32
-	// +kubebuilder:validation:Minimum=0
-	// Replicas - Designate Mdns Replicas
-	Replicas *int32 `json:"replicas"`
-
-	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname
 	DatabaseHostname string `json:"databaseHostname,omitempty"`
 
@@ -73,6 +66,9 @@ type DesignateMdnsSpecBase struct {
 type DesignateMdnsStatus struct {
 	// ReadyCount of designate MDNS instances
 	ReadyCount int32 `json:"readyCount,omitempty"`
+
+	// DesiredNumberScheduled - total number of the nodes which should be running Daemon
+	DesiredNumberScheduled int32 `json:"desiredNumberScheduled,omitempty"`
 
 	// Map of hashes to track e.g. job status
 	Hash map[string]string `json:"hash,omitempty"`
@@ -121,5 +117,6 @@ func init() {
 
 // IsReady - returns true if service is ready to serve requests
 func (instance DesignateMdns) IsReady() bool {
-	return instance.Status.ReadyCount == *(instance.Spec.Replicas)
+	return instance.Status.Conditions.IsTrue(condition.DeploymentReadyCondition) &&
+		instance.Status.Conditions.IsTrue(condition.NetworkAttachmentsReadyCondition)
 }

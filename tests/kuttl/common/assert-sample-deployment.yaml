@@ -12,8 +12,6 @@ spec:
     replicas: 1
   designateCentral:
     replicas: 1
-  designateMdns:
-    replicas: 1
   designateWorker:
     replicas: 1
   designateProducer:
@@ -26,7 +24,7 @@ spec:
 status:
   designateAPIReadyCount: 1
   designateCentralReadyCount: 1
-  designateMdnsReadyCount: 1
+  # designateMdnsReadyCount: 1
   designateProducerReadyCount: 1
   designateWorkerReadyCount: 1
   designateUnboundReadyCount: 1
