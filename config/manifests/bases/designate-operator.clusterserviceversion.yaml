@@ -4,8 +4,8 @@ metadata:
   annotations:
     alm-examples: '[]'
     capabilities: Basic Install
-    features.operators.openshift.io/fips-compliant: "true"
     features.operators.openshift.io/disconnected: "true"
+    features.operators.openshift.io/fips-compliant: "true"
     features.operators.openshift.io/proxy-aware: "false"
     features.operators.openshift.io/tls-profiles: "false"
     features.operators.openshift.io/token-auth-aws: "false"
@@ -34,31 +34,73 @@ spec:
       displayName: Designate API
       kind: DesignateAPI
       name: designateapis.designate.openstack.org
+      specDescriptors:
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: tls
+      - description: API tls type which encapsulates for API services
+        displayName: API
+        path: tls.api
       version: v1beta1
     - description: DesignateCentral is the Schema for the designatecentral API
       displayName: Designate Central
       kind: DesignateCentral
       name: designatecentrals.designate.openstack.org
+      specDescriptors:
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: tls
       version: v1beta1
     - description: DesignateMdns is the Schema for the designatemdnses API
       displayName: Designate Mdns
       kind: DesignateMdns
       name: designatemdnses.designate.openstack.org
+      specDescriptors:
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: tls
       version: v1beta1
     - description: DesignateProducer is the Schema for the designateproducer API
       displayName: Designate Producer
       kind: DesignateProducer
       name: designateproducers.designate.openstack.org
+      specDescriptors:
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: tls
       version: v1beta1
     - description: Designate is the Schema for the designates API
       displayName: Designate
       kind: Designate
       name: designates.designate.openstack.org
+      specDescriptors:
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: designateAPI.tls
+      - description: API tls type which encapsulates for API services
+        displayName: API
+        path: designateAPI.tls.api
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: designateCentral.tls
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: designateMdns.tls
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: designateProducer.tls
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: designateWorker.tls
       version: v1beta1
     - description: DesignateWorker is the Schema for the designateworker API
       displayName: Designate Worker
       kind: DesignateWorker
       name: designateworkers.designate.openstack.org
+      specDescriptors:
+      - description: TLS - Parameters related to the TLS
+        displayName: TLS
+        path: tls
       version: v1beta1
   description: Designate Operator
   displayName: Designate Operator
