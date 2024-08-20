@@ -151,44 +151,6 @@ spec:
           name: public-tls-certs
           readOnly: true
           subPath: tls.key
-      # - env:
-      #   - name: CONFIG_HASH
-      #   - name: KOLLA_CONFIG_STRATEGY
-      #   imagePullPolicy: IfNotPresent
-      #   livenessProbe:
-      #     failureThreshold: 3
-      #     httpGet:
-      #       path: /healthcheck
-      #       port: 9001
-      #       scheme: HTTPS
-      #     initialDelaySeconds: 3
-      #     periodSeconds: 13
-      #     successThreshold: 1
-      #     timeoutSeconds: 15
-      #   readinessProbe:
-      #     failureThreshold: 3
-      #     httpGet:
-      #       path: /healthcheck
-      #       port: 9001
-      #       scheme: HTTPS
-      #     initialDelaySeconds: 5
-      #     periodSeconds: 15
-      #     successThreshold: 1
-      #     timeoutSeconds: 15
-      #   volumeMounts:
-      #   - mountPath: /usr/local/bin/container-scripts
-      #     name: scripts
-      #     readOnly: true
-      #   - mountPath: /var/lib/config-data/merged
-      #     name: config-data-merged
-      #   - mountPath: /var/lib/kolla/config_files/config.json
-      #     name: config-data-merged
-      #     readOnly: true
-      #     subPath: designate-driver-agent-config.json
-      #   - mountPath: /etc/my.cnf
-      #     name: config-data
-      #   - mountPath: /run/designate
-      #     name: designate-run
       initContainers:
       - args:
         - -c
