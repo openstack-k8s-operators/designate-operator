@@ -16,6 +16,8 @@ limitations under the License.
 package designatemdns
 
 import (
+	"fmt"
+
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	designate "github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
@@ -42,6 +44,11 @@ func DaemonSet(
 ) *appsv1.DaemonSet {
 	rootUser := int64(0)
 
+	volumes := designate.GetVolumes(
+		designate.GetOwningDesignateName(instance),
+	)
+	volumeMounts := designate.GetVolumeMounts("designate-mdns")
+
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
 		TimeoutSeconds:      15,
@@ -67,6 +74,14 @@ func DaemonSet(
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
+	serviceName := fmt.Sprintf("%s-mdns", designate.ServiceName)
+
+	// Add the CA bundle
+	if instance.Spec.TLS.CaBundleSecretName != "" {
+		volumes = append(volumes, instance.Spec.TLS.CreateVolume())
+		volumeMounts = append(volumeMounts, instance.Spec.TLS.CreateVolumeMounts(nil)...)
+	}
+
 	daemonset := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Name,
@@ -84,12 +99,10 @@ func DaemonSet(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: instance.Spec.ServiceAccount,
-					Volumes: designate.GetVolumes(
-						designate.GetOwningDesignateName(instance),
-					),
+					Volumes:            volumes,
 					Containers: []corev1.Container{
 						{
-							Name: designate.ServiceName + "-mdns",
+							Name: serviceName,
 							Command: []string{
 								"/bin/bash",
 							},
@@ -99,7 +112,7 @@ func DaemonSet(
 								RunAsUser: &rootUser,
 							},
 							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:   designate.GetServiceVolumeMounts("designate-mdns"),
+							VolumeMounts:   volumeMounts,
 							Resources:      instance.Spec.Resources,
 							ReadinessProbe: readinessProbe,
 							LivenessProbe:  livenessProbe,
@@ -117,7 +130,7 @@ func DaemonSet(
 	daemonset.Spec.Template.Spec.Affinity = affinity.DistributePods(
 		common.AppSelector,
 		[]string{
-			designate.ServiceName,
+			serviceName,
 		},
 		corev1.LabelHostname,
 	)

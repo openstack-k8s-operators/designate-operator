@@ -21,14 +21,8 @@ spec:
   customServiceConfig: |
     [DEFAULT]
     debug = true
-status:
-  designateAPIReadyCount: 1
-  designateCentralReadyCount: 1
-  # designateMdnsReadyCount: 1
-  designateProducerReadyCount: 1
-  designateWorkerReadyCount: 1
-  designateUnboundReadyCount: 1
-  transportURLSecret: rabbitmq-transport-url-designate-designate-transport
+# status:
+#   transportURLSecret: rabbitmq-transport-url-designate-designate-transport
 ---
 apiVersion: v1
 kind: Service
