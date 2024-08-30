@@ -14,24 +14,41 @@
             "perm": "0600"
         },
         {
+            "source": "/var/lib/config-data/merged/my.cnf",
+            "dest": "/etc/my.cnf",
+            "owner": "designate",
+            "perm": "0644"
+        },
+        {
             "source": "/var/lib/config-data/merged/httpd.conf",
             "dest": "/etc/httpd/conf/httpd.conf",
             "owner": "root",
             "perm": "0644"
         },
         {
-            "source": "/var/lib/config-data/merged/logging.conf",
-            "dest": "/etc/designate/logging.conf",
+            "source": "/var/lib/config-data/merged/ssl.conf",
+            "dest": "/etc/httpd/conf.d/ssl.conf",
             "owner": "root",
             "perm": "0644"
+        },
+        {
+            "source": "/var/lib/config-data/tls/certs/*",
+            "dest": "/etc/pki/tls/certs/",
+            "owner": "designate",
+            "perm": "0440",
+            "optional": true,
+            "merge": true
+        },
+        {
+            "source": "/var/lib/config-data/tls/private/*",
+            "dest": "/etc/pki/tls/private/",
+            "owner": "designate",
+            "perm": "0400",
+            "optional": true,
+            "merge": true
         }
     ],
     "permissions": [
-        {
-            "path": "/var/log/designate",
-            "owner": "designate:designate",
-            "recurse": true
-        },
         {
             "path": "/run/designate",
             "owner": "designate:designate",
