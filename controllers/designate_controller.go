@@ -1016,7 +1016,6 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	//
 	Log := r.GetLogger(ctx)
 
-	Log := r.GetLogger(ctx)
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), map[string]string{})
 	replicas := int(*instance.Spec.DesignateBackendbind9.Replicas)
 
