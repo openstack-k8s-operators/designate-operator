@@ -19,10 +19,6 @@ set -ex
 # copies the result to the ephemeral /var/lib/config-data/merged volume.
 #
 # Secrets are obtained from ENV variables.
-export PASSWORD=${AdminPassword:?"Please specify a AdminPassword variable."}
-export TRANSPORTURL=${TransportURL:-""}
-export BACKENDURL=${BackendURL:-"redis://redis:6379/"}
-
 VERBOSE="True"
 
 SVC_CFG=/etc/designate/designate.conf
@@ -87,15 +83,6 @@ function setup_bind9 {
 for dir in /var/lib/config-data/default; do
     merge_config_dir ${dir}
 done
-
-# set secrets in the config-data
-crudini --set ${SVC_CFG_MERGED} keystone_authtoken password $PASSWORD
-if [ -n "$TRANSPORTURL" ]; then
-    crudini --set ${SVC_CFG_MERGED} DEFAULT transport_url $TRANSPORTURL
-fi
-if [ -n "$BACKENDURL" ]; then
-    crudini --set ${SVC_CFG_MERGED} coordination backend_url $BACKENDURL
-fi
 
 # NOTE:dkehn - REMOVED because Kolla_set & start copy eveyrthing.
 # I'm doing this to get the designate.conf w/all the tags with values.
