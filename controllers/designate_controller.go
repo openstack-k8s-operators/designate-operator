@@ -23,6 +23,7 @@ import (
 
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1059,9 +1060,65 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	// - %-config configmap holding minimal designate config required to get the service up, user can add additional files to be added to the service
 	// - parameters which has passwords gets added from the ospSecret via the init container
 	//
+	Log := r.GetLogger(ctx)
 
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), map[string]string{})
+	replicas := int(*instance.Spec.DesignateBackendbind9.Replicas)
 
+	// Get the secret first by providing the same name and namespace
+	secret := &corev1.Secret{}
+	err := h.GetClient().Get(ctx, types.NamespacedName{
+		Name:      designate.DesignateBindKeySecret,
+		Namespace: instance.Namespace,
+	}, secret)
+
+	// Define the secret if it is not found
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		Log.Error(err, "Failed to fetch secret")
+		return err
+	} else if k8s_errors.IsNotFound(err) {
+		secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      designate.DesignateBindKeySecret,
+				Namespace: instance.Namespace,
+			},
+		}
+	}
+
+	// Update the secret if it exists, instantiate it otherwise
+	_, err = controllerutil.CreateOrUpdate(ctx, h.GetClient(), secret, func() error {
+		secret.Labels = cmLabels
+		if secret.Data == nil {
+			secret.Data = make(map[string][]byte)
+		}
+		newKeysMap := make(map[string][]byte)
+
+		for i := 0; i < replicas; i++ {
+			keyName := fmt.Sprintf("%s-%v", designate.DesignateRndcKey, i)
+
+			if key, exists := secret.Data[keyName]; exists {
+				newKeysMap[keyName] = key
+				Log.Info(fmt.Sprintf("key %s existed and therefore was not added", keyName))
+			} else {
+				// If key doesn't exist, generate a new one
+				rndcKeyContent, err := designate.CreateRndcKeySecret()
+				if err != nil {
+					return err
+				}
+				newKeysMap[keyName] = []byte(rndcKeyContent)
+				Log.Info(fmt.Sprintf("key %s did not exist, was created and added", keyName))
+			}
+		}
+		secret.Data = newKeysMap
+		return nil
+	})
+
+	if err != nil {
+		Log.Error(err, "Failed to create or update secret")
+		return err
+	}
+
+	// TLS handling
 	var tlsCfg *tls.Service
 	if instance.Spec.DesignateAPI.TLS.Ca.CaBundleSecretName != "" {
 		tlsCfg = &tls.Service{}
@@ -1118,7 +1175,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 		},
 	}
 
-	err := oko_secret.EnsureSecrets(ctx, h, instance, cms, envVars)
+	err = oko_secret.EnsureSecrets(ctx, h, instance, cms, envVars)
 	if err != nil {
 		return err
 	}

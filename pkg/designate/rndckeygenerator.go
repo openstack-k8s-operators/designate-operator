@@ -20,6 +20,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"log"
 	"math/big"
 )
@@ -65,5 +66,12 @@ func CreateRndcKeySecret() (string, error) {
 
 	// Encode to base64
 	secret := base64.StdEncoding.EncodeToString(digest)
-	return secret, nil
+
+	// Format the key content according to the required structure
+	rndcKeyContent := fmt.Sprintf(`key "rndc-key" {
+		algorithm hmac-sha256;
+		secret "%s";
+	};`, secret)
+
+	return rndcKeyContent, nil
 }
