@@ -27,7 +27,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	// "k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -43,11 +42,10 @@ func Deployment(
 	annotations map[string]string,
 ) *appsv1.Deployment {
 	rootUser := int64(0)
+	serviceName := fmt.Sprintf("%s-worker", designate.ServiceName)
 
-	volumes := designate.GetVolumes(
-		designate.GetOwningDesignateName(instance),
-	)
-	volumeMounts := designate.GetVolumeMounts("designate-worker")
+	volumes := GetVolumes(designate.GetOwningDesignateName(instance))
+	volumeMounts := GetVolumeMounts(serviceName)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -72,8 +70,6 @@ func Deployment(
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
-
-	serviceName := fmt.Sprintf("%s-worker", designate.ServiceName)
 
 	// Add the CA bundle
 	if instance.Spec.TLS.CaBundleSecretName != "" {
