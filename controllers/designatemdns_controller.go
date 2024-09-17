@@ -220,7 +220,7 @@ func (r *DesignateMdnsReconciler) SetupWithManager(ctx context.Context, mgr ctrl
 		return err
 	}
 
-	svcSecretFn := func(ctx context.Context, o client.Object) []reconcile.Request {
+	svcSecretFn := func(_ context.Context, o client.Object) []reconcile.Request {
 		var namespace string = o.GetNamespace()
 		var secretName string = o.GetName()
 		result := []reconcile.Request{}
@@ -253,7 +253,7 @@ func (r *DesignateMdnsReconciler) SetupWithManager(ctx context.Context, mgr ctrl
 	}
 
 	// watch for configmap where the CM owner label AND the CR.Spec.ManagingCrName label matches
-	configMapFn := func(ctx context.Context, o client.Object) []reconcile.Request {
+	configMapFn := func(_ context.Context, o client.Object) []reconcile.Request {
 		result := []reconcile.Request{}
 
 		// get all Mdns CRs
