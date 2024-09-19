@@ -34,4 +34,8 @@ const (
 	DesignatePublicPort int32 = 9001
 	// DesignateInternalPort -
 	DesignateInternalPort int32 = 9001
+
+	DesignateBindKeySecret = "designate-bind-secret"
+
+	DesignateRndcKey = "rndc-key"
 )
