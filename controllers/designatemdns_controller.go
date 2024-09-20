@@ -466,7 +466,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	//
 
 	serviceLabels := map[string]string{
-		common.AppSelector:       designate.ServiceName,
+		common.AppSelector:       instance.ObjectMeta.Name,
 		common.ComponentSelector: designatemdns.Component,
 	}
 
@@ -720,7 +720,7 @@ func (r *DesignateMdnsReconciler) generateServiceConfigMaps(
 	// - %-config-data configmap holding custom config for the service's designate.conf
 	//
 
-	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), map[string]string{})
+	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
 
 	db, err := mariadbv1.GetDatabaseByNameAndAccount(ctx, h, designate.DatabaseName, instance.Spec.DatabaseAccount, instance.Namespace)
 	if err != nil {

@@ -403,7 +403,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	//
 
 	serviceLabels := map[string]string{
-		common.AppSelector:       designate.ServiceName,
+		common.AppSelector:       instance.ObjectMeta.Name,
 		common.ComponentSelector: designatebackendbind9.Component,
 	}
 
@@ -652,7 +652,7 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 	// - %-config-data configmap holding custom config for the service's designate.conf
 	//
 
-	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), serviceLabels)
+	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), serviceLabels)
 
 	// customData hold any customization for the service.
 	// custom.conf is going to be merged into /etc/designate/conder.conf
