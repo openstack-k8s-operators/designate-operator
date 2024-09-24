@@ -256,7 +256,7 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	// TODO: We also need a watch func to monitor for changes to the secret referenced by Designate.Spec.Secret
 	Log := r.GetLogger(ctx)
 
-	transportURLSecretFn := func(ctx context.Context, o client.Object) []reconcile.Request {
+	transportURLSecretFn := func(_ context.Context, o client.Object) []reconcile.Request {
 		result := []reconcile.Request{}
 
 		// get all Designate CRs

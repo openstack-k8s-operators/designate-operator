@@ -240,7 +240,7 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Watch for changes to any CustomServiceConfigSecrets. Global secrets
 	// (e.g. TransportURLSecret) are handled by the top designate controller.
-	svcSecretFn := func(ctx context.Context, o client.Object) []reconcile.Request {
+	svcSecretFn := func(_ context.Context, o client.Object) []reconcile.Request {
 		var namespace string = o.GetNamespace()
 		var secretName string = o.GetName()
 		result := []reconcile.Request{}
@@ -273,7 +273,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 	}
 
 	// watch for configmap where the CM owner label AND the CR.Spec.ManagingCrName label matches
-	configMapFn := func(ctx context.Context, o client.Object) []reconcile.Request {
+	configMapFn := func(_ context.Context, o client.Object) []reconcile.Request {
 		result := []reconcile.Request{}
 
 		// get all Backendbind9 CRs

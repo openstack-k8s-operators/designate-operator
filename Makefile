@@ -50,7 +50,7 @@ endif
 DEFAULT_IMG ?= quay.io/openstack-k8s-operators/designate-operator:latest
 IMG ?= $(DEFAULT_IMG)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.28.0
+ENVTEST_K8S_VERSION = 1.29
 
 CRDDESC_OVERRIDE ?= :maxDescLen=0
 
@@ -185,6 +185,7 @@ OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
 KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.11.1
 OPERATOR_SDK_VERSION ?= v1.31.0
+GOTOOLCHAIN_VERSION ?= go1.21.0
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -305,7 +306,7 @@ golint: get-ci-tools
 
 .PHONY: gowork
 gowork: ## Generate go.work file to support our multi module repository
-	test -f go.work || go work init
+	test -f go.work || GOTOOLCHAIN=$(GOTOOLCHAIN_VERSION) go work init
 	go work use .
 	go work use ./api
 	go work sync
