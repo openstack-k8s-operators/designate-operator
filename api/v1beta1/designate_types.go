@@ -176,6 +176,11 @@ type DesignateSpecBase struct {
 	// Resources - Compute Resources required by this service (Limits/Requests).
 	// https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:default=designate
+	// DesignateNetworkAttachment is a NetworkAttachment resource name for the Designate Control Network
+	DesignateNetworkAttachment string `json:"designateNetworkAttachment"`
 }
 
 // DesignateStatus defines the observed state of Designate

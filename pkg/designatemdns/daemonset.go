@@ -43,11 +43,9 @@ func DaemonSet(
 	annotations map[string]string,
 ) *appsv1.DaemonSet {
 	rootUser := int64(0)
-
-	volumes := designate.GetVolumes(
-		designate.GetOwningDesignateName(instance),
-	)
-	volumeMounts := designate.GetVolumeMounts("designate-mdns")
+	serviceName := fmt.Sprintf("%s-mdns", designate.ServiceName)
+	volumes := GetVolumes(designate.GetOwningDesignateName(instance))
+	volumeMounts := GetVolumeMounts(serviceName)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -73,8 +71,6 @@ func DaemonSet(
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
-
-	serviceName := fmt.Sprintf("%s-mdns", designate.ServiceName)
 
 	// Add the CA bundle
 	if instance.Spec.TLS.CaBundleSecretName != "" {
