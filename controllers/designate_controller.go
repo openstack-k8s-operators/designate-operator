@@ -714,6 +714,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	Log.Info("Deployment API task reconciled")
 
+	// Handle Mdns predictable IPs configmap
 	nad, err := nad.GetNADWithName(ctx, helper, instance.Spec.DesignateNetworkAttachment, instance.Namespace)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -722,31 +723,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	networkParameters, err := designate.GetNetworkParametersFromNAD(nad)
 	if err != nil {
 		return ctrl.Result{}, err
-	}
-
-	nodeConfigMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      designate.MdnsPredIPConfigMap,
-			Namespace: instance.GetNamespace(),
-			Labels:    labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{}),
-		},
-		Data: make(map[string]string),
-	}
-
-	// Look for existing config map and if exists, read existing data and match
-	// against nodes.
-	foundMap := &corev1.ConfigMap{}
-	err = helper.GetClient().Get(ctx, types.NamespacedName{Name: designate.MdnsPredIPConfigMap, Namespace: instance.GetNamespace()},
-		foundMap)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			Log.Info(fmt.Sprintf("Ip map %s doesn't exist, creating.", designate.MdnsPredIPConfigMap))
-		} else {
-			return ctrl.Result{}, err
-		}
-	} else {
-		Log.Info("Retrieved existing map, updating..")
-		nodeConfigMap.Data = foundMap.Data
 	}
 
 	//
@@ -760,6 +736,28 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// Fetch allocated ips from Mdns and Bind config maps and store them in allocatedIPs
+	mdnsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+	mdnsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.MdnsPredIPConfigMap, mdnsLabels)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	bindLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+	bindConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.BindPredIPConfigMap, bindLabels)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	allocatedIPs := make(map[string]bool)
+	for _, predIP := range bindConfigMap.Data {
+		allocatedIPs[predIP] = true
+	}
+	for _, predIP := range mdnsConfigMap.Data {
+		allocatedIPs[predIP] = true
+	}
+
 	// Get a list of the nodes in the cluster
 
 	// TODO(oschwart):
@@ -772,51 +770,48 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	updatedMap := make(map[string]string)
-	allocatedIPs := make(map[string]bool)
-	var predictableIPsRequired []string
 
-	// First scan existing allocations so we can keep existing allocations.
-	// Keeping track of what's required and what already exists. If a node is
-	// removed from the cluster, it's IPs will not be added to the allocated
-	// list and are effectively recycled.
+	var nodeNames []string
 	for _, node := range nodes.Items {
-		nodeName := fmt.Sprintf("mdns_%s", node.Name)
-		if ipValue, ok := nodeConfigMap.Data[nodeName]; ok {
-			updatedMap[nodeName] = ipValue
-			allocatedIPs[ipValue] = true
-			Log.Info(fmt.Sprintf("%s has IP mapping %s: %s", node.Name, nodeName, ipValue))
-		} else {
-			predictableIPsRequired = append(predictableIPsRequired, nodeName)
-		}
-	}
-	// Get new IPs using the range from predictableIPParmas minus the
-	// allocatedIPs captured above.
-	Log.Info(fmt.Sprintf("Allocating %d predictable IPs", len(predictableIPsRequired)))
-	for _, nodeName := range predictableIPsRequired {
-		nodeIP, err := designate.GetNextIP(predictableIPParams, allocatedIPs)
-		if err != nil {
-			// An error here is really unexpected- it means either we have
-			// messed up the allocatedIPs list or the range we are assuming is
-			// too small for the number of mdns pod.
-			return ctrl.Result{}, err
-		}
-		updatedMap[nodeName] = nodeIP
+		nodeNames = append(nodeNames, fmt.Sprintf("mdns_%s", node.Name))
 	}
 
-	mapLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
-	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), nodeConfigMap, func() error {
-		nodeConfigMap.Labels = util.MergeStringMaps(nodeConfigMap.Labels, mapLabels)
-		nodeConfigMap.Data = updatedMap
-		err := controllerutil.SetControllerReference(instance, nodeConfigMap, helper.GetScheme())
-		if err != nil {
-			return err
-		}
-		return nil
+	updatedMap, allocatedIPs, err := r.allocatePredictableIPs(ctx, predictableIPParams, nodeNames, mdnsConfigMap.Data, allocatedIPs)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), mdnsConfigMap, func() error {
+		mdnsConfigMap.Labels = util.MergeStringMaps(mdnsConfigMap.Labels, mdnsLabels)
+		mdnsConfigMap.Data = updatedMap
+		return controllerutil.SetControllerReference(instance, mdnsConfigMap, helper.GetScheme())
 	})
 
 	if err != nil {
 		Log.Info("Unable to create config map for mdns ips...")
+		return ctrl.Result{}, err
+	}
+
+	// Handle Bind predictable IPs configmap
+	bindReplicaCount := int(*instance.Spec.DesignateBackendbind9.Replicas)
+	var bindNames []string
+	for i := 0; i < bindReplicaCount; i++ {
+		bindNames = append(bindNames, fmt.Sprintf("bind_address_%d", i))
+	}
+
+	updatedBindMap, _, err := r.allocatePredictableIPs(ctx, predictableIPParams, bindNames, bindConfigMap.Data, allocatedIPs)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), bindConfigMap, func() error {
+		bindConfigMap.Labels = util.MergeStringMaps(bindConfigMap.Labels, bindLabels)
+		bindConfigMap.Data = updatedBindMap
+		return controllerutil.SetControllerReference(instance, bindConfigMap, helper.GetScheme())
+	})
+
+	if err != nil {
+		Log.Info("Unable to create config map for bind ips...")
 		return ctrl.Result{}, err
 	}
 
@@ -1080,6 +1075,73 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil
+}
+
+func (r *DesignateReconciler) handleConfigMap(ctx context.Context, helper *helper.Helper, instance *designatev1beta1.Designate, configMapName string, labels map[string]string) (*corev1.ConfigMap, error) {
+	Log := r.GetLogger(ctx)
+
+	nodeConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: instance.GetNamespace(),
+			Labels:    labels,
+		},
+		Data: make(map[string]string),
+	}
+
+	// Look for existing config map and if exists, read existing data and match
+	// against nodes.
+	foundMap := &corev1.ConfigMap{}
+	err := helper.GetClient().Get(ctx, types.NamespacedName{Name: configMapName, Namespace: instance.GetNamespace()}, foundMap)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			Log.Info(fmt.Sprintf("Ip map %s doesn't exist, creating.", configMapName))
+		} else {
+			return nil, err
+		}
+	} else {
+		Log.Info("Retrieved existing map, updating..")
+		nodeConfigMap.Data = foundMap.Data
+	}
+
+	return nodeConfigMap, nil
+}
+
+func (r *DesignateReconciler) allocatePredictableIPs(ctx context.Context, predictableIPParams *designate.NADIpam, nodeNames []string, existingMap map[string]string, allocatedIPs map[string]bool) (map[string]string, map[string]bool, error) {
+	Log := r.GetLogger(ctx)
+
+	updatedMap := make(map[string]string)
+	var predictableIPsRequired []string
+
+	// First scan existing allocations so we can keep existing allocations.
+	// Keeping track of what's required and what already exists. If a node is
+	// removed from the cluster, it's IPs will not be added to the allocated
+	// list and are effectively recycled.
+	for _, nodeName := range nodeNames {
+		if ipValue, ok := existingMap[nodeName]; ok {
+			updatedMap[nodeName] = ipValue
+			allocatedIPs[ipValue] = true
+			Log.Info(fmt.Sprintf("%s has IP mapping: %s", nodeName, ipValue))
+		} else {
+			predictableIPsRequired = append(predictableIPsRequired, nodeName)
+		}
+	}
+
+	// Get new IPs using the range from predictableIPParmas minus the
+	// allocatedIPs captured above.
+	Log.Info(fmt.Sprintf("Allocating %d predictable IPs", len(predictableIPsRequired)))
+	for _, nodeName := range predictableIPsRequired {
+		ipAddress, err := designate.GetNextIP(predictableIPParams, allocatedIPs)
+		if err != nil {
+			// An error here is really unexpected- it means either we have
+			// messed up the allocatedIPs list or the range we are assuming is
+			// too small for the number of mdns pod.
+			return nil, nil, err
+		}
+		updatedMap[nodeName] = ipAddress
+	}
+
+	return updatedMap, allocatedIPs, nil
 }
 
 func (r *DesignateReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.Designate) (ctrl.Result, error) {

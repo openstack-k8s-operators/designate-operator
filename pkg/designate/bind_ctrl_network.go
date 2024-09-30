@@ -36,21 +36,12 @@ func GetPredictableIPAM(networkParameters *NetworkParameters) (*NADIpam, error) 
 	return predParams, nil
 }
 
-// GetNextIP picks the next available IP from the range defined by a NADIpam,
-// skipping ones that are already used appear as keys in the currentValues map.
-func GetNextIP(predParams *NADIpam, currentValues map[string]bool) (string, error) {
-	candidateAddress := predParams.RangeStart
-	for alloced := true; alloced; {
-
-		if _, ok := currentValues[candidateAddress.String()]; ok {
-			if candidateAddress == predParams.RangeEnd {
-				return "", fmt.Errorf("predictable IPs: out of available addresses")
-			}
-			candidateAddress = candidateAddress.Next()
-		} else {
-			alloced = false
+func GetNextIP(predParams *NADIpam, allocatedIPs map[string]bool) (string, error) {
+	for candidateAddress := predParams.RangeStart; candidateAddress != predParams.RangeEnd; candidateAddress = candidateAddress.Next() {
+		if !allocatedIPs[candidateAddress.String()] {
+			allocatedIPs[candidateAddress.String()] = true
+			return candidateAddress.String(), nil
 		}
 	}
-	currentValues[candidateAddress.String()] = true
-	return candidateAddress.String(), nil
+	return "", fmt.Errorf("predictable IPs: out of available addresses")
 }

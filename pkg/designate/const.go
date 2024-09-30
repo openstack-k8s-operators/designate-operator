@@ -40,4 +40,6 @@ const (
 	DesignateRndcKey = "rndc-key"
 
 	MdnsPredIPConfigMap = "designate-mdns-ip-map"
+
+	BindPredIPConfigMap = "designate-bind-ip-map"
 )
