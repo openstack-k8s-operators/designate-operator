@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: designate-ns-records-params
+data:
+  ns_records: |
+    - host: host1
+      priority: 1
+    - host: host2
+      priority: 2
