@@ -815,6 +815,33 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
+	// Ensure pools.yaml configmap
+	poolsYamlConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      designate.PoolsYamlsConfigMap,
+			Namespace: instance.GetNamespace(),
+			Labels:    bindLabels,
+		},
+		Data: make(map[string]string),
+	}
+	poolsYaml, err := generatePoolsYamlFile(ctx, helper, instance)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	Log.Info(fmt.Sprintf("pools.yaml content is %v", poolsYaml))
+	updatedPoolsYaml := make(map[string]string)
+	updatedPoolsYaml[designate.PoolsYamlsConfigMap] = poolsYaml
+
+	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), poolsYamlConfigMap, func() error {
+		poolsYamlConfigMap.Labels = util.MergeStringMaps(poolsYamlConfigMap.Labels, bindLabels)
+		poolsYamlConfigMap.Data = updatedPoolsYaml
+		return controllerutil.SetControllerReference(instance, poolsYamlConfigMap, helper.GetScheme())
+	})
+	if err != nil {
+		Log.Info("Unable to create config map for pools.yaml file")
+		return ctrl.Result{}, err
+	}
+
 	// deploy designate-central
 	designateCentral, op, err := r.centralDeploymentCreateOrUpdate(ctx, instance)
 	if err != nil {
@@ -1095,7 +1122,7 @@ func (r *DesignateReconciler) handleConfigMap(ctx context.Context, helper *helpe
 	err := helper.GetClient().Get(ctx, types.NamespacedName{Name: configMapName, Namespace: instance.GetNamespace()}, foundMap)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
-			Log.Info(fmt.Sprintf("Ip map %s doesn't exist, creating.", configMapName))
+			Log.Info(fmt.Sprintf("configmap %s doesn't exist, creating.", configMapName))
 		} else {
 			return nil, err
 		}
@@ -1142,6 +1169,45 @@ func (r *DesignateReconciler) allocatePredictableIPs(ctx context.Context, predic
 	}
 
 	return updatedMap, allocatedIPs, nil
+}
+
+func generatePoolsYamlFile(ctx context.Context, h *helper.Helper, instance *designatev1beta1.Designate) (string, error) {
+	bindPredIPMap := &corev1.ConfigMap{}
+	err := h.GetClient().Get(ctx, types.NamespacedName{Name: designate.BindPredIPConfigMap, Namespace: instance.GetNamespace()}, bindPredIPMap)
+	if err != nil {
+		return "", err
+	}
+
+	mdnsPredIPMap := &corev1.ConfigMap{}
+	err = h.GetClient().Get(ctx, types.NamespacedName{Name: designate.MdnsPredIPConfigMap, Namespace: instance.GetNamespace()}, mdnsPredIPMap)
+	if err != nil {
+		return "", err
+	}
+	attributesInternal := map[string]string{
+		"pool_level": "default",
+		"type":       "internal",
+	}
+	poolsData := []designate.PoolData{
+		{
+			MdnsMap:    mdnsPredIPMap.Data,
+			BindMap:    bindPredIPMap.Data,
+			Attributes: attributesInternal,
+		},
+	}
+	attributesExternal := map[string]string{
+		"pool_level": "default",
+		"type":       "external",
+	}
+	poolsData = append(poolsData, designate.PoolData{
+		MdnsMap:    mdnsPredIPMap.Data,
+		BindMap:    bindPredIPMap.Data,
+		Attributes: attributesExternal,
+	})
+	poolsYaml, err := designate.GeneratePoolsYamlFile(poolsData)
+	if err != nil {
+		return "", err
+	}
+	return poolsYaml, err
 }
 
 func (r *DesignateReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.Designate) (ctrl.Result, error) {
