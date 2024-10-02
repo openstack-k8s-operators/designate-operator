@@ -627,12 +627,12 @@ var _ = Describe("Designate controller", func() {
 			Expect(nsRecordsConfigMap).ToNot(BeNil())
 
 			poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
-				Name:      designate.PoolsYamlsConfigMap,
+				Name:      designate.PoolsYamlConfigMap,
 				Namespace: namespace})
 			Expect(poolsYamlConfigMap).ToNot(BeNil())
 
 			var pools []designate.Pool
-			err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlsConfigMap]), &pools)
+			err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlConfigMap]), &pools)
 			Expect(err).ToNot(HaveOccurred())
 
 			validate := validator.New()

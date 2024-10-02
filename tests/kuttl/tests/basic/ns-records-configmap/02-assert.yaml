@@ -4,7 +4,7 @@ metadata:
   name: designate-ns-records-params
 data:
   ns_records: |
-    - hostname: ns1.example.com
+    - hostname: ns1.example.com.
       priority: 1
-    - hostname: ns2.example.com
+    - hostname: ns2.example.com.
       priority: 2

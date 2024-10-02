@@ -833,7 +833,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if len(nsRecordsConfigMap.Data) > 0 {
 		poolsYamlConfigMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      designate.PoolsYamlsConfigMap,
+				Name:      designate.PoolsYamlConfigMap,
 				Namespace: instance.GetNamespace(),
 				Labels:    bindLabels,
 			},
@@ -845,7 +845,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		}
 		Log.Info(fmt.Sprintf("pools.yaml content is\n%v", poolsYaml))
 		updatedPoolsYaml := make(map[string]string)
-		updatedPoolsYaml[designate.PoolsYamlsConfigMap] = poolsYaml
+		updatedPoolsYaml[designate.PoolsYamlContent] = poolsYaml
 
 		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), poolsYamlConfigMap, func() error {
 			poolsYamlConfigMap.Labels = util.MergeStringMaps(poolsYamlConfigMap.Labels, bindLabels)
@@ -864,9 +864,36 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		_, changed, err := r.createHashOfInputHashes(ctx, instance, designate.PoolsYamlHash, poolsYamlsEnvVars, configMaps)
 		if err != nil {
 			return ctrl.Result{}, err
-		} else if changed {
-			// launch the pool update job
-			Log.Info("Creating a pool update job")
+		}
+		if changed {
+			Log.Info("PoolsYamlHash has changed, creating a pool update job")
+
+			var poolUpdateHash string
+			var ok bool
+			if poolUpdateHash, ok = instance.Status.Hash[designatev1beta1.PoolUpdateHash]; !ok {
+				instance.Status.Hash[designatev1beta1.PoolUpdateHash] = ""
+				poolUpdateHash = ""
+			}
+			jobDef := designate.PoolUpdateJob(instance, serviceLabels, serviceAnnotations)
+
+			Log.Info("Initializing pool update job")
+			poolUpdatejob := job.NewJob(
+				jobDef,
+				designatev1beta1.PoolUpdateHash,
+				instance.Spec.PreserveJobs,
+				time.Duration(15)*time.Second,
+				poolUpdateHash,
+			)
+			_, err = poolUpdatejob.DoJob(ctx, helper)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolUpdatejob.GetHash()
+			err = r.Client.Status().Update(ctx, instance)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			Log.Info("Pool update job completed successfully")
 		}
 	}
 
