@@ -16,12 +16,13 @@ package designate
 import (
 	"bytes"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
+	"path"
 	"text/template"
+
+	"gopkg.in/yaml.v2"
+
+	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 )
 
 type Pool struct {
@@ -131,16 +132,16 @@ func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (st
 		CatalogZone: nil, // set to catalogZone if this section should be presented
 	}
 
-	poolsYamlPath, err := getPoolsYamlPath()
+	opTemplates, err := util.GetTemplatesPath()
 	if err != nil {
 		return "", err
 	}
-
-	PoolsYaml, err := os.ReadFile(poolsYamlPath)
+	poolsYamlPath := path.Join(opTemplates, PoolsYamlPath)
+	poolsYaml, err := os.ReadFile(poolsYamlPath)
 	if err != nil {
 		return "", err
 	}
-	tmpl, err := template.New("pool").Parse(string(PoolsYaml))
+	tmpl, err := template.New("pool").Parse(string(poolsYaml))
 	if err != nil {
 		return "", err
 	}
@@ -152,14 +153,4 @@ func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (st
 	}
 
 	return buf.String(), nil
-}
-
-// We have this function so different tests could find PoolsYamlPath
-func getPoolsYamlPath() (string, error) {
-	cmdOut, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get repository root directory from: %s because of %w", string(cmdOut), err)
-	}
-	repoRoot := strings.TrimSpace(string(cmdOut))
-	return filepath.Join(repoRoot, PoolsYamlPath), nil
 }
