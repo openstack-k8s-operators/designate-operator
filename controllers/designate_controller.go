@@ -729,82 +729,119 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
-	// Fetch allocated ips from Mdns and Bind config maps and store them in allocatedIPs
-	mdnsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
-	mdnsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.MdnsPredIPConfigMap, mdnsLabels)
+	nsRecordsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+	nsRecordsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.NsRecordsConfigMap, nsRecordsLabels)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	bindLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
-	bindConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.BindPredIPConfigMap, bindLabels)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+	Log.Info(fmt.Sprintf("nsRecordsConfigMap is: %v", nsRecordsConfigMap))
 
-	allocatedIPs := make(map[string]bool)
-	for _, predIP := range bindConfigMap.Data {
-		allocatedIPs[predIP] = true
-	}
-	for _, predIP := range mdnsConfigMap.Data {
-		allocatedIPs[predIP] = true
-	}
+	if len(nsRecordsConfigMap.Data) > 0 {
+		// Fetch allocated ips from Mdns and Bind config maps and store them in allocatedIPs
+		mdnsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+		mdnsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.MdnsPredIPConfigMap, mdnsLabels)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
-	// Get a list of the nodes in the cluster
+		bindLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+		bindConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.BindPredIPConfigMap, bindLabels)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
-	// TODO(oschwart):
-	// * confirm whether or not this lists only the nodes we want (i.e. ones
-	// that will host the daemonset)
-	// * do we want to provide a mechanism to temporarily disabling this list
-	// for maintenance windows where nodes might be "coming and going"
+		allocatedIPs := make(map[string]bool)
+		for _, predIP := range bindConfigMap.Data {
+			allocatedIPs[predIP] = true
+		}
+		for _, predIP := range mdnsConfigMap.Data {
+			allocatedIPs[predIP] = true
+		}
 
-	nodes, err := helper.GetKClient().CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+		// Get a list of the nodes in the cluster
 
-	var nodeNames []string
-	for _, node := range nodes.Items {
-		nodeNames = append(nodeNames, fmt.Sprintf("mdns_%s", node.Name))
-	}
+		// TODO(oschwart):
+		// * confirm whether or not this lists only the nodes we want (i.e. ones
+		// that will host the daemonset)
+		// * do we want to provide a mechanism to temporarily disabling this list
+		// for maintenance windows where nodes might be "coming and going"
 
-	updatedMap, allocatedIPs, err := r.allocatePredictableIPs(ctx, predictableIPParams, nodeNames, mdnsConfigMap.Data, allocatedIPs)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+		nodes, err := helper.GetKClient().CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
-	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), mdnsConfigMap, func() error {
-		mdnsConfigMap.Labels = util.MergeStringMaps(mdnsConfigMap.Labels, mdnsLabels)
-		mdnsConfigMap.Data = updatedMap
-		return controllerutil.SetControllerReference(instance, mdnsConfigMap, helper.GetScheme())
-	})
+		var nodeNames []string
+		for _, node := range nodes.Items {
+			nodeNames = append(nodeNames, fmt.Sprintf("mdns_%s", node.Name))
+		}
 
-	if err != nil {
-		Log.Info("Unable to create config map for mdns ips...")
-		return ctrl.Result{}, err
-	}
+		updatedMap, allocatedIPs, err := r.allocatePredictableIPs(ctx, predictableIPParams, nodeNames, mdnsConfigMap.Data, allocatedIPs)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 
-	// Handle Bind predictable IPs configmap
-	bindReplicaCount := int(*instance.Spec.DesignateBackendbind9.Replicas)
-	var bindNames []string
-	for i := 0; i < bindReplicaCount; i++ {
-		bindNames = append(bindNames, fmt.Sprintf("bind_address_%d", i))
-	}
+		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), mdnsConfigMap, func() error {
+			mdnsConfigMap.Labels = util.MergeStringMaps(mdnsConfigMap.Labels, mdnsLabels)
+			mdnsConfigMap.Data = updatedMap
+			return controllerutil.SetControllerReference(instance, mdnsConfigMap, helper.GetScheme())
+		})
 
-	updatedBindMap, _, err := r.allocatePredictableIPs(ctx, predictableIPParams, bindNames, bindConfigMap.Data, allocatedIPs)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+		if err != nil {
+			Log.Info("Unable to create config map for mdns ips...")
+			return ctrl.Result{}, err
+		}
 
-	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), bindConfigMap, func() error {
-		bindConfigMap.Labels = util.MergeStringMaps(bindConfigMap.Labels, bindLabels)
-		bindConfigMap.Data = updatedBindMap
-		return controllerutil.SetControllerReference(instance, bindConfigMap, helper.GetScheme())
-	})
+		// Handle Bind predictable IPs configmap
+		bindReplicaCount := int(*instance.Spec.DesignateBackendbind9.Replicas)
+		var bindNames []string
+		for i := 0; i < bindReplicaCount; i++ {
+			bindNames = append(bindNames, fmt.Sprintf("bind_address_%d", i))
+		}
 
-	if err != nil {
-		Log.Info("Unable to create config map for bind ips...")
-		return ctrl.Result{}, err
+		updatedBindMap, _, err := r.allocatePredictableIPs(ctx, predictableIPParams, bindNames, bindConfigMap.Data, allocatedIPs)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), bindConfigMap, func() error {
+			bindConfigMap.Labels = util.MergeStringMaps(bindConfigMap.Labels, bindLabels)
+			bindConfigMap.Data = updatedBindMap
+			return controllerutil.SetControllerReference(instance, bindConfigMap, helper.GetScheme())
+		})
+
+		if err != nil {
+			Log.Info("Unable to create config map for bind ips...")
+			return ctrl.Result{}, err
+		}
+
+		// Ensure pools.yaml configmap
+		poolsYamlConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      designate.PoolsYamlsConfigMap,
+				Namespace: instance.GetNamespace(),
+				Labels:    bindLabels,
+			},
+			Data: make(map[string]string),
+		}
+		poolsYaml, err := generatePoolsYamlFile(ctx, helper, instance)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		Log.Info(fmt.Sprintf("pools.yaml content is %v", poolsYaml))
+		updatedPoolsYaml := make(map[string]string)
+		updatedPoolsYaml[designate.PoolsYamlsConfigMap] = poolsYaml
+
+		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), poolsYamlConfigMap, func() error {
+			poolsYamlConfigMap.Labels = util.MergeStringMaps(poolsYamlConfigMap.Labels, bindLabels)
+			poolsYamlConfigMap.Data = updatedPoolsYaml
+			return controllerutil.SetControllerReference(instance, poolsYamlConfigMap, helper.GetScheme())
+		})
+		if err != nil {
+			Log.Info("Unable to create config map for pools.yaml file")
+			return ctrl.Result{}, err
+		}
 	}
 
 	// deploy designate-central
@@ -1087,7 +1124,7 @@ func (r *DesignateReconciler) handleConfigMap(ctx context.Context, helper *helpe
 	err := helper.GetClient().Get(ctx, types.NamespacedName{Name: configMapName, Namespace: instance.GetNamespace()}, foundMap)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
-			Log.Info(fmt.Sprintf("Ip map %s doesn't exist, creating.", configMapName))
+			Log.Info(fmt.Sprintf("configmap %s doesn't exist, creating.", configMapName))
 		} else {
 			return nil, err
 		}
@@ -1133,6 +1170,45 @@ func (r *DesignateReconciler) allocatePredictableIPs(ctx context.Context, predic
 	}
 
 	return updatedMap, allocatedIPs, nil
+}
+
+func generatePoolsYamlFile(ctx context.Context, h *helper.Helper, instance *designatev1beta1.Designate) (string, error) {
+	bindPredIPMap := &corev1.ConfigMap{}
+	err := h.GetClient().Get(ctx, types.NamespacedName{Name: designate.BindPredIPConfigMap, Namespace: instance.GetNamespace()}, bindPredIPMap)
+	if err != nil {
+		return "", err
+	}
+
+	mdnsPredIPMap := &corev1.ConfigMap{}
+	err = h.GetClient().Get(ctx, types.NamespacedName{Name: designate.MdnsPredIPConfigMap, Namespace: instance.GetNamespace()}, mdnsPredIPMap)
+	if err != nil {
+		return "", err
+	}
+	attributesInternal := map[string]string{
+		"pool_level": "default",
+		"type":       "internal",
+	}
+	poolsData := []designate.PoolData{
+		{
+			MdnsMap:    mdnsPredIPMap.Data,
+			BindMap:    bindPredIPMap.Data,
+			Attributes: attributesInternal,
+		},
+	}
+	attributesExternal := map[string]string{
+		"pool_level": "default",
+		"type":       "external",
+	}
+	poolsData = append(poolsData, designate.PoolData{
+		MdnsMap:    mdnsPredIPMap.Data,
+		BindMap:    bindPredIPMap.Data,
+		Attributes: attributesExternal,
+	})
+	poolsYaml, err := designate.GeneratePoolsYamlFile(poolsData)
+	if err != nil {
+		return "", err
+	}
+	return poolsYaml, err
 }
 
 func (r *DesignateReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.Designate) (ctrl.Result, error) {

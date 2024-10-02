@@ -554,7 +554,7 @@ spec:
                     description: Replicas - Designate Backendbind9 Replicas
                     format: int32
                     maximum: 32
-                    minimum: 0
+                    minimum: 1
                     type: integer
                   resources:
                     description: Resources - Compute Resources required by this service

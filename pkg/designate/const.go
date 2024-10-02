@@ -41,5 +41,11 @@ const (
 
 	MdnsPredIPConfigMap = "designate-mdns-ip-map"
 
+	NsRecordsConfigMap = "designate-ns-records-map"
+
 	BindPredIPConfigMap = "designate-bind-ip-map"
+
+	RndcConfDir = "/etc/designate/rndc-keys"
+
+	PoolsYamlsConfigMap = "designate-pools-yaml-config-map"
 )
