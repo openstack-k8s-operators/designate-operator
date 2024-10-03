@@ -487,7 +487,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
-	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
+	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, helper, instance, configMapVars)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -798,12 +798,30 @@ func (r *DesignateWorkerReconciler) generateServiceConfigMaps(
 // returns the hash, whether the hash changed (as a bool) and any error
 func (r *DesignateWorkerReconciler) createHashOfInputHashes(
 	ctx context.Context,
+	h *helper.Helper,
 	instance *designatev1beta1.DesignateWorker,
 	envVars map[string]env.Setter,
 ) (string, bool, error) {
 	Log := r.GetLogger(ctx)
 	var hashMap map[string]string
 	changed := false
+
+	// If DesignateBindKeySecret exists, add its hash to status hash
+	rndcSecret := &corev1.Secret{}
+	err := h.GetClient().Get(ctx, types.NamespacedName{
+		Name:      designate.DesignateBindKeySecret,
+		Namespace: instance.Namespace,
+	}, rndcSecret)
+	if err != nil {
+		Log.Error(err, "Unable to retrieve rndc key secret")
+		return "", false, err
+	}
+	secretHash, err := secret.Hash(rndcSecret)
+	if err != nil {
+		return secretHash, changed, err
+	}
+
+	envVars[designate.DesignateBindKeySecret] = env.SetValue(secretHash)
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
 	hash, err := util.ObjectHash(mergedMapVars)
 	if err != nil {

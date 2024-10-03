@@ -940,6 +940,11 @@ spec:
                 required:
                 - containerImage
                 type: object
+              designateNetworkAttachment:
+                default: designate
+                description: DesignateNetworkAttachment is a NetworkAttachment resource
+                  name for the Designate Control Network
+                type: string
               designateProducer:
                 description: DesignateProducer - Spec definition for the Producer
                   service of this Designate deployment
@@ -1473,6 +1478,7 @@ spec:
             - designateBackendbind9
             - designateCentral
             - designateMdns
+            - designateNetworkAttachment
             - designateProducer
             - designateWorker
             - rabbitMqClusterName

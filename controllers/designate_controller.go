@@ -115,6 +115,7 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=keystone.openstack.org,resources=keystoneapis,verbs=get;list;watch
 // +kubebuilder:rbac:groups=rabbitmq.openstack.org,resources=transporturls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list
 
 // service account, role, rolebinding
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch
@@ -712,6 +713,112 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 	Log.Info("Deployment API task reconciled")
+
+	nad, err := nad.GetNADWithName(ctx, helper, instance.Spec.DesignateNetworkAttachment, instance.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	networkParameters, err := designate.GetNetworkParametersFromNAD(nad)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	nodeConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      designate.MdnsPredIPConfigMap,
+			Namespace: instance.GetNamespace(),
+			Labels:    labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{}),
+		},
+		Data: make(map[string]string),
+	}
+
+	// Look for existing config map and if exists, read existing data and match
+	// against nodes.
+	foundMap := &corev1.ConfigMap{}
+	err = helper.GetClient().Get(ctx, types.NamespacedName{Name: designate.MdnsPredIPConfigMap, Namespace: instance.GetNamespace()},
+		foundMap)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			Log.Info(fmt.Sprintf("Ip map %s doesn't exist, creating.", designate.MdnsPredIPConfigMap))
+		} else {
+			return ctrl.Result{}, err
+		}
+	} else {
+		Log.Info("Retrieved existing map, updating..")
+		nodeConfigMap.Data = foundMap.Data
+	}
+
+	//
+	// Predictable IPs.
+	//
+	// NOTE(oschwart): refactoring this might be nice. This could also  be
+	// optimized but the data sets are small (nodes an IP ranges are less than
+	// 100) so optimization might be a waste.
+	//
+	predictableIPParams, err := designate.GetPredictableIPAM(networkParameters)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	// Get a list of the nodes in the cluster
+
+	// TODO(oschwart):
+	// * confirm whether or not this lists only the nodes we want (i.e. ones
+	// that will host the daemonset)
+	// * do we want to provide a mechanism to temporarily disabling this list
+	// for maintenance windows where nodes might be "coming and going"
+
+	nodes, err := helper.GetKClient().CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	updatedMap := make(map[string]string)
+	allocatedIPs := make(map[string]bool)
+	var predictableIPsRequired []string
+
+	// First scan existing allocations so we can keep existing allocations.
+	// Keeping track of what's required and what already exists. If a node is
+	// removed from the cluster, it's IPs will not be added to the allocated
+	// list and are effectively recycled.
+	for _, node := range nodes.Items {
+		nodeName := fmt.Sprintf("mdns_%s", node.Name)
+		if ipValue, ok := nodeConfigMap.Data[nodeName]; ok {
+			updatedMap[nodeName] = ipValue
+			allocatedIPs[ipValue] = true
+			Log.Info(fmt.Sprintf("%s has IP mapping %s: %s", node.Name, nodeName, ipValue))
+		} else {
+			predictableIPsRequired = append(predictableIPsRequired, nodeName)
+		}
+	}
+	// Get new IPs using the range from predictableIPParmas minus the
+	// allocatedIPs captured above.
+	Log.Info(fmt.Sprintf("Allocating %d predictable IPs", len(predictableIPsRequired)))
+	for _, nodeName := range predictableIPsRequired {
+		nodeIP, err := designate.GetNextIP(predictableIPParams, allocatedIPs)
+		if err != nil {
+			// An error here is really unexpected- it means either we have
+			// messed up the allocatedIPs list or the range we are assuming is
+			// too small for the number of mdns pod.
+			return ctrl.Result{}, err
+		}
+		updatedMap[nodeName] = nodeIP
+	}
+
+	mapLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), nodeConfigMap, func() error {
+		nodeConfigMap.Labels = util.MergeStringMaps(nodeConfigMap.Labels, mapLabels)
+		nodeConfigMap.Data = updatedMap
+		err := controllerutil.SetControllerReference(instance, nodeConfigMap, helper.GetScheme())
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		Log.Info("Unable to create config map for mdns ips...")
+		return ctrl.Result{}, err
+	}
 
 	// deploy designate-central
 	designateCentral, op, err := r.centralDeploymentCreateOrUpdate(ctx, instance)
