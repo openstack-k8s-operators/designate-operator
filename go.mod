@@ -4,14 +4,14 @@ go 1.21
 
 require (
 	github.com/go-logr/logr v1.4.2
-	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.4.0
+	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.4
 	github.com/onsi/ginkgo/v2 v2.20.1
 	github.com/onsi/gomega v1.34.1
 	github.com/openstack-k8s-operators/designate-operator/api v0.1.1-0.20240807132522-6c2eca7c6bbb
-	github.com/openstack-k8s-operators/infra-operator/apis v0.4.1-0.20240924160156-ab5ffca21875
-	github.com/openstack-k8s-operators/keystone-operator/api v0.4.1-0.20240924153427-7c76cf130db3
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.4.1-0.20240925091112-d0fa8e528283
-	github.com/openstack-k8s-operators/mariadb-operator/api v0.4.1-0.20240926100023-0398f9bb0ba5
+	github.com/openstack-k8s-operators/infra-operator/apis v0.4.1-0.20241007092425-6a8834a432f2
+	github.com/openstack-k8s-operators/keystone-operator/api v0.4.1-0.20241007094639-47b983c3ab77
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.4.1-0.20241007071524-66e6544525a3
+	github.com/openstack-k8s-operators/mariadb-operator/api v0.4.1-0.20241003090345-178862fb12c3
 	k8s.io/api v0.29.9
 	k8s.io/apimachinery v0.29.9
 	k8s.io/client-go v0.29.9
@@ -48,8 +48,8 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/openshift/api v3.9.0+incompatible // indirect
-	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.4.1-0.20240926101719-8fc1c3da53f7 // indirect
-	github.com/openstack-k8s-operators/lib-common/modules/storage v0.4.1-0.20240926101719-8fc1c3da53f7 // indirect
+	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.4.1-0.20241007071524-66e6544525a3 // indirect
+	github.com/openstack-k8s-operators/lib-common/modules/storage v0.4.1-0.20241007071524-66e6544525a3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.18.0 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
