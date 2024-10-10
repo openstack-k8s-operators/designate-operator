@@ -1,0 +1,36 @@
+{
+  "command": "/usr/sbin/named -g -d 3 -u named -c /etc/named.conf -f",
+  "config_files": [
+    {
+      "source": "/var/lib/config-data/merged/named.conf",
+      "dest": "/etc/named.conf",
+      "owner": "named:named",
+      "perm": "0644"
+    },
+	{
+      "source": "/var/lib/config-data/merged/named",
+      "dest": "/etc/named",
+      "owner": "named:named",
+      "perm": "0775"
+	}
+  ],
+  "permissions": [
+    {
+      "path": "/var/log/bind",
+      "owner": "root:named",
+      "recurse": "true",
+      "perm": "0775"
+    },
+    {
+      "path": "/var/named-persistent",
+      "owner": "root:named",
+      "perm": "0770"
+    },
+    {
+      "path": "/etc/named",
+      "owner": "named:named",
+      "recurse": "true",
+      "perm": "0775"
+    }
+  ]
+}

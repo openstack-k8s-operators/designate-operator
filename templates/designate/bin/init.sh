@@ -15,7 +15,7 @@
 # under the License.
 set -ex
 
-# This script generates the designate.conf/logging.conf file and
+# This script generates the designate.conf file and
 # copies the result to the ephemeral /var/lib/config-data/merged volume.
 #
 # Secrets are obtained from ENV variables.

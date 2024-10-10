@@ -1,4 +1,4 @@
-#!/bin//bash
+#!/bin/bash
 #
 # Copyright 2024 Red Hat Inc.
 #
@@ -15,27 +15,38 @@
 # under the License.
 set -ex
 
-# This script generates the designate.conf file and
-# copies the result to the ephemeral /var/lib/config-data/merged volume.
-#
-# Secrets are obtained from ENV variables.
-VERBOSE="True"
-
-SVC_CFG=/etc/designate/designate.conf
-SVC_CFG_MERGED=/var/lib/config-data/merged/designate.conf
-
 # expect that the common.sh is in the same dir as the calling script
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 . ${SCRIPTPATH}/common.sh --source-only
-
-# Copy default service config from container image as base
-cp -a ${SVC_CFG} ${SVC_CFG_MERGED}
 
 # Merge all templates from config CM
 for dir in /var/lib/config-data/default; do
     merge_config_dir ${dir}
 done
 
-# NOTE:dkehn - REMOVED because Kolla_set & start copy eveyrthing.
-# I'm doing this to get the designate.conf w/all the tags with values.
-cp -a ${SVC_CFG_MERGED} ${SVC_CFG}
+mkdir /var/lib/config-data/merged/named
+cp -f /var/lib/config-data/default/named/* /var/lib/config-data/merged/named/
+
+# Using the index for the podname, get the matching rndc key and copy it into the proper location
+
+if [[ -z "${POD_NAME}" ]]; then
+    echo "ERROR: requires the POD_NAME variable to be set"
+    exit 1
+fi
+if [[ -z "${RNDC_PREFIX}" ]]; then
+    rndc_prefix="rndc-key-"
+else
+    rndc_prefix="${RNDC_PREFIX}-"
+fi
+
+# get the index off of the pod name
+set -f
+name_parts=(${POD_NAME//-/ })
+pod_index="${name_parts[-1]}"
+rndc_key_filename="/var/lib/config-data/keys/${rndc_prefix}${pod_index}"
+if [[ -f "${rndc_key_filename}" ]]; then
+    cp ${rndc_key_filename} /var/lib/config-data/merged/named/rndc.key
+else
+    echo "ERROR: rndc key not found!"
+    exit 1
+fi
