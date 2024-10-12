@@ -8,10 +8,10 @@ require (
 	github.com/onsi/ginkgo/v2 v2.20.1
 	github.com/onsi/gomega v1.34.1
 	github.com/openstack-k8s-operators/designate-operator/api v0.1.1-0.20240807132522-6c2eca7c6bbb
-	github.com/openstack-k8s-operators/infra-operator/apis v0.4.1-0.20241007092425-6a8834a432f2
-	github.com/openstack-k8s-operators/keystone-operator/api v0.4.1-0.20241007094639-47b983c3ab77
+	github.com/openstack-k8s-operators/infra-operator/apis v0.4.1-0.20241010211630-1da98a9fb3f9
+	github.com/openstack-k8s-operators/keystone-operator/api v0.4.1-0.20241010164950-7b08059ab809
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.4.1-0.20241007071524-66e6544525a3
-	github.com/openstack-k8s-operators/mariadb-operator/api v0.4.1-0.20241003090345-178862fb12c3
+	github.com/openstack-k8s-operators/mariadb-operator/api v0.4.1-0.20241010184758-ab6bb1c87d6f
 	k8s.io/api v0.29.9
 	k8s.io/apimachinery v0.29.9
 	k8s.io/client-go v0.29.9
