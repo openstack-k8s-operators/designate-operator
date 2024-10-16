@@ -378,7 +378,7 @@ func (r *DesignateReconciler) reconcileInit(
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
-	_, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
+	_, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars, nil)
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if hashChanged {
@@ -738,6 +738,10 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	Log.Info(fmt.Sprintf("nsRecordsConfigMap is: %v", nsRecordsConfigMap))
 
 	if len(nsRecordsConfigMap.Data) > 0 {
+		envVars, err := r.getEnvVars(ctx, helper, instance)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 		// Fetch allocated ips from Mdns and Bind config maps and store them in allocatedIPs
 		mdnsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
 		mdnsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.MdnsPredIPConfigMap, mdnsLabels)
@@ -750,97 +754,110 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-
-		allocatedIPs := make(map[string]bool)
-		for _, predIP := range bindConfigMap.Data {
-			allocatedIPs[predIP] = true
-		}
-		for _, predIP := range mdnsConfigMap.Data {
-			allocatedIPs[predIP] = true
+		configMaps := []interface{}{
+			nsRecordsConfigMap.Data,
+			mdnsConfigMap.Data,
+			bindConfigMap.Data,
 		}
 
-		// Get a list of the nodes in the cluster
+		_, changed, err := r.createHashOfInputHashes(ctx, instance, envVars, configMaps)
 
-		// TODO(oschwart):
-		// * confirm whether or not this lists only the nodes we want (i.e. ones
-		// that will host the daemonset)
-		// * do we want to provide a mechanism to temporarily disabling this list
-		// for maintenance windows where nodes might be "coming and going"
-
-		nodes, err := helper.GetKClient().CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
-		var nodeNames []string
-		for _, node := range nodes.Items {
-			nodeNames = append(nodeNames, fmt.Sprintf("mdns_%s", node.Name))
-		}
+		if changed {
+			allocatedIPs := make(map[string]bool)
+			for _, predIP := range bindConfigMap.Data {
+				allocatedIPs[predIP] = true
+			}
+			for _, predIP := range mdnsConfigMap.Data {
+				allocatedIPs[predIP] = true
+			}
 
-		updatedMap, allocatedIPs, err := r.allocatePredictableIPs(ctx, predictableIPParams, nodeNames, mdnsConfigMap.Data, allocatedIPs)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+			// Get a list of the nodes in the cluster
 
-		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), mdnsConfigMap, func() error {
-			mdnsConfigMap.Labels = util.MergeStringMaps(mdnsConfigMap.Labels, mdnsLabels)
-			mdnsConfigMap.Data = updatedMap
-			return controllerutil.SetControllerReference(instance, mdnsConfigMap, helper.GetScheme())
-		})
+			// TODO(oschwart):
+			// * confirm whether or not this lists only the nodes we want (i.e. ones
+			// that will host the daemonset)
+			// * do we want to provide a mechanism to temporarily disabling this list
+			// for maintenance windows where nodes might be "coming and going"
 
-		if err != nil {
-			Log.Info("Unable to create config map for mdns ips...")
-			return ctrl.Result{}, err
-		}
+			nodes, err := helper.GetKClient().CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 
-		// Handle Bind predictable IPs configmap
-		bindReplicaCount := int(*instance.Spec.DesignateBackendbind9.Replicas)
-		var bindNames []string
-		for i := 0; i < bindReplicaCount; i++ {
-			bindNames = append(bindNames, fmt.Sprintf("bind_address_%d", i))
-		}
+			var nodeNames []string
+			for _, node := range nodes.Items {
+				nodeNames = append(nodeNames, fmt.Sprintf("mdns_%s", node.Name))
+			}
 
-		updatedBindMap, _, err := r.allocatePredictableIPs(ctx, predictableIPParams, bindNames, bindConfigMap.Data, allocatedIPs)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+			updatedMap, allocatedIPs, err := r.allocatePredictableIPs(ctx, predictableIPParams, nodeNames, mdnsConfigMap.Data, allocatedIPs)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
 
-		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), bindConfigMap, func() error {
-			bindConfigMap.Labels = util.MergeStringMaps(bindConfigMap.Labels, bindLabels)
-			bindConfigMap.Data = updatedBindMap
-			return controllerutil.SetControllerReference(instance, bindConfigMap, helper.GetScheme())
-		})
+			_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), mdnsConfigMap, func() error {
+				mdnsConfigMap.Labels = util.MergeStringMaps(mdnsConfigMap.Labels, mdnsLabels)
+				mdnsConfigMap.Data = updatedMap
+				return controllerutil.SetControllerReference(instance, mdnsConfigMap, helper.GetScheme())
+			})
 
-		if err != nil {
-			Log.Info("Unable to create config map for bind ips...")
-			return ctrl.Result{}, err
-		}
+			if err != nil {
+				Log.Info("Unable to create config map for mdns ips...")
+				return ctrl.Result{}, err
+			}
 
-		// Ensure pools.yaml configmap
-		poolsYamlConfigMap := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      designate.PoolsYamlsConfigMap,
-				Namespace: instance.GetNamespace(),
-				Labels:    bindLabels,
-			},
-			Data: make(map[string]string),
-		}
-		poolsYaml, err := generatePoolsYamlFile(ctx, helper, instance)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		Log.Info(fmt.Sprintf("pools.yaml content is %v", poolsYaml))
-		updatedPoolsYaml := make(map[string]string)
-		updatedPoolsYaml[designate.PoolsYamlsConfigMap] = poolsYaml
+			// Handle Bind predictable IPs configmap
+			bindReplicaCount := int(*instance.Spec.DesignateBackendbind9.Replicas)
+			var bindNames []string
+			for i := 0; i < bindReplicaCount; i++ {
+				bindNames = append(bindNames, fmt.Sprintf("bind_address_%d", i))
+			}
 
-		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), poolsYamlConfigMap, func() error {
-			poolsYamlConfigMap.Labels = util.MergeStringMaps(poolsYamlConfigMap.Labels, bindLabels)
-			poolsYamlConfigMap.Data = updatedPoolsYaml
-			return controllerutil.SetControllerReference(instance, poolsYamlConfigMap, helper.GetScheme())
-		})
-		if err != nil {
-			Log.Info("Unable to create config map for pools.yaml file")
-			return ctrl.Result{}, err
+			updatedBindMap, _, err := r.allocatePredictableIPs(ctx, predictableIPParams, bindNames, bindConfigMap.Data, allocatedIPs)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+
+			_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), bindConfigMap, func() error {
+				bindConfigMap.Labels = util.MergeStringMaps(bindConfigMap.Labels, bindLabels)
+				bindConfigMap.Data = updatedBindMap
+				return controllerutil.SetControllerReference(instance, bindConfigMap, helper.GetScheme())
+			})
+
+			if err != nil {
+				Log.Info("Unable to create config map for bind ips...")
+				return ctrl.Result{}, err
+			}
+
+			// Ensure pools.yaml configmap
+			poolsYamlConfigMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      designate.PoolsYamlsConfigMap,
+					Namespace: instance.GetNamespace(),
+					Labels:    bindLabels,
+				},
+				Data: make(map[string]string),
+			}
+			poolsYaml, err := generatePoolsYamlFile(ctx, helper, instance)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			Log.Info(fmt.Sprintf("pools.yaml content is %v", poolsYaml))
+			updatedPoolsYaml := make(map[string]string)
+			updatedPoolsYaml[designate.PoolsYamlsConfigMap] = poolsYaml
+
+			_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), poolsYamlConfigMap, func() error {
+				poolsYamlConfigMap.Labels = util.MergeStringMaps(poolsYamlConfigMap.Labels, bindLabels)
+				poolsYamlConfigMap.Data = updatedPoolsYaml
+				return controllerutil.SetControllerReference(instance, poolsYamlConfigMap, helper.GetScheme())
+			})
+			if err != nil {
+				Log.Info("Unable to create config map for pools.yaml file")
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -1415,6 +1432,127 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	return nil
 }
 
+func (r *DesignateReconciler) getEnvVars(
+	ctx context.Context,
+	h *helper.Helper,
+	instance *designatev1beta1.Designate,
+) (map[string]env.Setter, error) {
+
+	Log := r.GetLogger(ctx)
+	designateDb, err := mariadbv1.GetDatabaseByNameAndAccount(ctx, h, designate.DatabaseCRName, instance.Spec.DatabaseAccount, instance.Namespace)
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return nil, err
+	}
+
+	// TLS handling
+	var tlsCfg *tls.Service
+	if instance.Spec.DesignateAPI.TLS.Ca.CaBundleSecretName != "" {
+		tlsCfg = &tls.Service{}
+	}
+
+	// customData hold any customization for the service.
+	// custom.conf is going to /etc/<service>/<service>.conf.d
+	// all other files get placed into /etc/<service> to allow overwrite of e.g. policy.json
+	// TODO: make sure custom.conf can not be overwritten
+	customData := map[string]string{
+		common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig,
+		"my.cnf":                           designateDb.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
+	}
+
+	for key, data := range instance.Spec.DefaultConfigOverwrite {
+		customData[key] = data
+	}
+
+	databaseAccount := designateDb.GetAccount()
+	dbSecret := designateDb.GetSecret()
+
+	// We only need a minimal 00-config.conf that is only used by db-sync job,
+	// hence only passing the database related parameters
+	templateParameters := map[string]interface{}{
+		"MinimalConfig": true, // This tells the template to generate a minimal config
+		"DatabaseConnection": fmt.Sprintf("mysql+pymysql://%s:%s@%s/%s?read_default_file=/etc/my.cnf",
+			databaseAccount.Spec.UserName,
+			string(dbSecret.Data[mariadbv1.DatabasePasswordSelector]),
+			instance.Status.DatabaseHostname,
+			designate.DatabaseName,
+		),
+	}
+	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
+
+	transportURLSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Status.TransportURLSecret, instance.Namespace)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			Log.Info(fmt.Sprintf("TransportURL secret %s not found", instance.Status.TransportURLSecret))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return nil, err
+		}
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return nil, err
+	}
+	templateParameters["TransportURL"] = string(transportURLSecret.Data["transport_url"])
+
+	adminPasswordSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Spec.Secret, instance.Namespace)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			Log.Info(fmt.Sprintf("AdminPassword secret %s not found", instance.Spec.Secret))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return nil, err
+		}
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return nil, err
+	}
+	templateParameters["AdminPassword"] = string(adminPasswordSecret.Data["DesignatePassword"])
+
+	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), map[string]string{})
+	cms := []util.Template{
+		// ScriptsConfigMap
+		{
+			Name:               fmt.Sprintf("%s-scripts", instance.Name),
+			Namespace:          instance.Namespace,
+			Type:               util.TemplateTypeScripts,
+			InstanceType:       instance.Kind,
+			AdditionalTemplate: map[string]string{"common.sh": "/common/common.sh"},
+			Labels:             cmLabels,
+		},
+		// ConfigMap
+		{
+			Name:          fmt.Sprintf("%s-config-data", instance.Name),
+			Namespace:     instance.Namespace,
+			Type:          util.TemplateTypeConfig,
+			InstanceType:  instance.Kind,
+			CustomData:    customData,
+			ConfigOptions: templateParameters,
+			Labels:        cmLabels,
+		},
+	}
+
+	envVars := make(map[string]env.Setter)
+	err = oko_secret.EnsureSecrets(ctx, h, instance, cms, &envVars)
+	if err != nil {
+		return nil, err
+	}
+
+	return envVars, nil
+}
+
 // createHashOfInputHashes - creates a hash of hashes which gets added to the resources which requires a restart
 // if any of the input resources change, like configs, passwords, ...
 //
@@ -1423,22 +1561,43 @@ func (r *DesignateReconciler) createHashOfInputHashes(
 	ctx context.Context,
 	instance *designatev1beta1.Designate,
 	envVars map[string]env.Setter,
+	additionalConfigmaps []interface{},
 ) (string, bool, error) {
 	Log := r.GetLogger(ctx)
 
 	var hashMap map[string]string
 	changed := false
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
-	hash, err := util.ObjectHash(mergedMapVars)
+	combinedHashes := []string{}
+
+	envHash, err := util.ObjectHash(mergedMapVars)
 	if err != nil {
 		Log.Info("XXX - Error creating hash")
-		return hash, changed, err
+		return "", changed, err
 	}
-	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, hash); changed {
+	combinedHashes = append(combinedHashes, envHash)
+
+	for _, configMap := range additionalConfigmaps {
+		configMapHash, err := util.ObjectHash(configMap)
+		if err != nil {
+			Log.Info(fmt.Sprintf("Error creating hash for %v", configMap))
+			return "", changed, err
+		}
+		combinedHashes = append(combinedHashes, configMapHash)
+	}
+
+	finalHash, err := util.ObjectHash(combinedHashes)
+	if err != nil {
+		Log.Info("Error creating final hash")
+		return "", changed, err
+	}
+
+	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, finalHash); changed {
 		instance.Status.Hash = hashMap
-		Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
+		Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, finalHash))
 	}
-	return hash, changed, nil
+
+	return finalHash, changed, nil
 }
 
 func (r *DesignateReconciler) transportURLCreateOrUpdate(

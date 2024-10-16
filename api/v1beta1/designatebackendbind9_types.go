@@ -46,7 +46,7 @@ type DesignateBackendbind9SpecBase struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Maximum=32
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate Backendbind9 Replicas
 	Replicas *int32 `json:"replicas"`
 
