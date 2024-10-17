@@ -234,15 +234,6 @@ const (
 	tlsAPIPublicField       = ".spec.tls.api.public.secretName"
 )
 
-var (
-	allWatchFields = []string{
-		passwordSecretField,
-		caBundleSecretNameField,
-		tlsAPIInternalField,
-		tlsAPIPublicField,
-	}
-)
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// transportURLSecretFn - Watch for changes made to the secret associated with the RabbitMQ

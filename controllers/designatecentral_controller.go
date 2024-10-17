@@ -314,6 +314,11 @@ func (r *DesignateCentralReconciler) findObjectsForSrc(ctx context.Context, src 
 
 	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateCentral")
 
+	allWatchFields := []string{
+		passwordSecretField,
+		caBundleSecretNameField,
+	}
+
 	for _, field := range allWatchFields {
 		crList := &designatev1beta1.DesignateCentralList{}
 		listOps := &client.ListOptions{

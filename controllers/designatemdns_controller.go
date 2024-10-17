@@ -313,6 +313,11 @@ func (r *DesignateMdnsReconciler) findObjectsForSrc(ctx context.Context, src cli
 
 	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateMdns")
 
+	allWatchFields := []string{
+		passwordSecretField,
+		caBundleSecretNameField,
+	}
+
 	for _, field := range allWatchFields {
 		crList := &designatev1beta1.DesignateMdnsList{}
 		listOps := &client.ListOptions{
