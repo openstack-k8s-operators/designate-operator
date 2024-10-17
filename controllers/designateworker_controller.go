@@ -313,6 +313,11 @@ func (r *DesignateWorkerReconciler) findObjectsForSrc(ctx context.Context, src c
 
 	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateWorker")
 
+	allWatchFields := []string{
+		passwordSecretField,
+		caBundleSecretNameField,
+	}
+
 	for _, field := range allWatchFields {
 		crList := &designatev1beta1.DesignateWorkerList{}
 		listOps := &client.ListOptions{

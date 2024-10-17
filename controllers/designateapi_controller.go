@@ -359,6 +359,13 @@ func (r *DesignateAPIReconciler) findObjectsForSrc(ctx context.Context, src clie
 
 	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateAPI")
 
+	allWatchFields := []string{
+		passwordSecretField,
+		caBundleSecretNameField,
+		tlsAPIInternalField,
+		tlsAPIPublicField,
+	}
+
 	for _, field := range allWatchFields {
 		crList := &designatev1beta1.DesignateAPIList{}
 		listOps := &client.ListOptions{

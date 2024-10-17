@@ -313,6 +313,11 @@ func (r *DesignateProducerReconciler) findObjectsForSrc(ctx context.Context, src
 
 	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateProducer")
 
+	allWatchFields := []string{
+		passwordSecretField,
+		caBundleSecretNameField,
+	}
+
 	for _, field := range allWatchFields {
 		crList := &designatev1beta1.DesignateProducerList{}
 		listOps := &client.ListOptions{
