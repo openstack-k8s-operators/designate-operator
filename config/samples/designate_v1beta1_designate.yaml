@@ -22,12 +22,13 @@ spec:
   designateBackendbind9:
     secret: osp-secret
     serviceUser: designate
+    replicas: 1
     customServiceConfig: |
       [DEFAULT]
       debug = true
     databaseAccount: designate
     rabbitMqClusterName: rabbitmq
-    storageRequest: 1G
+    storageRequest: 10G
     storageClass: local-storage
     networkAttachments:
       - designate

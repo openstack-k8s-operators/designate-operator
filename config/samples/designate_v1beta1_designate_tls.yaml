@@ -43,12 +43,13 @@ spec:
       caBundleSecretName: combined-ca-bundle
   designateBackendbind9:
     databaseAccount: designate
+    replicas: 1
     serviceUser: designate
     secret: osp-secret
     customServiceConfig: |
       [DEFAULT]
       debug = true
-    storageRequest: 1G
+    storageRequest: 10G
     storageClass: local-storage
     networkAttachments:
       - designate

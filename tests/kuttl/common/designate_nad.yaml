@@ -1,0 +1,21 @@
+# Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+# reopened with the relevant failures.
+#
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: designate
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "name": "designate",
+      "type": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "172.28.0.0/24",
+        "range_start": "172.28.0.30",
+        "range_end": "172.28.0.70"
+      }
+    }
