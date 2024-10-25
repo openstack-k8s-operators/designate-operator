@@ -2,13 +2,11 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
   - script: |
-      cp ../../../../config/samples/designate_v1beta1_designate.yaml deploy
       # Do not modify the designate network attachment if it already
       # exists.
+      set -e
       if ! (oc get -n $NAMESPACE net-attach-def | grep designate);
       then
-         cp ../../common/designate_nad.yaml deploy
-      else
-         echo "" > deploy/designate_nad.yaml
+         cp ../../common/designate_nad.yaml .
+         oc apply -n $NAMESPACE -f designate_nad.yaml
       fi
-      oc kustomize deploy | oc apply -n $NAMESPACE -f -

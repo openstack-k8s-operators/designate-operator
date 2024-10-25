@@ -28,6 +28,8 @@ spec:
     customServiceConfig: |
       [DEFAULT]
       debug = true
+    networkAttachments:
+      - designate
     tls:
       caBundleSecretName: combined-ca-bundle
   designateCentral:
@@ -39,6 +41,18 @@ spec:
       debug = true
     tls:
       caBundleSecretName: combined-ca-bundle
+  designateBackendbind9:
+    databaseAccount: designate
+    replicas: 1
+    serviceUser: designate
+    secret: osp-secret
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    storageRequest: 10G
+    storageClass: local-storage
+    networkAttachments:
+      - designate
   designateWorker:
     databaseAccount: designate
     serviceUser: designate
@@ -46,6 +60,8 @@ spec:
     customServiceConfig: |
       [DEFAULT]
       debug = true
+    networkAttachments:
+      - designate
     tls:
       caBundleSecretName: combined-ca-bundle
   designateAPI:
