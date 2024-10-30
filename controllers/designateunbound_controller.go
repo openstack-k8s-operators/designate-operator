@@ -217,10 +217,10 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.ExposeServiceReadyCondition,
+			condition.CreateServiceReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			condition.ExposeServiceReadyErrorMessage,
+			condition.CreateServiceReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
@@ -230,14 +230,14 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	ctrlResult, err := svc.CreateOrPatch(ctx, helper)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.ExposeServiceReadyCondition,
+			condition.CreateServiceReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			condition.ExposeServiceReadyErrorMessage,
+			condition.CreateServiceReadyErrorMessage,
 			err.Error()))
 		return ctrlResult, err
 	}
-	instance.Status.Conditions.MarkTrue(condition.ExposeServiceReadyCondition, condition.ExposeServiceReadyMessage)
+	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
 
 	configMapVars := make(map[string]env.Setter)
 	err = r.generateServiceConfigMaps(ctx, instance, helper, &configMapVars)
