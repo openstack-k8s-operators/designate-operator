@@ -43,7 +43,6 @@ import (
 	designatemdns "github.com/openstack-k8s-operators/designate-operator/pkg/designatemdns"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/daemonset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
@@ -496,7 +495,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
-	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, helper, instance, configMapVars)
+	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -810,7 +809,6 @@ func (r *DesignateMdnsReconciler) generateServiceConfigMaps(
 // returns the hash, whether the hash changed (as a bool) and any error
 func (r *DesignateMdnsReconciler) createHashOfInputHashes(
 	ctx context.Context,
-	h *helper.Helper,
 	instance *designatev1beta1.DesignateMdns,
 	envVars map[string]env.Setter,
 ) (string, bool, error) {
@@ -818,21 +816,6 @@ func (r *DesignateMdnsReconciler) createHashOfInputHashes(
 
 	var hashMap map[string]string
 	changed := false
-
-	// If MdnsPredIPConfigMap exists, add its hash to status hash
-	mdnsPredIPCM := &corev1.ConfigMap{}
-	err := h.GetClient().Get(ctx, types.NamespacedName{
-		Name:      designate.MdnsPredIPConfigMap,
-		Namespace: instance.Namespace,
-	}, mdnsPredIPCM)
-	if err != nil {
-		Log.Error(err, "Unable to retrieve Mdns predictable IPs ConfigMap")
-		return "", false, err
-	}
-	mdnsPredIPCMHash, err := configmap.Hash(mdnsPredIPCM)
-	if err != nil {
-		return mdnsPredIPCMHash, changed, err
-	}
 
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
 	hash, err := util.ObjectHash(mergedMapVars)

@@ -833,6 +833,7 @@ func (r *DesignateWorkerReconciler) createHashOfInputHashes(
 	if err != nil {
 		return hash, changed, err
 	}
+
 	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, hash); changed {
 		instance.Status.Hash = hashMap
 		Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))

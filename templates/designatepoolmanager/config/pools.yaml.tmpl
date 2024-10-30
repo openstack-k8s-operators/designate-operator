@@ -1,0 +1,45 @@
+---
+- name: {{.Name}}
+  description: {{.Description}}
+  attributes: {
+    {{- range $key, $value := .Attributes }}
+    "{{ $key }}": "{{ $value }}",
+    {{- end }}
+  }
+
+  ns_records:
+    {{- range .NSRecords }}
+    - hostname: {{.Hostname}}
+      priority: {{.Priority}}
+    {{- end }}
+
+  nameservers:
+    {{- range .Nameservers }}
+    - host: {{.Host}}
+      port: {{.Port}}
+    {{- end }}
+
+  targets:
+    {{- range .Targets }}
+    - type: {{.Type}}
+      description: {{.Description}}
+
+      masters:
+        {{- range .Masters }}
+        - host: {{.Host}}
+          port: {{.Port}}
+        {{- end }}
+
+      options:
+        host: {{.Options.Host}}
+        port: {{.Options.Port}}
+        rndc_host: {{.Options.RNDCHost}}
+        rndc_port: {{.Options.RNDCPort}}
+        rndc_config_file: {{.Options.RNDCConfigFile}}
+    {{- end }}
+
+  {{- if .CatalogZone }}
+  catalog_zone:
+    catalog_zone_fqdn: {{.CatalogZone.FQDN}}
+    catalog_zone_refresh: '{{.CatalogZone.Refresh}}'
+  {{- end }}

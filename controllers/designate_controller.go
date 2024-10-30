@@ -378,7 +378,7 @@ func (r *DesignateReconciler) reconcileInit(
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
-	_, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
+	_, hashChanged, err := r.createHashOfInputHashes(ctx, instance, common.InputHashName, configMapVars, nil)
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if hashChanged {
@@ -742,6 +742,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
+	nsRecordsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+	nsRecordsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.NsRecordsConfigMap, nsRecordsLabels)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	allocatedIPs := make(map[string]bool)
 	for _, predIP := range bindConfigMap.Data {
 		allocatedIPs[predIP] = true
@@ -805,6 +811,49 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if err != nil {
 		Log.Info("Unable to create config map for bind ips...")
 		return ctrl.Result{}, err
+	}
+
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if len(nsRecordsConfigMap.Data) > 0 {
+		poolsYamlConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      designate.PoolsYamlsConfigMap,
+				Namespace: instance.GetNamespace(),
+				Labels:    bindLabels,
+			},
+			Data: make(map[string]string),
+		}
+		poolsYaml, err := designate.GeneratePoolsYamlData(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		Log.Info(fmt.Sprintf("pools.yaml content is\n%v", poolsYaml))
+		updatedPoolsYaml := make(map[string]string)
+		updatedPoolsYaml[designate.PoolsYamlsConfigMap] = poolsYaml
+
+		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), poolsYamlConfigMap, func() error {
+			poolsYamlConfigMap.Labels = util.MergeStringMaps(poolsYamlConfigMap.Labels, bindLabels)
+			poolsYamlConfigMap.Data = updatedPoolsYaml
+			return controllerutil.SetControllerReference(instance, poolsYamlConfigMap, helper.GetScheme())
+		})
+		if err != nil {
+			Log.Info("Unable to create config map for pools.yaml file")
+			return ctrl.Result{}, err
+		}
+		configMaps := []interface{}{
+			poolsYamlConfigMap.Data,
+		}
+
+		poolsYamlsEnvVars := make(map[string]env.Setter)
+		_, changed, err := r.createHashOfInputHashes(ctx, instance, designate.PoolsYamlHash, poolsYamlsEnvVars, configMaps)
+		if err != nil {
+			return ctrl.Result{}, err
+		} else if changed {
+			// launch the pool update job
+			Log.Info("Creating a pool update job")
+		}
 	}
 
 	// deploy designate-central
@@ -1087,7 +1136,7 @@ func (r *DesignateReconciler) handleConfigMap(ctx context.Context, helper *helpe
 	err := helper.GetClient().Get(ctx, types.NamespacedName{Name: configMapName, Namespace: instance.GetNamespace()}, foundMap)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
-			Log.Info(fmt.Sprintf("Ip map %s doesn't exist, creating.", configMapName))
+			Log.Info(fmt.Sprintf("configmap %s doesn't exist, creating.", configMapName))
 		} else {
 			return nil, err
 		}
@@ -1346,23 +1395,45 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 func (r *DesignateReconciler) createHashOfInputHashes(
 	ctx context.Context,
 	instance *designatev1beta1.Designate,
+	hashType string,
 	envVars map[string]env.Setter,
+	additionalConfigmaps []interface{},
 ) (string, bool, error) {
 	Log := r.GetLogger(ctx)
 
 	var hashMap map[string]string
 	changed := false
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
-	hash, err := util.ObjectHash(mergedMapVars)
+	combinedHashes := []string{}
+
+	envHash, err := util.ObjectHash(mergedMapVars)
 	if err != nil {
 		Log.Info("XXX - Error creating hash")
-		return hash, changed, err
+		return "", changed, err
 	}
-	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, hash); changed {
+	combinedHashes = append(combinedHashes, envHash)
+
+	for _, configMap := range additionalConfigmaps {
+		configMapHash, err := util.ObjectHash(configMap)
+		if err != nil {
+			Log.Info(fmt.Sprintf("Error creating hash for %v", configMap))
+			return "", changed, err
+		}
+		combinedHashes = append(combinedHashes, configMapHash)
+	}
+
+	finalHash, err := util.ObjectHash(combinedHashes)
+	if err != nil {
+		Log.Info("Error creating final hash")
+		return "", changed, err
+	}
+
+	if hashMap, changed = util.SetHash(instance.Status.Hash, hashType, finalHash); changed {
 		instance.Status.Hash = hashMap
-		Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
+		Log.Info(fmt.Sprintf("Input maps hash %s - %s", hashType, finalHash))
 	}
-	return hash, changed, nil
+
+	return finalHash, changed, nil
 }
 
 func (r *DesignateReconciler) transportURLCreateOrUpdate(
