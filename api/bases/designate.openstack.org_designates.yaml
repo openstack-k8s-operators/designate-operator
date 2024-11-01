@@ -713,6 +713,11 @@ spec:
                           password from the Secret
                         type: string
                     type: object
+                  redisHostIPs:
+                    description: List of Redis Host IP addresses
+                    items:
+                      type: string
+                    type: array
                   replicas:
                     default: 1
                     description: Replicas - Designate Central Replicas
@@ -1043,6 +1048,11 @@ spec:
                           password from the Secret
                         type: string
                     type: object
+                  redisHostIPs:
+                    description: List of Redis Host IP addresses
+                    items:
+                      type: string
+                    type: array
                   replicas:
                     default: 1
                     description: Replicas - Designate Producer Replicas
@@ -1594,6 +1604,11 @@ spec:
                   ContainerImage)
                 format: int64
                 type: integer
+              redisHostIPs:
+                description: List of Redis Host IP addresses
+                items:
+                  type: string
+                type: array
               transportURLSecret:
                 description: TransportURLSecret - Secret containing RabbitMQ transportURL
                 type: string

@@ -126,6 +126,11 @@ spec:
                       from the Secret
                     type: string
                 type: object
+              redisHostIPs:
+                description: List of Redis Host IP addresses
+                items:
+                  type: string
+                type: array
               replicas:
                 default: 1
                 description: Replicas - Designate Central Replicas

@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,6 +38,7 @@ import (
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	rabbitmqv1 "github.com/openstack-k8s-operators/infra-operator/apis/rabbitmq/v1beta1"
+	redisv1 "github.com/openstack-k8s-operators/infra-operator/apis/redis/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
@@ -115,6 +117,7 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=mariadb.openstack.org,resources=mariadbaccounts/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=keystone.openstack.org,resources=keystoneapis,verbs=get;list;watch
 // +kubebuilder:rbac:groups=rabbitmq.openstack.org,resources=transporturls,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=redis.openstack.org,resources=redises,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;create;update;patch;delete;watch
@@ -296,6 +299,7 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Owns(&designatev1beta1.DesignateBackendbind9{}).
 		Owns(&designatev1beta1.DesignateUnbound{}).
 		Owns(&rabbitmqv1.TransportURL{}).
+		Owns(&redisv1.Redis{}).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.ServiceAccount{}).
@@ -591,6 +595,14 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	instance.Status.Conditions.MarkTrue(designatev1beta1.DesignateRabbitMqTransportURLReadyCondition, designatev1beta1.DesignateRabbitMqTransportURLReadyMessage)
 
 	// end transportURL
+
+	redis, op, err := r.redisCreateOrUpdate(ctx, instance, helper)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if op != controllerutil.OperationResultNone {
+		Log.Info(fmt.Sprintf("Redis %s successfully reconciled - operation: %s", redis.Name, string(op)))
+	}
 
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
@@ -1521,6 +1533,7 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
+		deployment.Spec.RedisHostIPs = instance.Status.RedisHostIPs
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
 		deployment.Spec.NodeSelector = instance.Spec.DesignateCentral.NodeSelector
 
@@ -1629,6 +1642,7 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
+		deployment.Spec.RedisHostIPs = instance.Status.RedisHostIPs
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
 		deployment.Spec.NodeSelector = instance.Spec.DesignateProducer.NodeSelector
 
@@ -1854,4 +1868,53 @@ func (r *DesignateReconciler) checkDesignateUnboundGeneration(
 		}
 	}
 	return true, nil
+}
+
+func getRedisServiceIPs(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+	helper *helper.Helper,
+	redis *redisv1.Redis,
+) ([]string, error) {
+	getOptions := metav1.GetOptions{}
+	service, err := helper.GetKClient().CoreV1().Services(instance.Namespace).Get(ctx, "redis", getOptions)
+	if err != nil {
+		return []string{}, err
+	}
+	// TODO Ensure that the correct port is exposed
+	return service.Spec.ClusterIPs, nil
+}
+
+func (r *DesignateReconciler) redisCreateOrUpdate(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+	helper *helper.Helper,
+) (*redisv1.Redis, controllerutil.OperationResult, error) {
+	redis := &redisv1.Redis{
+		// Use the "global" redis instance.
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "redis",
+			Namespace: instance.Namespace,
+		},
+	}
+
+	op, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, redis, func() error {
+		// We probably don't want to own the redis instance.
+		//err := controllerutil.SetControllerReference(instance, redis, r.Scheme)
+		//return err
+		return nil
+	})
+	if err != nil {
+		return nil, op, err
+	}
+
+	hostIPs, err := getRedisServiceIPs(ctx, instance, helper, redis)
+	if err != nil {
+		return redis, op, err
+	}
+
+	sort.Strings(hostIPs)
+	instance.Status.RedisHostIPs = hostIPs
+
+	return redis, op, err
 }

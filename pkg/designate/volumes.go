@@ -64,17 +64,17 @@ func GetVolumes(baseConfigMapName string) []corev1.Volume {
 func GetInitVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
-			Name:      "scripts",
+			Name:      scriptVolume,
 			MountPath: "/usr/local/bin/container-scripts",
 			ReadOnly:  true,
 		},
 		{
-			Name:      "config-data",
+			Name:      configVolume,
 			MountPath: "/var/lib/config-data/default",
 			ReadOnly:  true,
 		},
 		{
-			Name:      "config-data-merged",
+			Name:      mergedConfigVolume,
 			MountPath: "/var/lib/config-data/merged",
 			ReadOnly:  false,
 		},

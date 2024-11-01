@@ -28,7 +28,6 @@ SVC_CFG_MERGED=/var/lib/config-data/merged/designate.conf
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 . ${SCRIPTPATH}/common.sh --source-only
 
-# Copy default service config from container image as base
 cp -a ${SVC_CFG} ${SVC_CFG_MERGED}
 
 # Merge all templates from config CM

@@ -227,6 +227,9 @@ type DesignateStatus struct {
 	// then the controller has not processed the latest changes injected by
 	// the opentack-operator in the top-level CR (e.g. the ContainerImage)
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// List of Redis Host IP addresses
+	RedisHostIPs []string `json:"redisHostIPs,omitempty"`
 }
 
 // +kubebuilder:object:root=true
