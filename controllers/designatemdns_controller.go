@@ -48,7 +48,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
+	oko_secret "github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
@@ -674,7 +674,7 @@ func (r *DesignateMdnsReconciler) getSecret(
 	envVars *map[string]env.Setter,
 	prefix string,
 ) (ctrl.Result, error) {
-	secret, hash, err := secret.GetSecret(ctx, h, secretName, instance.Namespace)
+	secret, hash, err := oko_secret.GetSecret(ctx, h, secretName, instance.Namespace)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			h.GetLogger().Info(fmt.Sprintf("Secret %s not found", secretName))
@@ -824,15 +824,39 @@ func (r *DesignateMdnsReconciler) generateServiceConfigMaps(
 	}
 	templateParameters["AllowCIDR"] = cidr
 
+	transportURLSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Spec.TransportURLSecret, instance.Namespace)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			r.GetLogger().Info(fmt.Sprintf("TransportURL secret %s not found", instance.Spec.TransportURLSecret))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return nil
+		}
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return err
+	}
+	templateParameters["TransportURL"] = string(transportURLSecret.Data["transport_url"])
+
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
-			Name:               fmt.Sprintf("%s-scripts", instance.Name),
-			Namespace:          instance.Namespace,
-			Type:               util.TemplateTypeScripts,
-			InstanceType:       instance.Kind,
-			AdditionalTemplate: map[string]string{"common.sh": "/common/common.sh"},
-			Labels:             cmLabels,
+			Name:         fmt.Sprintf("%s-scripts", instance.Name),
+			Namespace:    instance.Namespace,
+			Type:         util.TemplateTypeScripts,
+			InstanceType: instance.Kind,
+			AdditionalTemplate: map[string]string{
+				"common.sh":     "/common/common.sh",
+				"setipalias.py": "/common/setipalias.py",
+			},
+			Labels: cmLabels,
 		},
 		// Custom ConfigMap
 		{
@@ -846,7 +870,7 @@ func (r *DesignateMdnsReconciler) generateServiceConfigMaps(
 		},
 	}
 
-	return secret.EnsureSecrets(ctx, h, instance, cms, envVars)
+	return oko_secret.EnsureSecrets(ctx, h, instance, cms, envVars)
 }
 
 // createHashOfInputHashes - creates a hash of hashes which gets added to the resources which requires a restart

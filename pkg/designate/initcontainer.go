@@ -31,10 +31,39 @@ type APIDetails struct {
 	Privileged           bool
 }
 
+type InitContainerDetails struct {
+	ContainerImage string
+	VolumeMounts   []corev1.VolumeMount
+	EnvVars        []corev1.EnvVar
+}
+
 const (
 	// InitContainerCommand -
 	InitContainerCommand = "/usr/local/bin/container-scripts/init.sh"
 )
+
+func SimpleInitContainer(init InitContainerDetails) corev1.Container {
+	runAsUser := int64(0)
+
+	args := []string{
+		"-c",
+		InitContainerCommand,
+	}
+
+	return corev1.Container{
+		Name:  "init",
+		Image: init.ContainerImage,
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser: &runAsUser,
+		},
+		Command: []string{
+			"/bin/bash",
+		},
+		Args:         args,
+		Env:          init.EnvVars,
+		VolumeMounts: init.VolumeMounts,
+	}
+}
 
 // InitContainer - init container for designate api pods
 func InitContainer(init APIDetails) []corev1.Container {

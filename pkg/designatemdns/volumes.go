@@ -37,13 +37,16 @@ func GetVolumes(name string) []corev1.Volume {
 	)
 }
 
-func GetVolumeMounts(serviceName string) []corev1.VolumeMount {
-	return append(
-		designate.GetVolumeMounts(serviceName),
-		corev1.VolumeMount{
-			Name:      "bind-ips",
-			MountPath: "/var/lib/bind-ips",
+func getPredIPVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      "scripts",
+			MountPath: "/usr/local/bin/container-scripts",
 			ReadOnly:  true,
 		},
-	)
+		{
+			Name:      "bind-ips",
+			MountPath: "/var/lib/predictableips",
+		},
+	}
 }

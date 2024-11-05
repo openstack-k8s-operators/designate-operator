@@ -72,6 +72,10 @@ type DesignateMdnsSpecBase struct {
 	// +kubebuilder:validation:Optional
 	// ControlNetworkName - specify which network attachment is to be used for control, notifys and zone transfers.
 	ControlNetworkName string `json:"controlNetworkName"`
+
+	// +kubebuilder:validation:Optional
+	// NetUtilsImage - NetUtils container image
+	NetUtilsImage string `json:"netUtilsImage"`
 }
 
 // DesignateMdnsStatus defines the observed state of DesignateMdns
