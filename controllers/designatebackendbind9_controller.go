@@ -2,7 +2,6 @@
 Copyright 2022.
 
 Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
     http://www.apache.org/licenses/LICENSE-2.0
@@ -25,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,6 +39,7 @@ import (
 	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/pkg/designatebackendbind9"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
@@ -388,6 +389,19 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		return ctrl.Result{}, nil
 	}
 
+	bindIPsUpdated, err := r.hasMapChanged(ctx, helper, instance, designate.BindPredIPConfigMap, designate.BindPredictableIPHash)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	rndcUpdate, err := r.hasSecretChanged(ctx, helper, instance, designate.DesignateBindKeySecret, designate.RndcHash)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if rndcUpdate || bindIPsUpdated {
+		// Predictable IPs and/or rndc keys have been updated, we need to update the statefulset.
+		return ctrl.Result{}, nil
+	}
+
 	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
 
 	// Create ConfigMaps and Secrets - end
@@ -514,7 +528,6 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 				condition.SeverityWarning,
 				condition.NetworkAttachmentsReadyErrorMessage,
 				err.Error()))
-
 			return ctrl.Result{}, err
 		}
 
@@ -711,12 +724,15 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
-			Name:               fmt.Sprintf("%s-scripts", instance.Name),
-			Namespace:          instance.Namespace,
-			Type:               util.TemplateTypeScripts,
-			InstanceType:       instance.Kind,
-			AdditionalTemplate: map[string]string{"common.sh": "/common/common.sh"},
-			Labels:             cmLabels,
+			Name:         fmt.Sprintf("%s-scripts", instance.Name),
+			Namespace:    instance.Namespace,
+			Type:         util.TemplateTypeScripts,
+			InstanceType: instance.Kind,
+			AdditionalTemplate: map[string]string{
+				"common.sh":     "/common/common.sh",
+				"setipalias.py": "/common/setipalias.py",
+			},
+			Labels: cmLabels,
 		},
 		// Custom ConfigMap
 		{
@@ -761,4 +777,46 @@ func (r *DesignateBackendbind9Reconciler) createHashOfInputHashes(
 		r.Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
 	}
 	return hash, changed, nil
+}
+
+func (r *DesignateBackendbind9Reconciler) hasMapChanged(
+	ctx context.Context,
+	h *helper.Helper,
+	instance *designatev1beta1.DesignateBackendbind9,
+	mapName string,
+	hashKey string,
+) (bool, error) {
+	configMap := &corev1.ConfigMap{}
+	err := h.GetClient().Get(ctx, types.NamespacedName{Name: mapName, Namespace: instance.GetNamespace()}, configMap)
+	if err != nil {
+		r.GetLogger().Error(err, fmt.Sprintf("Unable to check config map %s for changes", mapName))
+		return false, err
+	}
+	hashValue, err := configmap.Hash(configMap)
+	if err != nil {
+		return false, err
+	}
+	_, updated := util.SetHash(instance.Status.Hash, hashKey, hashValue)
+	return updated, nil
+}
+
+func (r *DesignateBackendbind9Reconciler) hasSecretChanged(
+	ctx context.Context,
+	h *helper.Helper,
+	instance *designatev1beta1.DesignateBackendbind9,
+	secretName string,
+	hashKey string,
+) (bool, error) {
+	found := &corev1.Secret{}
+	err := h.GetClient().Get(ctx, types.NamespacedName{Name: secretName, Namespace: instance.GetNamespace()}, found)
+	if err != nil {
+		r.GetLogger().Error(err, fmt.Sprintf("Unable to check secret %s for changes", secretName))
+		return false, err
+	}
+	hashValue, err := secret.Hash(found)
+	if err != nil {
+		return false, err
+	}
+	_, updated := util.SetHash(instance.Status.Hash, hashKey, hashValue)
+	return updated, nil
 }
