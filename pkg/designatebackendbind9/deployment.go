@@ -111,7 +111,6 @@ func StatefulSet(
 							ReadinessProbe: readinessProbe,
 						},
 					},
-					NodeSelector: instance.Spec.NodeSelector,
 				},
 			},
 		},
@@ -157,8 +156,8 @@ func StatefulSet(
 		},
 		corev1.LabelHostname,
 	)
-	if instance.Spec.NodeSelector != nil && len(instance.Spec.NodeSelector) > 0 {
-		statefulSet.Spec.Template.Spec.NodeSelector = instance.Spec.NodeSelector
+	if instance.Spec.NodeSelector != nil {
+		statefulSet.Spec.Template.Spec.NodeSelector = *instance.Spec.NodeSelector
 	}
 
 	// TODO: bind's init container doesn't need most of this stuff. It doesn't use rabbitmq, redis or access the
