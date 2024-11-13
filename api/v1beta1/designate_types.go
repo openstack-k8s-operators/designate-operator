@@ -181,6 +181,11 @@ type DesignateSpecBase struct {
 	// +kubebuilder:default=designate
 	// DesignateNetworkAttachment is a NetworkAttachment resource name for the Designate Control Network
 	DesignateNetworkAttachment string `json:"designateNetworkAttachment"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:default="designate-redis"
+	// RedisServiceName is the name of the Redis instance to be used (must be in the same namespace as designate)
+	RedisServiceName string `json:"redisServiceName"`
 }
 
 // DesignateStatus defines the observed state of Designate

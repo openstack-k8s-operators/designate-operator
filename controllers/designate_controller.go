@@ -592,17 +592,18 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	}
 
-	instance.Status.Conditions.MarkTrue(designatev1beta1.DesignateRabbitMqTransportURLReadyCondition, designatev1beta1.DesignateRabbitMqTransportURLReadyMessage)
+	instance.Status.Conditions.MarkTrue(
+		designatev1beta1.DesignateRabbitMqTransportURLReadyCondition,
+		designatev1beta1.DesignateRabbitMqTransportURLReadyMessage)
 
 	// end transportURL
-
-	redis, op, err := r.redisCreateOrUpdate(ctx, instance, helper)
+	hostIPs, err := getRedisServiceIPs(ctx, instance, helper)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if op != controllerutil.OperationResultNone {
-		Log.Info(fmt.Sprintf("Redis %s successfully reconciled - operation: %s", redis.Name, string(op)))
-	}
+
+	sort.Strings(hostIPs)
+	instance.Status.RedisHostIPs = hostIPs
 
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
@@ -1874,47 +1875,12 @@ func getRedisServiceIPs(
 	ctx context.Context,
 	instance *designatev1beta1.Designate,
 	helper *helper.Helper,
-	redis *redisv1.Redis,
 ) ([]string, error) {
 	getOptions := metav1.GetOptions{}
-	service, err := helper.GetKClient().CoreV1().Services(instance.Namespace).Get(ctx, "redis", getOptions)
+	service, err := helper.GetKClient().CoreV1().Services(instance.Namespace).Get(ctx, instance.Spec.RedisServiceName, getOptions)
 	if err != nil {
 		return []string{}, err
 	}
-	// TODO Ensure that the correct port is exposed
+	// TODO: Ensure that the correct port is exposed
 	return service.Spec.ClusterIPs, nil
-}
-
-func (r *DesignateReconciler) redisCreateOrUpdate(
-	ctx context.Context,
-	instance *designatev1beta1.Designate,
-	helper *helper.Helper,
-) (*redisv1.Redis, controllerutil.OperationResult, error) {
-	redis := &redisv1.Redis{
-		// Use the "global" redis instance.
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "redis",
-			Namespace: instance.Namespace,
-		},
-	}
-
-	op, err := controllerutil.CreateOrUpdate(context.TODO(), r.Client, redis, func() error {
-		// We probably don't want to own the redis instance.
-		//err := controllerutil.SetControllerReference(instance, redis, r.Scheme)
-		//return err
-		return nil
-	})
-	if err != nil {
-		return nil, op, err
-	}
-
-	hostIPs, err := getRedisServiceIPs(ctx, instance, helper, redis)
-	if err != nil {
-		return redis, op, err
-	}
-
-	sort.Strings(hostIPs)
-	instance.Status.RedisHostIPs = hostIPs
-
-	return redis, op, err
 }

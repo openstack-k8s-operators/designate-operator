@@ -1,0 +1,9 @@
+apiVersion: redis.openstack.org/v1beta1
+kind: Redis
+metadata:
+  name: designate-redis
+spec:
+  replicas: 1
+  tls:
+    secretName: redis-tls
+    caBundleSecretName: redis-tls
