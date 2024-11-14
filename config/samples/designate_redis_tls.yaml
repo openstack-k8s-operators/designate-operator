@@ -5,5 +5,5 @@ metadata:
 spec:
   replicas: 1
   tls:
-    secretName: redis-tls
-    caBundleSecretName: redis-tls
+    secretName: cert-designate-redis-svc
+    caBundleSecretName: combined-ca-bundle

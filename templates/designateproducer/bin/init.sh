@@ -34,4 +34,3 @@ cp -a ${SVC_CFG} ${SVC_CFG_MERGED}
 for dir in /var/lib/config-data/default; do
     merge_config_dir ${dir}
 done
-

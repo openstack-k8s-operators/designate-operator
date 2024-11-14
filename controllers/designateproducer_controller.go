@@ -785,11 +785,11 @@ func (r *DesignateProducerReconciler) generateServiceConfigMaps(
 	}
 
 	if len(instance.Spec.RedisHostIPs) > 0 {
-		backendUrl := fmt.Sprintf("redis://%s:6379/", instance.Spec.RedisHostIPs[0])
+		backendURL := fmt.Sprintf("redis://%s:6379/", instance.Spec.RedisHostIPs[0])
 		if tlsCfg != nil {
-			backendUrl = fmt.Sprintf("%s?ssl=true", backendUrl)
+			backendURL = fmt.Sprintf("%s?ssl=true", backendURL)
 		}
-		templateParameters["CoordinationBackendUrl"] = backendUrl
+		templateParameters["CoordinationBackendURL"] = backendURL
 	}
 
 	transportURLSecret, _, err := secret.GetSecret(ctx, h, instance.Spec.TransportURLSecret, instance.Namespace)
