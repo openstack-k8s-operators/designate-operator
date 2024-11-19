@@ -211,8 +211,6 @@ spec:
                 type: string
             required:
             - containerImage
-            - controlNetworkName
-            - storageRequest
             type: object
           status:
             description: DesignateBackendbind9Status defines the observed state of
