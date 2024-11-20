@@ -1471,6 +1471,10 @@ func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, i
 		},
 	}
 
+	if instance.Spec.DesignateAPI.NodeSelector == nil {
+		instance.Spec.DesignateAPI.NodeSelector = instance.Spec.NodeSelector
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.Spec = instance.Spec.DesignateAPI
 		// Add in transfers from umbrella Designate (this instance) spec
@@ -1482,9 +1486,7 @@ func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, i
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
+		deployment.Spec.NodeSelector = instance.Spec.DesignateAPI.NodeSelector
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
 		if err != nil {
@@ -1505,6 +1507,10 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		},
 	}
 
+	if instance.Spec.DesignateCentral.NodeSelector == nil {
+		instance.Spec.DesignateCentral.NodeSelector = instance.Spec.NodeSelector
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.Spec = instance.Spec.DesignateCentral
 		// Add in transfers from umbrella Designate CR (this instance) spec
@@ -1516,9 +1522,7 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
+		deployment.Spec.NodeSelector = instance.Spec.DesignateCentral.NodeSelector
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
 		if err != nil {
@@ -1539,6 +1543,10 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 		},
 	}
 
+	if instance.Spec.DesignateWorker.NodeSelector == nil {
+		instance.Spec.DesignateWorker.NodeSelector = instance.Spec.NodeSelector
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.Spec = instance.Spec.DesignateWorker
 		// Add in transfers from umbrella Designate CR (this instance) spec
@@ -1550,9 +1558,7 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
+		deployment.Spec.NodeSelector = instance.Spec.DesignateWorker.NodeSelector
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
 		if err != nil {
@@ -1573,6 +1579,10 @@ func (r *DesignateReconciler) mdnsDaemonSetCreateOrUpdate(ctx context.Context, i
 		},
 	}
 
+	if instance.Spec.DesignateMdns.NodeSelector == nil {
+		instance.Spec.DesignateMdns.NodeSelector = instance.Spec.NodeSelector
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, daemonset, func() error {
 		daemonset.Spec = instance.Spec.DesignateMdns
 		// Add in transfers from umbrella Designate CR (this instance) spec
@@ -1584,9 +1594,7 @@ func (r *DesignateReconciler) mdnsDaemonSetCreateOrUpdate(ctx context.Context, i
 		daemonset.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		daemonset.Spec.ServiceAccount = instance.RbacResourceName()
 		daemonset.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		if len(daemonset.Spec.NodeSelector) == 0 {
-			daemonset.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
+		daemonset.Spec.NodeSelector = instance.Spec.DesignateMdns.NodeSelector
 
 		err := controllerutil.SetControllerReference(instance, daemonset, r.Scheme)
 		if err != nil {
@@ -1607,6 +1615,10 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 		},
 	}
 
+	if instance.Spec.DesignateProducer.NodeSelector == nil {
+		instance.Spec.DesignateProducer.NodeSelector = instance.Spec.NodeSelector
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.Spec = instance.Spec.DesignateProducer
 		// Add in transfers from umbrella Designate CR (this instance) spec
@@ -1618,9 +1630,7 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
+		deployment.Spec.NodeSelector = instance.Spec.DesignateProducer.NodeSelector
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
 		if err != nil {
@@ -1641,6 +1651,10 @@ func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.
 		},
 	}
 
+	if instance.Spec.DesignateBackendbind9.NodeSelector == nil {
+		instance.Spec.DesignateBackendbind9.NodeSelector = instance.Spec.NodeSelector
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
 		statefulSet.Spec = instance.Spec.DesignateBackendbind9
 		// Add in transfers from umbrella Designate CR (this instance) spec
@@ -1649,9 +1663,7 @@ func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.
 		statefulSet.Spec.Secret = instance.Spec.Secret
 		statefulSet.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
-		if len(statefulSet.Spec.NodeSelector) == 0 {
-			statefulSet.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
+		statefulSet.Spec.NodeSelector = instance.Spec.DesignateBackendbind9.NodeSelector
 
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
@@ -1675,14 +1687,16 @@ func (r *DesignateReconciler) unboundDeploymentCreateOrUpdate(
 		},
 	}
 
+	if instance.Spec.DesignateUnbound.NodeSelector == nil {
+		instance.Spec.DesignateUnbound.NodeSelector = instance.Spec.NodeSelector
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
 		deployment.Spec = instance.Spec.DesignateUnbound
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		if len(deployment.Spec.NodeSelector) == 0 {
-			deployment.Spec.NodeSelector = instance.Spec.NodeSelector
-		}
+		deployment.Spec.NodeSelector = instance.Spec.DesignateUnbound.NodeSelector
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
 		if err != nil {
