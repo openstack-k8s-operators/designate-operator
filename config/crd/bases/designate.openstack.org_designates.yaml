@@ -630,8 +630,6 @@ spec:
                     type: string
                 required:
                 - containerImage
-                - controlNetworkName
-                - storageRequest
                 type: object
               designateCentral:
                 description: DesignateCentral - Spec definition for the Central service
@@ -1496,7 +1494,6 @@ spec:
             - designateBackendbind9
             - designateCentral
             - designateMdns
-            - designateNetworkAttachment
             - designateProducer
             - designateWorker
             - rabbitMqClusterName

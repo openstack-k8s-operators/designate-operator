@@ -67,6 +67,7 @@ type DesignateBackendbind9SpecBase struct {
 	CustomBindOptions []string `json:"customBindOptions,omitempty"`
 
 	// +kubebuilder:default="designate"
+	// +kubebuilder:validation:Optional
 	// ControlNetworkName - specify which network attachment is to be used for control, notifys and zone transfers.
 	ControlNetworkName string `json:"controlNetworkName"`
 
@@ -74,7 +75,7 @@ type DesignateBackendbind9SpecBase struct {
 	// StorageClass
 	StorageClass string `json:"storageClass,omitempty"`
 
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// StorageRequest
 	StorageRequest string `json:"storageRequest"`
 }
