@@ -44,6 +44,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -523,6 +524,36 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		}
 	}
 	// create StatefulSet - end
+
+	// create Bind Services - start
+	services := designatebackendbind9.CreateBindServices(instance, *instance.Spec.Replicas, instance.Spec.AddressPool)
+	for _, svc := range services {
+		svc, err := service.NewService(svc, 5, nil)
+
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		ctrlResult, err = svc.CreateOrPatch(ctx, helper)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.CreateServiceReadyErrorMessage,
+				err.Error()))
+
+			return ctrlResult, err
+		} else if (ctrlResult != ctrl.Result{}) {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.CreateServiceReadyRunningMessage))
+			return ctrlResult, nil
+		}
+	}
+	// create Bind Services - end
 
 	// We reached the end of the Reconcile, update the Ready condition based on
 	// the sub conditions
