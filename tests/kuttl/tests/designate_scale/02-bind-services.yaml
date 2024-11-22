@@ -1,0 +1,8 @@
+# apiVersion: kuttl.dev/v1beta1
+# kind: TestStep
+# commands:
+#   - script: |
+#       # cp ../../common/designate-bind-addresspool.yaml .
+#       # oc apply -n $NAMESPACE -f designate-bind-addresspool.yaml
+#       oc patch designate -n $NAMESPACE designate --type='json' -p='[{"op": "replace", "path": "/spec/designateBackendbind9/addressPool", "value": "internalapi"}]'
+#       oc patch designate -n $NAMESPACE designate --type='json' -p='[{"op": "replace", "path": "/spec/designateBackendbind9/replicas", "value": 2}]'

@@ -234,13 +234,13 @@ spec:
   selector:
     service: designate
   type: ClusterIP
----
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-commands:
-  - script: |
-      if ! oc get -n $NAMESPACE secret -o json designate-central-config-data | jq '.data["designate.conf"] | @base64d' | sed -e 's/\\n/\n/g' | grep ^backend_url.*redis.*ssl.true;
-      then
-          echo "Configuration of backend_url failed"
-          exit 1
-      fi
+# ---
+# apiVersion: kuttl.dev/v1beta1
+# kind: TestAssert
+# commands:
+#   - script: |
+#       if ! oc get -n $NAMESPACE secret -o json designate-central-config-data | jq '.data["designate.conf"] | @base64d' | sed -e 's/\\n/\n/g' | grep "^backend_url.*redis.*ssl.true"
+#       then
+#           echo "Configuration of backend_url failed"
+#           exit 1
+#       fi

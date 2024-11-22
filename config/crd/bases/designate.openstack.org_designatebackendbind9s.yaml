@@ -48,6 +48,10 @@ spec:
           spec:
             description: DesignateBackendbind9Spec defines the desired state of DesignateBackendbind9
             properties:
+              addressPool:
+                default: ""
+                description: AddressPool
+                type: string
               backendMdnsServerProtocol:
                 description: |-
                   BackendTypeProtocol - Defines the backend protocol to be used between the designate-worker &

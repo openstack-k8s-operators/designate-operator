@@ -82,6 +82,11 @@ type DesignateBackendbind9SpecBase struct {
 	// +kubebuilder:validation:Optional
 	// NetUtilsImage - NetUtils container image
 	NetUtilsImage string `json:"netUtilsImage"`
+
+	// +kubebuilder:default=""
+	// +kubebuilder:validation:Optional
+	// AddressPool
+	AddressPool string `json:"addressPool"`
 }
 
 // DesignateBackendbind9Status defines the observed state of DesignateBackendbind9

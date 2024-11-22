@@ -454,6 +454,10 @@ spec:
                 description: DesignateBackendbind9 - Spec definition for the Backendbind9
                   service of this Designate deployment
                 properties:
+                  addressPool:
+                    default: ""
+                    description: AddressPool
+                    type: string
                   backendMdnsServerProtocol:
                     description: |-
                       BackendTypeProtocol - Defines the backend protocol to be used between the designate-worker &

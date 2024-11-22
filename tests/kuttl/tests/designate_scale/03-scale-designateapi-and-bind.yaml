@@ -3,3 +3,4 @@ kind: TestStep
 commands:
   - script: |
       oc patch designate -n $NAMESPACE designate --type='json' -p='[{"op": "replace", "path": "/spec/designateAPI/replicas", "value":3}]'
+      oc patch designate -n $NAMESPACE designate --type='json' -p='[{"op": "replace", "path": "/spec/designateBackendbind9/replicas", "value": 4}]'

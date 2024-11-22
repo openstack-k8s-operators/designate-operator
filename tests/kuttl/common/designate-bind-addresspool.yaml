@@ -1,0 +1,10 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+spec:
+  designate:
+    template:
+      designateBackendbind9:
+        addressPool: internalapi
+        replicas: 2

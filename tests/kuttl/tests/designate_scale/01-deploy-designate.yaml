@@ -4,3 +4,5 @@ commands:
   - script: |
       oc kustomize ../../../../demo/examples/ns_records | oc apply -n $NAMESPACE -f -
       oc kustomize ../../../../config/samples | oc apply -n $NAMESPACE -f -
+      oc patch designate -n $NAMESPACE designate --type='json' -p='[{"op": "replace", "path": "/spec/designateBackendbind9/addressPool", "value": "internalapi"}]'
+      oc patch designate -n $NAMESPACE designate --type='json' -p='[{"op": "replace", "path": "/spec/designateBackendbind9/replicas", "value": 2}]'
