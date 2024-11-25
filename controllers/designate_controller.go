@@ -119,7 +119,6 @@ type DesignateReconciler struct {
 // +kubebuilder:rbac:groups=rabbitmq.openstack.org,resources=transporturls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=redis.openstack.org,resources=redises,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;create;update;patch;delete;watch
 
 // service account, role, rolebinding
@@ -775,25 +774,14 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		allocatedIPs[predIP] = true
 	}
 
-	// Get a list of the nodes in the cluster
-
-	// TODO(oschwart):
-	// * confirm whether or not this lists only the nodes we want (i.e. ones
-	// that will host the daemonset)
-	// * do we want to provide a mechanism to temporarily disabling this list
-	// for maintenance windows where nodes might be "coming and going"
-
-	nodes, err := helper.GetKClient().CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return ctrl.Result{}, err
+	// Handle Mdns predictable IPs configmap
+	mdnsReplicaCount := int(*instance.Spec.DesignateMdns.Replicas)
+	var mdnsNames []string
+	for i := 0; i < mdnsReplicaCount; i++ {
+		mdnsNames = append(mdnsNames, fmt.Sprintf("mdns_address_%d", i))
 	}
 
-	var nodeNames []string
-	for _, node := range nodes.Items {
-		nodeNames = append(nodeNames, fmt.Sprintf("mdns_%s", node.Name))
-	}
-
-	updatedMap, allocatedIPs, err := r.allocatePredictableIPs(ctx, predictableIPParams, nodeNames, mdnsConfigMap.Data, allocatedIPs)
+	updatedMap, allocatedIPs, err := r.allocatePredictableIPs(ctx, predictableIPParams, mdnsNames, mdnsConfigMap.Data, allocatedIPs)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -959,7 +947,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	Log.Info("Deployment Worker task reconciled")
 
 	// deploy designate-mdns
-	designateMdns, op, err := r.mdnsDaemonSetCreateOrUpdate(ctx, instance)
+	designateMdns, op, err := r.mdnsStatefulSetCreateOrUpdate(ctx, instance)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			designatev1beta1.DesignateMdnsReadyCondition,
@@ -1585,8 +1573,8 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 	return deployment, op, err
 }
 
-func (r *DesignateReconciler) mdnsDaemonSetCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateMdns, controllerutil.OperationResult, error) {
-	daemonset := &designatev1beta1.DesignateMdns{
+func (r *DesignateReconciler) mdnsStatefulSetCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateMdns, controllerutil.OperationResult, error) {
+	statefulSet := &designatev1beta1.DesignateMdns{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-mdns", instance.Name),
 			Namespace: instance.Namespace,
@@ -1597,20 +1585,20 @@ func (r *DesignateReconciler) mdnsDaemonSetCreateOrUpdate(ctx context.Context, i
 		instance.Spec.DesignateMdns.NodeSelector = instance.Spec.NodeSelector
 	}
 
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, daemonset, func() error {
-		daemonset.Spec = instance.Spec.DesignateMdns
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
+		statefulSet.Spec = instance.Spec.DesignateMdns
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		daemonset.Spec.ServiceUser = instance.Spec.ServiceUser
-		daemonset.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		daemonset.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
-		daemonset.Spec.Secret = instance.Spec.Secret
-		daemonset.Spec.TransportURLSecret = instance.Status.TransportURLSecret
-		daemonset.Spec.ServiceAccount = instance.RbacResourceName()
-		daemonset.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		daemonset.Spec.NodeSelector = instance.Spec.DesignateMdns.NodeSelector
+		statefulSet.Spec.ServiceUser = instance.Spec.ServiceUser
+		statefulSet.Spec.DatabaseHostname = instance.Status.DatabaseHostname
+		statefulSet.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
+		statefulSet.Spec.Secret = instance.Spec.Secret
+		statefulSet.Spec.TransportURLSecret = instance.Status.TransportURLSecret
+		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
+		statefulSet.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
+		statefulSet.Spec.NodeSelector = instance.Spec.DesignateMdns.NodeSelector
 
-		err := controllerutil.SetControllerReference(instance, daemonset, r.Scheme)
+		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
 			return err
 		}
@@ -1618,7 +1606,7 @@ func (r *DesignateReconciler) mdnsDaemonSetCreateOrUpdate(ctx context.Context, i
 		return nil
 	})
 
-	return daemonset, op, err
+	return statefulSet, op, err
 }
 
 func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateProducer, controllerutil.OperationResult, error) {
