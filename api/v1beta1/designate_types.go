@@ -181,6 +181,11 @@ type DesignateSpecBase struct {
 	// +kubebuilder:default=designate
 	// DesignateNetworkAttachment is a NetworkAttachment resource name for the Designate Control Network
 	DesignateNetworkAttachment string `json:"designateNetworkAttachment"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:default="designate-redis"
+	// RedisServiceName is the name of the Redis instance to be used (must be in the same namespace as designate)
+	RedisServiceName string `json:"redisServiceName"`
 }
 
 // DesignateStatus defines the observed state of Designate
@@ -227,6 +232,9 @@ type DesignateStatus struct {
 	// then the controller has not processed the latest changes injected by
 	// the opentack-operator in the top-level CR (e.g. the ContainerImage)
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// List of Redis Host IP addresses
+	RedisHostIPs []string `json:"redisHostIPs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

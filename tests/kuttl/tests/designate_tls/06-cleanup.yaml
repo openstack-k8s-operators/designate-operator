@@ -1,0 +1,9 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+- apiVersion: designate.openstack.org/v1beta1
+  kind: Designate
+  name: designate
+- apiVersion: redis.openstack.org/v1beta1
+  kind: Redis
+  name: designate-redis

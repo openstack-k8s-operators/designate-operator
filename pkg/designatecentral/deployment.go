@@ -30,11 +30,6 @@ import (
 	// "k8s.io/apimachinery/pkg/util/intstr"
 )
 
-const (
-	// ServiceCommand -
-	ServiceCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
-)
-
 // Deployment func
 func Deployment(
 	instance *designatev1beta1.DesignateCentral,
@@ -48,9 +43,7 @@ func Deployment(
 	// designateUser := int64(42411)
 	// designateGroup := int64(42411)
 
-	volumes := designate.GetVolumes(
-		designate.GetOwningDesignateName(instance),
-	)
+	volumes := designate.GetVolumes("designate-central")
 	volumeMounts := designate.GetVolumeMounts("designate-central")
 
 	livenessProbe := &corev1.Probe{
@@ -65,7 +58,6 @@ func Deployment(
 		PeriodSeconds:       15,
 		InitialDelaySeconds: 5,
 	}
-	args := []string{"-c", ServiceCommand}
 	livenessProbe.Exec = &corev1.ExecAction{
 		Command: []string{
 			"/usr/bin/pgrep", "-r", "DRST", "-f", "designate.central",
@@ -106,11 +98,7 @@ func Deployment(
 					Volumes:            volumes,
 					Containers: []corev1.Container{
 						{
-							Name: serviceName,
-							Command: []string{
-								"/bin/bash",
-							},
-							Args:  args,
+							Name:  serviceName,
 							Image: instance.Spec.ContainerImage,
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &rootUser,

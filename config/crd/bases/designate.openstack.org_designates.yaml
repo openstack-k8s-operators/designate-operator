@@ -713,6 +713,11 @@ spec:
                           password from the Secret
                         type: string
                     type: object
+                  redisHostIPs:
+                    description: List of Redis Host IP addresses
+                    items:
+                      type: string
+                    type: array
                   replicas:
                     default: 1
                     description: Replicas - Designate Central Replicas
@@ -1043,6 +1048,11 @@ spec:
                           password from the Secret
                         type: string
                     type: object
+                  redisHostIPs:
+                    description: List of Redis Host IP addresses
+                    items:
+                      type: string
+                    type: array
                   replicas:
                     default: 1
                     description: Replicas - Designate Producer Replicas
@@ -1430,6 +1440,11 @@ spec:
                 description: RabbitMQ instance name Needed to request a transportURL
                   that is created and used in Designate
                 type: string
+              redisServiceName:
+                default: designate-redis
+                description: RedisServiceName is the name of the Redis instance to
+                  be used (must be in the same namespace as designate)
+                type: string
               resources:
                 description: Resources - Compute Resources required by this service
                   (Limits/Requests). https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
@@ -1497,6 +1512,7 @@ spec:
             - designateProducer
             - designateWorker
             - rabbitMqClusterName
+            - redisServiceName
             - secret
             type: object
           status:
@@ -1594,6 +1610,11 @@ spec:
                   ContainerImage)
                 format: int64
                 type: integer
+              redisHostIPs:
+                description: List of Redis Host IP addresses
+                items:
+                  type: string
+                type: array
               transportURLSecret:
                 description: TransportURLSecret - Secret containing RabbitMQ transportURL
                 type: string

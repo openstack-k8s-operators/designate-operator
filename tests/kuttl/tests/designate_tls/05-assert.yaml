@@ -1,0 +1,246 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+spec:
+  customServiceConfig: |
+    [DEFAULT]
+    debug = true
+  databaseInstance: openstack
+  databaseAccount: designate
+  preserveJobs: false
+  secret: osp-secret
+  serviceUser: designate
+  designateAPI:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      api:
+        internal:
+          secretName: cert-designate-internal-svc
+        public:
+          secretName: cert-designate-public-svc
+      caBundleSecretName: combined-ca-bundle
+  designateProducer:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateMdns:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateBackendbind9:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+  designateCentral:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+  designateWorker:
+    customServiceConfig: |
+      [DEFAULT]
+      debug = true
+    databaseAccount: designate
+    secret: osp-secret
+    serviceUser: designate
+    tls:
+      caBundleSecretName: combined-ca-bundle
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: designate-api
+spec:
+  template:
+    metadata:
+      labels:
+        service: designate
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: service
+                  operator: In
+                  values:
+                  - designate-api
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - args:
+        - -c
+        - /usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start
+        command:
+        - /bin/bash
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthcheck
+            port: 9001
+            scheme: HTTPS
+          initialDelaySeconds: 3
+          periodSeconds: 13
+          successThreshold: 1
+          timeoutSeconds: 15
+        name: designate-api
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthcheck
+            port: 9001
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 15
+        volumeMounts:
+        - mountPath: /usr/local/bin/container-scripts
+          name: scripts
+          readOnly: true
+        - mountPath: /var/lib/config-data/merged
+          name: config-data-merged
+        - mountPath: /var/lib/kolla/config_files/config.json
+          name: config-data-merged
+          readOnly: true
+          subPath: designate-api-config.json
+        - mountPath: /run/designate
+          name: designate-run
+        - mountPath: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+          name: combined-ca-bundle
+          readOnly: true
+          subPath: tls-ca-bundle.pem
+        - mountPath: /var/lib/config-data/tls/certs/internal.crt
+          name: internal-tls-certs
+          readOnly: true
+          subPath: tls.crt
+        - mountPath: /var/lib/config-data/tls/private/internal.key
+          name: internal-tls-certs
+          readOnly: true
+          subPath: tls.key
+        - mountPath: /var/lib/config-data/tls/certs/public.crt
+          name: public-tls-certs
+          readOnly: true
+          subPath: tls.crt
+        - mountPath: /var/lib/config-data/tls/private/public.key
+          name: public-tls-certs
+          readOnly: true
+          subPath: tls.key
+      initContainers:
+      - args:
+        - -c
+        - /usr/local/bin/container-scripts/init.sh
+        command:
+        - /bin/bash
+        imagePullPolicy: IfNotPresent
+        name: init
+        resources: {}
+        volumeMounts:
+        - mountPath: /usr/local/bin/container-scripts
+          name: scripts
+          readOnly: true
+        - mountPath: /var/lib/config-data/default
+          name: config-data
+          readOnly: true
+        - mountPath: /var/lib/config-data/merged
+          name: config-data-merged
+      restartPolicy: Always
+      serviceAccount: designate-designate
+      serviceAccountName: designate-designate
+      volumes:
+      - name: scripts
+        secret:
+          secretName: designate-api-scripts
+          defaultMode: 493
+      - name: config-data
+        secret:
+          secretName: designate-api-config-data
+          defaultMode: 416
+      - emptyDir: {}
+        name: config-data-merged
+      - emptyDir: {}
+        name: designate-run
+      - name: combined-ca-bundle
+        secret:
+          secretName: combined-ca-bundle
+          defaultMode: 292
+      - name: internal-tls-certs
+        secret:
+          secretName: cert-designate-internal-svc
+          defaultMode: 256
+      - name: public-tls-certs
+        secret:
+          secretName: cert-designate-public-svc
+          defaultMode: 256
+---
+# the openshift annotations can't be checked through the deployment above
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    openshift.io/scc: anyuid
+  labels:
+    service: designate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    endpoint: internal
+    service: designate
+  name: designate-internal
+spec:
+  ports:
+    - name: designate-internal
+  selector:
+    service: designate
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    endpoint: public
+    service: designate
+  name: designate-public
+spec:
+  ports:
+    - name: designate-public
+  selector:
+    service: designate
+  type: ClusterIP
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      if ! oc get -n $NAMESPACE secret -o json designate-central-config-data | jq '.data["designate.conf"] | @base64d' | sed -e 's/\\n/\n/g' | grep ^backend_url.*redis.*ssl.true;
+      then
+          echo "Configuration of backend_url failed"
+          exit 1
+      fi

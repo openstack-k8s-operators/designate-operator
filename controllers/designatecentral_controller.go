@@ -784,6 +784,35 @@ func (r *DesignateCentralReconciler) generateServiceConfigMaps(
 			designate.DatabaseName,
 		),
 	}
+	if len(instance.Spec.RedisHostIPs) > 0 {
+		backendURL := fmt.Sprintf("redis://%s:6379/", instance.Spec.RedisHostIPs[0])
+		if tlsCfg != nil {
+			backendURL = fmt.Sprintf("%s?ssl=true", backendURL)
+		}
+		templateParameters["CoordinationBackendURL"] = backendURL
+	}
+
+	transportURLSecret, _, err := secret.GetSecret(ctx, h, instance.Spec.TransportURLSecret, instance.Namespace)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			r.GetLogger(ctx).Info(fmt.Sprintf("TransportURL secret %s not found", instance.Spec.TransportURLSecret))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return nil
+		}
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return err
+	}
+	templateParameters["TransportURL"] = string(transportURLSecret.Data["transport_url"])
+	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
 
 	cms := []util.Template{
 		// ScriptsConfigMap

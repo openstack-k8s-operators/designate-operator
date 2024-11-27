@@ -67,6 +67,9 @@ type DesignateProducerSpecBase struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	// TLS - Parameters related to the TLS
 	TLS tls.Ca `json:"tls,omitempty"`
+
+	// List of Redis Host IP addresses
+	RedisHostIPs []string `json:"redisHostIPs,omitempty"`
 }
 
 // DesignateProducerStatus defines the observed state of DesignateProducer
