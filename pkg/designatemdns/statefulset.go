@@ -35,13 +35,13 @@ const (
 	ServiceCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
 )
 
-// DaemonSet func
-func DaemonSet(
+// StatefulSet func
+func StatefulSet(
 	instance *designatev1beta1.DesignateMdns,
 	configHash string,
 	labels map[string]string,
 	annotations map[string]string,
-) *appsv1.DaemonSet {
+) *appsv1.StatefulSet {
 	rootUser := int64(0)
 	serviceName := fmt.Sprintf("%s-mdns", designate.ServiceName)
 	volumes := GetVolumes(designate.GetOwningDesignateName(instance))
@@ -51,13 +51,13 @@ func DaemonSet(
 		// TODO might need tuning
 		TimeoutSeconds:      15,
 		PeriodSeconds:       13,
-		InitialDelaySeconds: 3,
+		InitialDelaySeconds: 15,
 	}
 	readinessProbe := &corev1.Probe{
 		// TODO might need tuning
 		TimeoutSeconds:      15,
-		PeriodSeconds:       15,
-		InitialDelaySeconds: 5,
+		PeriodSeconds:       13,
+		InitialDelaySeconds: 10,
 	}
 
 	args := []string{"-c", ServiceCommand}
@@ -78,13 +78,13 @@ func DaemonSet(
 		volumeMounts = append(volumeMounts, instance.Spec.TLS.CreateVolumeMounts(nil)...)
 	}
 
-	daemonset := &appsv1.DaemonSet{
+	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Name,
 			Namespace: instance.Namespace,
 			Labels:    labels,
 		},
-		Spec: appsv1.DaemonSetSpec{
+		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -122,7 +122,7 @@ func DaemonSet(
 	// If possible two pods of the same service should not
 	// run on the same worker node. If this is not possible
 	// the get still created on the same worker node.
-	daemonset.Spec.Template.Spec.Affinity = affinity.DistributePods(
+	statefulSet.Spec.Template.Spec.Affinity = affinity.DistributePods(
 		common.AppSelector,
 		[]string{
 			serviceName,
@@ -130,7 +130,7 @@ func DaemonSet(
 		corev1.LabelHostname,
 	)
 	if instance.Spec.NodeSelector != nil {
-		daemonset.Spec.Template.Spec.NodeSelector = *instance.Spec.NodeSelector
+		statefulSet.Spec.Template.Spec.NodeSelector = *instance.Spec.NodeSelector
 	}
 
 	initContainerDetails := designate.APIDetails{
@@ -142,7 +142,7 @@ func DaemonSet(
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
 		VolumeMounts:         designate.GetInitVolumeMounts(),
 	}
-	daemonset.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
+	statefulSet.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 
-	return daemonset
+	return statefulSet
 }

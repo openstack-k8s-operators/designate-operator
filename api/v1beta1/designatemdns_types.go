@@ -46,6 +46,13 @@ type DesignateMdnsSpecBase struct {
 	DesignateTemplate `json:",inline"`
 
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Maximum=32
+	// +kubebuilder:validation:Minimum=0
+	// Replicas - Designate Mdns Replicas
+	Replicas *int32 `json:"replicas"`
+
+	// +kubebuilder:validation:Optional
 	// DatabaseHostname - Designate Database Hostname
 	DatabaseHostname string `json:"databaseHostname,omitempty"`
 
@@ -60,6 +67,11 @@ type DesignateMdnsSpecBase struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	// TLS - Parameters related to the TLS
 	TLS tls.Ca `json:"tls,omitempty"`
+
+	// +kubebuilder:default="designate"
+	// +kubebuilder:validation:Optional
+	// ControlNetworkName - specify which network attachment is to be used for control, notifys and zone transfers.
+	ControlNetworkName string `json:"controlNetworkName"`
 }
 
 // DesignateMdnsStatus defines the observed state of DesignateMdns
