@@ -44,6 +44,10 @@ spec:
           spec:
             description: DesignateAPISpec defines the desired state of DesignateAPI
             properties:
+              apiTimeout:
+                default: 120
+                description: Designate API timeout
+                type: integer
               backendMdnsServerProtocol:
                 description: 'BackendTypeProtocol - Defines the backend protocol to
                   be used between the designate-worker & designate_mdns to/from the
@@ -91,6 +95,10 @@ spec:
                 description: DesignateAPI - Spec definition for the API service of
                   this Designate deployment
                 properties:
+                  apiTimeout:
+                    description: APITimeout for HAProxy and Apache defaults to DesignateSpecCore
+                      APITimeout (seconds)
+                    type: integer
                   backendMdnsServerProtocol:
                     description: 'BackendTypeProtocol - Defines the backend protocol
                       to be used between the designate-worker & designate_mdns to/from

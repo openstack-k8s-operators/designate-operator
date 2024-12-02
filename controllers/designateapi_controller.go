@@ -1103,6 +1103,7 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
 	templateParameters["KeystoneInternalURL"] = keystoneInternalURL
 	templateParameters["KeystonePublicURL"] = keystonePublicURL
+	templateParameters["TimeOut"] = instance.Spec.APITimeout
 
 	// create httpd  vhost template parameters
 	httpdVhostConfig := map[string]interface{}{}
