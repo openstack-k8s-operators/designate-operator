@@ -78,6 +78,10 @@ type DesignateAPISpecBase struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	// TLS - Parameters related to the TLS
 	TLS tls.API `json:"tls,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// APITimeout for HAProxy and Apache defaults to DesignateSpecCore APITimeout (seconds)
+	APITimeout int `json:"apiTimeout"`
 }
 
 // APIOverrideSpec to override the generated manifest of several child resources.

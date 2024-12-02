@@ -1488,6 +1488,7 @@ func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, i
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.NodeSelector = instance.Spec.DesignateAPI.NodeSelector
+		deployment.Spec.APITimeout = instance.Spec.APITimeout
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
 		if err != nil {
