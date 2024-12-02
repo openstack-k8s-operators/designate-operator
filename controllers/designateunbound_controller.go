@@ -36,13 +36,13 @@ import (
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/deployment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 )
 
@@ -154,7 +154,7 @@ func (r *UnboundReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&appsv1.Deployment{}).
+		Owns(&appsv1.StatefulSet{}).
 		Complete(r)
 }
 
@@ -317,14 +317,16 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		return ctrlResult, nil
 	}
 
-	depl := deployment.NewDeployment(
-		designateunbound.Deployment(instance, inputHash, serviceLabels, serviceAnnotations),
+	// Define a new Unbound StatefulSet object
+	statefulSetDef := designateunbound.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations)
+	statefulSet := statefulset.NewStatefulSet(
+		statefulSetDef,
 		time.Duration(5)*time.Second,
 	)
 
 	r.Log.Info("deploying the unbound pod")
 
-	ctrlResult, err = depl.CreateOrPatch(ctx, helper)
+	ctrlResult, err = statefulSet.CreateOrPatch(ctx, helper)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DeploymentReadyCondition,
@@ -342,8 +344,8 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		return ctrlResult, nil
 	}
 
-	if depl.GetDeployment().Generation == depl.GetDeployment().Status.ObservedGeneration {
-		instance.Status.ReadyCount = depl.GetDeployment().Status.ReadyReplicas
+	if statefulSet.GetStatefulSet().Generation == statefulSet.GetStatefulSet().Status.ObservedGeneration {
+		instance.Status.ReadyCount = statefulSet.GetStatefulSet().Status.ReadyReplicas
 
 		r.Log.Info("verifying network attachments")
 		// verify if network attachment matches expectations
@@ -382,7 +384,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 		}
 	}
-	// create Deployment - end
+	// create StatefulSet - end
 
 	// We reached the end of the Reconcile, update the Ready condition based on
 	// the sub conditions

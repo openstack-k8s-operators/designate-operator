@@ -32,12 +32,12 @@ const (
 	configVolume = "designateunbound-config"
 )
 
-// Deployment func
-func Deployment(instance *designatev1beta1.DesignateUnbound,
+// StatefulSet func
+func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 	configHash string,
 	labels map[string]string,
 	annotations map[string]string,
-) *appsv1.Deployment {
+) *appsv1.StatefulSet {
 	var configMode int32 = 0640
 
 	volumes := []corev1.Volume{
@@ -63,7 +63,7 @@ func Deployment(instance *designatev1beta1.DesignateUnbound,
 		// TODO might need tuning
 		TimeoutSeconds:      15,
 		PeriodSeconds:       13,
-		InitialDelaySeconds: 10,
+		InitialDelaySeconds: 15,
 	}
 	readinessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -92,12 +92,12 @@ func Deployment(instance *designatev1beta1.DesignateUnbound,
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
-	deployment := &appsv1.Deployment{
+	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Name,
 			Namespace: instance.Namespace,
 		},
-		Spec: appsv1.DeploymentSpec{
+		Spec: appsv1.StatefulSetSpec{
 			Replicas: instance.Spec.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
@@ -139,7 +139,7 @@ func Deployment(instance *designatev1beta1.DesignateUnbound,
 	// If possible two pods of the same service should not
 	// run on the same worker node. If this is not possible
 	// the get still created on the same worker node.
-	deployment.Spec.Template.Spec.Affinity = affinity.DistributePods(
+	statefulSet.Spec.Template.Spec.Affinity = affinity.DistributePods(
 		common.AppSelector,
 		[]string{
 			designate.ServiceName,
@@ -147,8 +147,8 @@ func Deployment(instance *designatev1beta1.DesignateUnbound,
 		corev1.LabelHostname,
 	)
 	if instance.Spec.NodeSelector != nil {
-		deployment.Spec.Template.Spec.NodeSelector = *instance.Spec.NodeSelector
+		statefulSet.Spec.Template.Spec.NodeSelector = *instance.Spec.NodeSelector
 	}
 
-	return deployment
+	return statefulSet
 }
