@@ -1070,7 +1070,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	Log.Info("Deployment Backendbind9 task reconciled")
 
 	// deploy the unbound reconcilier if necessary
-	designateUnbound, op, err := r.unboundDeploymentCreateOrUpdate(ctx, instance)
+	designateUnbound, op, err := r.unboundStatefulSetCreateOrUpdate(ctx, instance)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			designatev1beta1.DesignateUnboundReadyCondition,
@@ -1679,11 +1679,11 @@ func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.
 	return statefulSet, op, err
 }
 
-func (r *DesignateReconciler) unboundDeploymentCreateOrUpdate(
+func (r *DesignateReconciler) unboundStatefulSetCreateOrUpdate(
 	ctx context.Context,
 	instance *designatev1beta1.Designate,
 ) (*designatev1beta1.DesignateUnbound, controllerutil.OperationResult, error) {
-	deployment := &designatev1beta1.DesignateUnbound{
+	statefulSet := &designatev1beta1.DesignateUnbound{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-unbound", instance.Name),
 			Namespace: instance.Namespace,
@@ -1694,14 +1694,14 @@ func (r *DesignateReconciler) unboundDeploymentCreateOrUpdate(
 		instance.Spec.DesignateUnbound.NodeSelector = instance.Spec.NodeSelector
 	}
 
-	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateUnbound
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
+		statefulSet.Spec = instance.Spec.DesignateUnbound
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		deployment.Spec.NodeSelector = instance.Spec.DesignateUnbound.NodeSelector
+		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
+		statefulSet.Spec.NodeSelector = instance.Spec.DesignateUnbound.NodeSelector
 
-		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
+		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
 			return err
 		}
@@ -1709,7 +1709,7 @@ func (r *DesignateReconciler) unboundDeploymentCreateOrUpdate(
 		return nil
 	})
 
-	return deployment, op, err
+	return statefulSet, op, err
 }
 
 // checkDesignateAPIGeneration -
