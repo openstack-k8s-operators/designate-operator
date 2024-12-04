@@ -47,9 +47,11 @@ const (
 
 	RndcConfDir = "/etc/designate/rndc-keys"
 
-	PoolsYamlsConfigMap = "designate-pools-yaml-config-map"
+	PoolsYamlConfigMap = "designate-pools-yaml-config-map"
 
 	PoolsYamlPath = "templates/designatepoolmanager/config/pools.yaml.tmpl"
 
 	PoolsYamlHash = "pools-yaml-hash"
+
+	PoolsYamlContent = "pools-yaml-content"
 )
