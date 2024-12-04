@@ -78,6 +78,11 @@ type DesignateBackendbind9SpecBase struct {
 	// +kubebuilder:validation:Optional
 	// StorageRequest
 	StorageRequest string `json:"storageRequest"`
+
+	// +kubebuilder:default="internalapi"
+	// +kubebuilder:validation:Optional
+	// AddressPool
+	AddressPool string `json:"addressPool"`
 }
 
 // DesignateBackendbind9Status defines the observed state of DesignateBackendbind9
