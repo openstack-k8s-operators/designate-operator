@@ -38,6 +38,8 @@ const (
 	DesignateUnboundContainerImage = "quay.io/podified-antelope-centos9/openstack-unbound:current-podified"
 	// DesignateBackendbind9ContainerImage is the fall-back container image for DesignateUnbound
 	DesignateBackendbind9ContainerImage = "quay.io/podified-antelope-centos9/openstack-designate-backend-bind9:current-podified"
+	// NetUtilsContainerImage is the container image containing support for predictable IP pod injection
+	NetUtilsContainerImage = "quay.io/podified-antelope-centos9/openstack-netutils:current-podified"
 )
 
 // DesignateTemplate defines common input parameters used by all Designate services
@@ -145,6 +147,7 @@ func SetupDefaults() {
 		WorkerContainerImageURL:       util.GetEnvVar("RELATED_IMAGE_DESIGNATE_WORKER_IMAGE_URL_DEFAULT", DesignateWorkerContainerImage),
 		UnboundContainerImageURL:      util.GetEnvVar("RELATED_IMAGE_DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT", DesignateUnboundContainerImage),
 		Backendbind9ContainerImageURL: util.GetEnvVar("RELATED_IMAGE_DESIGNATE_BACKENDBIND9_IMAGE_URL_DEFAULT", DesignateBackendbind9ContainerImage),
+		NetUtilsURL:                   util.GetEnvVar("RELATED_IMAGE_NETUTILS_IMAGE_URL_DEFAULT", NetUtilsContainerImage),
 	}
 
 	SetupDesignateDefaults(designateDefaults)

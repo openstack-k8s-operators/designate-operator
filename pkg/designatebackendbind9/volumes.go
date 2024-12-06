@@ -28,6 +28,7 @@ const (
 	mergedConfigVolume = "designatebackendbind9-config-data-merged"
 	logVolume          = "designatebackendbind9-log-volume"
 	rndcKeys           = "designatebackendbind9-keys"
+	bindIPs            = "designate-bind-ips"
 )
 
 // NOTE(beagles): I vacillated on using designate.GetVolumes() here and appending the extra entries and may still. There
@@ -86,6 +87,17 @@ func getServicePodVolumes(baseConfigMapName string) []corev1.Volume {
 				},
 			},
 		},
+		{
+			Name: bindIPs,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					DefaultMode: &configMode,
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: designate.BindPredIPConfigMap,
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -119,6 +131,20 @@ func getInitVolumeMounts() []corev1.VolumeMount {
 			Name:      rndcKeys,
 			MountPath: "/var/lib/config-data/keys",
 			ReadOnly:  true,
+		},
+	}
+}
+
+func getPredIPVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      scriptVolume,
+			MountPath: "/usr/local/bin/container-scripts",
+			ReadOnly:  true,
+		},
+		{
+			Name:      bindIPs,
+			MountPath: "/var/lib/predictableips",
 		},
 	}
 }

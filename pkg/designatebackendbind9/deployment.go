@@ -162,24 +162,28 @@ func StatefulSet(
 
 	// TODO: bind's init container doesn't need most of this stuff. It doesn't use rabbitmq, redis or access the
 	// database. Should clean this up!
-	initContainerDetails := designate.APIDetails{
-		ContainerImage:       instance.Spec.ContainerImage,
-		DatabaseHost:         instance.Spec.DatabaseHostname,
-		DatabaseName:         designate.DatabaseName,
-		OSPSecret:            instance.Spec.Secret,
-		TransportURLSecret:   instance.Spec.TransportURLSecret,
-		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		VolumeMounts:         getInitVolumeMounts(),
-	}
-	statefulSet.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
-
-	// TODO: Clean up this hack
-	// Add custom config for the API Service
 	envVars = map[string]env.Setter{}
-	envVars["CustomConf"] = env.SetValue(common.CustomServiceConfigFileName)
 	envVars["POD_NAME"] = env.DownwardAPI("metadata.name")
+	envVars["CustomConf"] = env.SetValue(common.CustomServiceConfigFileName)
+	envVars["MAP_PREFIX"] = env.SetValue("bind_address_")
 	envVars["RNDC_PREFIX"] = env.SetValue(designate.DesignateRndcKey)
-	statefulSet.Spec.Template.Spec.InitContainers[0].Env = env.MergeEnvs(statefulSet.Spec.Template.Spec.InitContainers[0].Env, envVars)
+	env := env.MergeEnvs([]corev1.EnvVar{}, envVars)
+	initContainerDetails := designate.InitContainerDetails{
+		ContainerImage: instance.Spec.ContainerImage,
+		VolumeMounts:   getInitVolumeMounts(),
+		EnvVars:        env,
+	}
+	predIPContainerDetails := designate.PredIPContainerDetails{
+		ContainerImage: instance.Spec.NetUtilsImage,
+		VolumeMounts:   getPredIPVolumeMounts(),
+		EnvVars:        env,
+		Command:        designate.PredictableIPCommand,
+	}
+
+	statefulSet.Spec.Template.Spec.InitContainers = []corev1.Container{
+		designate.SimpleInitContainer(initContainerDetails),
+		designate.PredictableIPContainer(predIPContainerDetails),
+	}
 
 	return statefulSet
 }
