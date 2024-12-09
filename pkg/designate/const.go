@@ -52,4 +52,13 @@ const (
 	PoolsYamlPath = "templates/designatepoolmanager/config/pools.yaml.tmpl"
 
 	PoolsYamlHash = "pools-yaml-hash"
+
+	// BindPredictableIPHash key for status hash
+	BindPredictableIPHash = "Bind IP Map"
+
+	// RndcHash key for status hash
+	RndcHash = "Rndc keys"
+
+	// PredictableIPCommand -
+	PredictableIPCommand = "/usr/local/bin/container-scripts/setipalias.sh"
 )

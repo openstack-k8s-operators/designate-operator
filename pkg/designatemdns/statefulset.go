@@ -43,9 +43,9 @@ func StatefulSet(
 	annotations map[string]string,
 ) *appsv1.StatefulSet {
 	rootUser := int64(0)
-	serviceName := fmt.Sprintf("%s-mdns", designate.ServiceName)
-	volumes := GetVolumes(designate.GetOwningDesignateName(instance))
-	volumeMounts := GetVolumeMounts(serviceName)
+	serviceName := fmt.Sprintf(instance.Name)
+	volumes := GetVolumes(instance.Name)
+	volumeMounts := designate.GetVolumeMounts(instance.Name)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -133,16 +133,26 @@ func StatefulSet(
 		statefulSet.Spec.Template.Spec.NodeSelector = *instance.Spec.NodeSelector
 	}
 
-	initContainerDetails := designate.APIDetails{
-		ContainerImage:       instance.Spec.ContainerImage,
-		DatabaseHost:         instance.Spec.DatabaseHostname,
-		DatabaseName:         designate.DatabaseName,
-		OSPSecret:            instance.Spec.Secret,
-		TransportURLSecret:   instance.Spec.TransportURLSecret,
-		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		VolumeMounts:         designate.GetInitVolumeMounts(),
+	envVars = map[string]env.Setter{}
+	envVars["POD_NAME"] = env.DownwardAPI("metadata.name")
+	envVars["MAP_PREFIX"] = env.SetValue("mdns_address_")
+	podEnv := env.MergeEnvs([]corev1.EnvVar{}, envVars)
+	initContainerDetails := designate.InitContainerDetails{
+		ContainerImage: instance.Spec.ContainerImage,
+		VolumeMounts:   designate.GetInitVolumeMounts(),
+		EnvVars:        podEnv,
 	}
-	statefulSet.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
+	predIPContainerDetails := designate.PredIPContainerDetails{
+		ContainerImage: instance.Spec.NetUtilsImage,
+		VolumeMounts:   getPredIPVolumeMounts(),
+		EnvVars:        podEnv,
+		Command:        designate.PredictableIPCommand,
+	}
+
+	statefulSet.Spec.Template.Spec.InitContainers = []corev1.Container{
+		designate.SimpleInitContainer(initContainerDetails),
+		designate.PredictableIPContainer(predIPContainerDetails),
+	}
 
 	return statefulSet
 }
