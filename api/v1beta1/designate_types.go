@@ -29,6 +29,9 @@ const (
 
 	// DeploymentHash hash used to detect changes
 	DeploymentHash = "deployment"
+
+	// PoolUpdateHash hash
+	PoolUpdateHash = "pool-update"
 )
 
 // DesignateAPISpecCore - this version has no containerImage for use with the OpenStackControlplane
