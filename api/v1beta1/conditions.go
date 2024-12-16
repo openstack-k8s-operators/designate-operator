@@ -21,8 +21,8 @@ import (
 
 // Designate Condition Types used by API objects.
 const (
-	// DesignateRabbitMqTransportURLReadyCondition Status=True condition which indicates if the RabbitMQ TransportURLUrl is ready
-	DesignateRabbitMqTransportURLReadyCondition condition.Type = "DesignateRabbitMqTransportURLReady"
+	// RabbitMqTransportURLReadyCondition Status=True condition which indicates if the RabbitMQ TransportURLUrl is ready
+	RabbitMqTransportURLReadyCondition condition.Type = "RabbitMqTransportURLReady"
 
 	// DesignateAPIReadyCondition Status=True condition which indicates if the DesignateAPI is configured and operational
 	DesignateAPIReadyCondition condition.Type = "DesignateAPIReady"
@@ -52,19 +52,19 @@ const ()
 // Common Messages used by API objects.
 const (
 	//
-	// DesignateRabbitMqTransportURLReady condition messages
+	//  RabbitMqTransportURLReady condition messages
 	//
-	// DesignateRabbitMqTransportURLReadyInitMessage
-	DesignateRabbitMqTransportURLReadyInitMessage = "DesignateRabbitMqTransportURL not started"
+	// RabbitMqTransportURLReadyInitMessage
+	RabbitMqTransportURLReadyInitMessage = "RabbitMqTransportURL not started"
 
-	// DesignateRabbitMqTransportURLReadyRunningMessage
-	DesignateRabbitMqTransportURLReadyRunningMessage = "DesignateRabbitMqTransportURL creation in progress"
+	// RabbitMqTransportURLReadyRunningMessage
+	RabbitMqTransportURLReadyRunningMessage = "RabbitMqTransportURL creation in progress"
 
-	// DesignateRabbitMqTransportURLReadyMessage
-	DesignateRabbitMqTransportURLReadyMessage = "DesignateRabbitMqTransportURL successfully created"
+	// RabbitMqTransportURLReadyMessage
+	RabbitMqTransportURLReadyMessage = "RabbitMqTransportURL successfully created"
 
-	// DesignateRabbitMqTransportURLReadyErrorMessage
-	DesignateRabbitMqTransportURLReadyErrorMessage = "DesignateRabbitMqTransportURL error occured %s"
+	// RabbitMqTransportURLReadyErrorMessage
+	RabbitMqTransportURLReadyErrorMessage = "RabbitMqTransportURL error occured %s"
 
 	//
 	// DesignateAPIReady condition messages
