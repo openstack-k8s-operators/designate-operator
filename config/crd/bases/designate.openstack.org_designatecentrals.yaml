@@ -134,6 +134,7 @@ spec:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: atomic
               replicas:
                 default: 1
                 description: Replicas - Designate Central Replicas
