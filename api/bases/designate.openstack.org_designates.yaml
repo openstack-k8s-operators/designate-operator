@@ -706,6 +706,7 @@ spec:
                     items:
                       type: string
                     type: array
+                    x-kubernetes-list-type: atomic
                   replicas:
                     default: 1
                     description: Replicas - Designate Central Replicas
@@ -1063,6 +1064,7 @@ spec:
                     items:
                       type: string
                     type: array
+                    x-kubernetes-list-type: atomic
                   replicas:
                     default: 1
                     description: Replicas - Designate Producer Replicas
@@ -1548,7 +1550,6 @@ spec:
             - designateProducer
             - designateWorker
             - rabbitMqClusterName
-            - redisServiceName
             - secret
             type: object
           status:

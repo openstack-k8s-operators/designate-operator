@@ -69,6 +69,7 @@ type DesignateProducerSpecBase struct {
 	TLS tls.Ca `json:"tls,omitempty"`
 
 	// List of Redis Host IP addresses
+	// +listType:=atomic
 	RedisHostIPs []string `json:"redisHostIPs,omitempty"`
 }
 
