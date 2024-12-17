@@ -44,6 +44,7 @@ type DesignateDefaults struct {
 	WorkerContainerImageURL       string
 	Backendbind9ContainerImageURL string
 	UnboundContainerImageURL      string
+	DesignateAPIRouteTimeout         int
 }
 
 var designateDefaults DesignateDefaults
@@ -206,4 +207,36 @@ func (r *Designate) ValidateDelete() (admission.Warnings, error) {
 
 	// TODO(user): fill in your validation logic upon object deletion.
 	return nil, nil
+}
+
+func (spec *DesignateSpecCore) GetDefaultRouteAnnotations() (annotations map[string]string) {
+	return map[string]string{
+		"haproxy.router.openshift.io/timeout": fmt.Sprintf("%ds", designateDefaults.DesignateAPIRouteTimeout),
+	}
+}
+
+// SetDefaultRouteAnnotations sets HAProxy timeout values of the route
+func (spec *DesignateSpecCore) SetDefaultRouteAnnotations(annotations map[string]string) {
+	const haProxyAnno = "haproxy.router.openshift.io/timeout"
+	// Use a custom annotation to flag when the operator has set the default HAProxy timeout
+	// With the annotation func determines when to overwrite existing HAProxy timeout with the APITimeout
+	const designateAnno = "api.designate.openstack.org/timeout"
+
+	valDesignate, okDesignate := annotations[designateAnno]
+	valHAProxy, okHAProxy := annotations[haProxyAnno]
+
+	// Human operator set the HAProxy timeout manually
+	if !okDesignate && okHAProxy {
+		return
+	}
+
+	// Human operator modified the HAProxy timeout manually without removing the Designate flag
+	if okDesignate && okHAProxy && valDesignate != valHAProxy {
+		delete(annotations, designateAnno)
+		return
+	}
+
+	timeout := fmt.Sprintf("%ds", spec.APITimeout)
+	annotations[designateAnno] = timeout
+	annotations[haProxyAnno] = timeout
 }

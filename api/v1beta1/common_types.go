@@ -17,7 +17,6 @@ limitations under the License.
 package v1beta1
 
 import (
-	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -132,20 +131,4 @@ type PasswordSelector struct {
 	// +kubebuilder:default="DesignatePassword"
 	// Service - Selector to get the designate service password from the Secret
 	Service string `json:"service"`
-}
-
-// SetupDefaults - initializes any CRD field defaults based on environment variables (the defaulting mechanism itself is implemented via webhooks)
-func SetupDefaults() {
-	// Acquire environmental defaults and initialize Designate defaults with them
-	designateDefaults := DesignateDefaults{
-		APIContainerImageURL:          util.GetEnvVar("RELATED_IMAGE_DESIGNATE_API_IMAGE_URL_DEFAULT", DesignateAPIContainerImage),
-		CentralContainerImageURL:      util.GetEnvVar("RELATED_IMAGE_DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT", DesignateCentralContainerImage),
-		MdnsContainerImageURL:         util.GetEnvVar("RELATED_IMAGE_DESIGNATE_MDNS_IMAGE_URL_DEFAULT", DesignateMdnsContainerImage),
-		ProducerContainerImageURL:     util.GetEnvVar("RELATED_IMAGE_DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT", DesignateProducerContainerImage),
-		WorkerContainerImageURL:       util.GetEnvVar("RELATED_IMAGE_DESIGNATE_WORKER_IMAGE_URL_DEFAULT", DesignateWorkerContainerImage),
-		UnboundContainerImageURL:      util.GetEnvVar("RELATED_IMAGE_DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT", DesignateUnboundContainerImage),
-		Backendbind9ContainerImageURL: util.GetEnvVar("RELATED_IMAGE_DESIGNATE_BACKENDBIND9_IMAGE_URL_DEFAULT", DesignateBackendbind9ContainerImage),
-	}
-
-	SetupDesignateDefaults(designateDefaults)
 }
