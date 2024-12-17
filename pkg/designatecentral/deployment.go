@@ -43,8 +43,9 @@ func Deployment(
 	// designateUser := int64(42411)
 	// designateGroup := int64(42411)
 
-	volumes := designate.GetVolumes("designate-central")
-	volumeMounts := designate.GetVolumeMounts("designate-central")
+	serviceName := fmt.Sprintf("%s-central", designate.ServiceName)
+	volumes := getServicePodVolumes(serviceName)
+	volumeMounts := getServicePodVolumeMounts(serviceName)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -68,8 +69,6 @@ func Deployment(
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
-
-	serviceName := fmt.Sprintf("%s-central", designate.ServiceName)
 
 	// Add the CA bundle
 	if instance.Spec.TLS.CaBundleSecretName != "" {
