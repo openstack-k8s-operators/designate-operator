@@ -44,6 +44,7 @@ type DesignateDefaults struct {
 	WorkerContainerImageURL       string
 	Backendbind9ContainerImageURL string
 	UnboundContainerImageURL      string
+	NetUtilsURL                   string
 }
 
 var designateDefaults DesignateDefaults
@@ -85,6 +86,9 @@ func (spec *DesignateSpec) Default() {
 	if spec.DesignateMdns.ContainerImage == "" {
 		spec.DesignateMdns.ContainerImage = designateDefaults.MdnsContainerImageURL
 	}
+	if spec.DesignateMdns.NetUtilsImage == "" {
+		spec.DesignateMdns.NetUtilsImage = designateDefaults.NetUtilsURL
+	}
 	if spec.DesignateProducer.ContainerImage == "" {
 		spec.DesignateProducer.ContainerImage = designateDefaults.ProducerContainerImageURL
 	}
@@ -93,6 +97,9 @@ func (spec *DesignateSpec) Default() {
 	}
 	if spec.DesignateBackendbind9.ContainerImage == "" {
 		spec.DesignateBackendbind9.ContainerImage = designateDefaults.Backendbind9ContainerImageURL
+	}
+	if spec.DesignateBackendbind9.NetUtilsImage == "" {
+		spec.DesignateBackendbind9.NetUtilsImage = designateDefaults.NetUtilsURL
 	}
 	if spec.DesignateUnbound.ContainerImage == "" {
 		spec.DesignateUnbound.ContainerImage = designateDefaults.UnboundContainerImageURL
