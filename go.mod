@@ -13,6 +13,7 @@ require (
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.5.1-0.20241216113837-d172b3ac0f4e
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.5.1-0.20241212160155-4e7d8f749820
 	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.29.10
 	k8s.io/apimachinery v0.29.10
 	k8s.io/client-go v0.29.10
@@ -71,7 +72,6 @@ require (
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.29.10 // indirect
 	k8s.io/component-base v0.29.10 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect
