@@ -428,7 +428,6 @@ func (r *DesignateProducerReconciler) reconcileNormal(ctx context.Context, insta
 		return ctrlResult, err
 	}
 
-	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 	// run check parent Designate CR config maps - end
 
 	//
@@ -516,6 +515,7 @@ func (r *DesignateProducerReconciler) reconcileNormal(ctx context.Context, insta
 
 	// Create ConfigMaps and Secrets - end
 
+	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 	//
 	// TODO check when/if Init, Update, or Upgrade should/could be skipped
 	//

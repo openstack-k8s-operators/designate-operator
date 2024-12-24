@@ -193,7 +193,7 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		condition.UnknownCondition(condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage),
 		condition.UnknownCondition(condition.DBReadyCondition, condition.InitReason, condition.DBReadyInitMessage),
 		condition.UnknownCondition(condition.DBSyncReadyCondition, condition.InitReason, condition.DBSyncReadyInitMessage),
-		condition.UnknownCondition(designatev1beta1.DesignateRabbitMqTransportURLReadyCondition, condition.InitReason, designatev1beta1.DesignateRabbitMqTransportURLReadyInitMessage),
+		condition.UnknownCondition(condition.RabbitMqTransportURLReadyCondition, condition.InitReason, condition.RabbitMqTransportURLReadyInitMessage),
 		condition.UnknownCondition(condition.InputReadyCondition, condition.InitReason, condition.InputReadyInitMessage),
 		condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateAPIReadyCondition, condition.InitReason, designatev1beta1.DesignateAPIReadyInitMessage),
@@ -567,10 +567,10 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	transportURL, op, err := r.transportURLCreateOrUpdate(ctx, instance)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateRabbitMqTransportURLReadyCondition,
+			condition.RabbitMqTransportURLReadyCondition,
 			condition.ErrorReason,
 			condition.SeverityWarning,
-			designatev1beta1.DesignateRabbitMqTransportURLReadyErrorMessage,
+			condition.RabbitMqTransportURLReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, err
 	}
@@ -592,8 +592,8 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	instance.Status.Conditions.MarkTrue(
-		designatev1beta1.DesignateRabbitMqTransportURLReadyCondition,
-		designatev1beta1.DesignateRabbitMqTransportURLReadyMessage)
+		condition.RabbitMqTransportURLReadyCondition,
+		condition.RabbitMqTransportURLReadyMessage)
 
 	// end transportURL
 	hostIPs, err := getRedisServiceIPs(ctx, instance, helper)

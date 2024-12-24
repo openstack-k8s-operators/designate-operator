@@ -63,10 +63,6 @@ status:
     reason: Ready
     status: "True"
     type: DesignateProducerReady
-  - message: DesignateRabbitMqTransportURL successfully created
-    reason: Ready
-    status: "True"
-    type: DesignateRabbitMqTransportURLReady
   - message: Setup complete
     reason: Ready
     status: "True"
@@ -87,6 +83,10 @@ status:
     reason: Ready
     status: "True"
     type: NetworkAttachmentsReady
+  - message: RabbitMqTransportURL successfully created
+    reason: Ready
+    status: "True"
+    type: RabbitMqTransportURLReady
   - message: RoleBinding created
     reason: Ready
     status: "True"
