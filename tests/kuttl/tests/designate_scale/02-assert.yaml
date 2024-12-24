@@ -1,0 +1,27 @@
+#
+# Check for:
+#
+# - 1 DesignateAPI CR
+# - 3 Pods for DesignateAPI CR
+#
+
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  finalizers:
+  - openstack.org/designate
+  name: designate
+spec:
+  designateAPI:
+    replicas: 3
+status:
+  designateAPIReadyCount: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: designate-api
+spec:
+  replicas: 3
+status:
+  availableReplicas: 3
