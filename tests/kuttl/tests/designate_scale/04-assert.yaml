@@ -1,0 +1,23 @@
+#
+# Check for:
+#
+# - 1 DesignateAPI CR with 0 replicas
+# - Designate Deployment with 0 Pods
+#
+
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  finalizers:
+  - openstack.org/designate
+  name: designate
+spec:
+  designateAPI:
+    replicas: 0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: designate-api
+spec:
+  replicas: 0
