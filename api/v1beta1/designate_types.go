@@ -18,6 +18,7 @@ package v1beta1
 
 import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	"github.com/openstack-k8s-operators/lib-common/modules/storage"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +30,9 @@ const (
 
 	// DeploymentHash hash used to detect changes
 	DeploymentHash = "deployment"
+
+	// Designate API timeout
+	APITimeout = 120
 )
 
 // DesignateAPISpecCore - this version has no containerImage for use with the OpenStackControlplane
@@ -186,6 +190,11 @@ type DesignateSpecBase struct {
 	// +kubebuilder:default="designate-redis"
 	// RedisServiceName is the name of the Redis instance to be used (must be in the same namespace as designate)
 	RedisServiceName string `json:"redisServiceName"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=120
+	// Designate API timeout
+	APITimeout int `json:"apiTimeout"`
 }
 
 // DesignateStatus defines the observed state of Designate
@@ -276,6 +285,24 @@ func (instance Designate) IsReady() bool {
 		instance.Status.Conditions.IsTrue(DesignateBackendbind9ReadyCondition) &&
 		unboundReady
 }
+
+// SetupDefaults - initializes any CRD field defaults based on environment variables (the defaulting mechanism itself is implemented via webhooks)
+func SetupDefaults() {
+	// Acquire environmental defaults and initialize Designate defaults with them
+	designateDefaults := DesignateDefaults{
+		APIContainerImageURL:          util.GetEnvVar("RELATED_IMAGE_DESIGNATE_API_IMAGE_URL_DEFAULT", DesignateAPIContainerImage),
+		CentralContainerImageURL:      util.GetEnvVar("RELATED_IMAGE_DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT", DesignateCentralContainerImage),
+		MdnsContainerImageURL:         util.GetEnvVar("RELATED_IMAGE_DESIGNATE_MDNS_IMAGE_URL_DEFAULT", DesignateMdnsContainerImage),
+		ProducerContainerImageURL:     util.GetEnvVar("RELATED_IMAGE_DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT", DesignateProducerContainerImage),
+		WorkerContainerImageURL:       util.GetEnvVar("RELATED_IMAGE_DESIGNATE_WORKER_IMAGE_URL_DEFAULT", DesignateWorkerContainerImage),
+		UnboundContainerImageURL:      util.GetEnvVar("RELATED_IMAGE_DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT", DesignateUnboundContainerImage),
+		Backendbind9ContainerImageURL: util.GetEnvVar("RELATED_IMAGE_DESIGNATE_BACKENDBIND9_IMAGE_URL_DEFAULT", DesignateBackendbind9ContainerImage),
+		DesignateAPIRouteTimeout:      APITimeout,
+	}
+
+	SetupDesignateDefaults(designateDefaults)
+}
+
 
 // DesignateExtraVolMounts exposes additional parameters processed by the designate-operator
 // and defines the common VolMounts structure provided by the main storage module
