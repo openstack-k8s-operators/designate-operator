@@ -31,78 +31,6 @@ status:
   designateWorkerReadyCount: 1
   databaseHostname: openstack.designate-kuttl-tests.svc
   conditions:
-  # - message: Setup complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: Ready
-  # - message: DB create completed
-  #   reason: Ready
-  #   status: "True"
-  #   type: DBReady
-  # - message: DBsync completed
-  #   reason: Ready
-  #   status: "True"
-  #   type: DBSyncReady
-  # - message: Setup complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: InputReady
-  # - message: MariaDBAccount creation complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: MariaDBAccountReady
-  # - message: NetworkAttachments completed
-  #   reason: Ready
-  #   status: "True"
-  #   type: NetworkAttachmentsReady
-  # - message: Setup complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: DesignateAPIReady
-  # - message: Setup complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: DesignateCentralReady
-  # - message: Setup complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: DesignateWorkerReady
-  # - message: Setup complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: DesignateMdnsReady
-  # - message: Setup complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: DesignateProducerReady
-  # - message: Setup complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: DesignateBackendbind9Ready
-  # - message: Setup complete
-  #   reason: Ready
-  #   status: "True"
-  #   type: DesignateUnboundReady
-  # - message: DesignateRabbitMqTransportURL successfully created
-  #   reason: Ready
-  #   status: "True"
-  #   type: DesignateRabbitMqTransportURLReady
-  # - message: RoleBinding created
-  #   reason: Ready
-  #   status: "True"
-  #   type: RoleBindingReady
-  # - message: Role created
-  #   reason: Ready
-  #   status: "True"
-  #   type: RoleReady
-  # - message: ServiceAccount created
-  #   reason: Ready
-  #   status: "True"
-  #   type: ServiceAccountReady
-  # - message: Service config create completed
-  #   reason: Ready
-  #   status: "True"
-  #   type: ServiceConfigReady
   - message: Setup complete
     reason: Ready
     status: "True"
@@ -135,10 +63,6 @@ status:
     reason: Ready
     status: "True"
     type: DesignateProducerReady
-  - message: DesignateRabbitMqTransportURL successfully created
-    reason: Ready
-    status: "True"
-    type: DesignateRabbitMqTransportURLReady
   - message: Setup complete
     reason: Ready
     status: "True"
@@ -159,6 +83,10 @@ status:
     reason: Ready
     status: "True"
     type: NetworkAttachmentsReady
+  - message: RabbitMqTransportURL successfully created
+    reason: Ready
+    status: "True"
+    type: RabbitMqTransportURLReady
   - message: RoleBinding created
     reason: Ready
     status: "True"

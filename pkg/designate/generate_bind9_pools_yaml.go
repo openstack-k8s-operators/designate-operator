@@ -18,52 +18,55 @@ import (
 	"fmt"
 	"gopkg.in/yaml.v2"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"text/template"
 )
 
 type Pool struct {
-	Name        string
-	Description string
-	Attributes  map[string]string
-	NSRecords   []NSRecord
-	Nameservers []Nameserver
-	Targets     []Target
-	CatalogZone *CatalogZone // it is a pointer because it is optional
+	Name        string            `yaml:"name"`
+	Description string            `yaml:"description"`
+	Attributes  map[string]string `yaml:"attributes"`
+	NSRecords   []NSRecord        `yaml:"ns_records"`
+	Nameservers []Nameserver      `yaml:"nameservers"`
+	Targets     []Target          `yaml:"targets"`
+	CatalogZone *CatalogZone      `yaml:"catalog_zone,omitempty"` // it is a pointer because it is optional
 }
 
 type NSRecord struct {
-	Hostname string
-	Priority int
+	Hostname string `yaml:"hostname"`
+	Priority int    `yaml:"priority"`
 }
 
 type Nameserver struct {
-	Host string
-	Port int
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
 }
 
 type Target struct {
-	Type        string
-	Description string
-	Masters     []Master
-	Options     Options
+	Type        string   `yaml:"type"`
+	Description string   `yaml:"description"`
+	Masters     []Master `yaml:"masters"`
+	Options     Options  `yaml:"options"`
 }
 
 type Master struct {
-	Host string
-	Port int
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
 }
 
 type Options struct {
-	Host           string
-	Port           int
-	RNDCHost       string
-	RNDCPort       int
-	RNDCConfigFile string
+	Host           string `yaml:"host"`
+	Port           int    `yaml:"port"`
+	RNDCHost       string `yaml:"rndc_host"`
+	RNDCPort       int    `yaml:"rndc_port"`
+	RNDCConfigFile string `yaml:"rndc_config_file"`
 }
 
 type CatalogZone struct {
-	FQDN    string
-	Refresh string
+	FQDN    string `yaml:"fqdn"`
+	Refresh int    `yaml:"refresh"`
 }
 
 func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (string, error) {
@@ -114,7 +117,7 @@ func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (st
 	// Catalog zone is an optional section
 	// catalogZone := &CatalogZone{
 	// 	FQDN:    "example.org.",
-	// 	Refresh: "60",
+	//	Refresh: 60,
 	// }
 	defaultAttributes := make(map[string]string)
 	// Create the Pool struct with the dynamic values
@@ -128,7 +131,12 @@ func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (st
 		CatalogZone: nil, // set to catalogZone if this section should be presented
 	}
 
-	PoolsYaml, err := os.ReadFile(PoolsYamlPath)
+	poolsYamlPath, err := getPoolsYamlPath()
+	if err != nil {
+		return "", err
+	}
+
+	PoolsYaml, err := os.ReadFile(poolsYamlPath)
 	if err != nil {
 		return "", err
 	}
@@ -144,4 +152,14 @@ func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (st
 	}
 
 	return buf.String(), nil
+}
+
+// We have this function so different tests could find PoolsYamlPath
+func getPoolsYamlPath() (string, error) {
+	cmdOut, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get repository root directory from: %s because of %w", string(cmdOut), err)
+	}
+	repoRoot := strings.TrimSpace(string(cmdOut))
+	return filepath.Join(repoRoot, PoolsYamlPath), nil
 }

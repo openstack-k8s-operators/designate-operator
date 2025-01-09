@@ -21,9 +21,6 @@ import (
 
 // Designate Condition Types used by API objects.
 const (
-	// DesignateRabbitMqTransportURLReadyCondition Status=True condition which indicates if the RabbitMQ TransportURLUrl is ready
-	DesignateRabbitMqTransportURLReadyCondition condition.Type = "DesignateRabbitMqTransportURLReady"
-
 	// DesignateAPIReadyCondition Status=True condition which indicates if the DesignateAPI is configured and operational
 	DesignateAPIReadyCondition condition.Type = "DesignateAPIReady"
 
@@ -51,21 +48,6 @@ const ()
 
 // Common Messages used by API objects.
 const (
-	//
-	// DesignateRabbitMqTransportURLReady condition messages
-	//
-	// DesignateRabbitMqTransportURLReadyInitMessage
-	DesignateRabbitMqTransportURLReadyInitMessage = "DesignateRabbitMqTransportURL not started"
-
-	// DesignateRabbitMqTransportURLReadyRunningMessage
-	DesignateRabbitMqTransportURLReadyRunningMessage = "DesignateRabbitMqTransportURL creation in progress"
-
-	// DesignateRabbitMqTransportURLReadyMessage
-	DesignateRabbitMqTransportURLReadyMessage = "DesignateRabbitMqTransportURL successfully created"
-
-	// DesignateRabbitMqTransportURLReadyErrorMessage
-	DesignateRabbitMqTransportURLReadyErrorMessage = "DesignateRabbitMqTransportURL error occured %s"
-
 	//
 	// DesignateAPIReady condition messages
 	//

@@ -419,7 +419,6 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 		return ctrlResult, err
 	}
 
-	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 	// run check parent Designate CR config maps - end
 
 	//
@@ -507,6 +506,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 
 	// Create ConfigMaps and Secrets - end
 
+	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 	//
 	// TODO check when/if Init, Update, or Upgrade should/could be skipped
 	//
