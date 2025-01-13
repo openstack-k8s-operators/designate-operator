@@ -775,7 +775,11 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	// Handle Mdns predictable IPs configmap
+	// We cannot have 0 mDNS pods so even though the CRD validation allows 0, don't allow it.
 	mdnsReplicaCount := int(*instance.Spec.DesignateMdns.Replicas)
+	if mdnsReplicaCount < 1 {
+		mdnsReplicaCount = 1
+	}
 	var mdnsNames []string
 	for i := 0; i < mdnsReplicaCount; i++ {
 		mdnsNames = append(mdnsNames, fmt.Sprintf("mdns_address_%d", i))
@@ -798,6 +802,9 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	// Handle Bind predictable IPs configmap
+	// Unlike mDNS, we can have 0 binds when byob is used.
+	// NOTE(beagles) Really it might make more sense to have BYOB be an explicit flag and not assume that a 0
+	// value is a byob case. Something to think about.
 	bindReplicaCount := int(*instance.Spec.DesignateBackendbind9.Replicas)
 	var bindNames []string
 	for i := 0; i < bindReplicaCount; i++ {
@@ -1586,6 +1593,11 @@ func (r *DesignateReconciler) mdnsStatefulSetCreateOrUpdate(ctx context.Context,
 		instance.Spec.DesignateMdns.NodeSelector = instance.Spec.NodeSelector
 	}
 
+	if int(*instance.Spec.DesignateMdns.Replicas) < 1 {
+		var minReplicas int32 = 1
+		instance.Spec.DesignateMdns.Replicas = &minReplicas
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
 		statefulSet.Spec = instance.Spec.DesignateMdns
 		// Add in transfers from umbrella Designate CR (this instance) spec
@@ -1598,6 +1610,7 @@ func (r *DesignateReconciler) mdnsStatefulSetCreateOrUpdate(ctx context.Context,
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
 		statefulSet.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
 		statefulSet.Spec.NodeSelector = instance.Spec.DesignateMdns.NodeSelector
+		statefulSet.Spec.Replicas = instance.Spec.DesignateMdns.Replicas
 
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {

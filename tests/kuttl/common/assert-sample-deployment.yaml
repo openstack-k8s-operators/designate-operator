@@ -149,7 +149,7 @@ commands:
       imageTuples=$(oc get -n openstack-operators deployment designate-operator-controller-manager -o go-template="$tupleTemplate")
       for ITEM in $(echo $imageTuples); do
         # it is an image
-        if echo $ITEM | grep 'RELATED_IMAGE' &> /dev/null; then
+        if echo $ITEM | grep 'RELATED_IMAGE_DESIGNATE' &> /dev/null; then
           NAME=$(echo $ITEM | sed -e 's|^RELATED_IMAGE_DESIGNATE_\([^_]*\)_.*|\1|')
           IMG_FROM_ENV=$(echo $ITEM | sed -e 's|^.*#\(.*\)|\1|')
           case $NAME in
