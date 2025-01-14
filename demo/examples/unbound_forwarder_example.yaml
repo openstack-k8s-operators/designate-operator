@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: designate-unbound-forwarders-config
+data:
+  forwarders.conf: |
+    forward-zone:
+      name: "."
+      forward-addr: 8.8.8.8
+      forward-addr: 8.8.4.4
+  other.conf: |
+    forward-zone:
+      name: "."
+      forward-addr: 8.8.8.8
+      forward-addr: 8.8.4.4

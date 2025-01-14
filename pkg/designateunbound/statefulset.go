@@ -16,6 +16,8 @@ limitations under the License.
 package designateunbound
 
 import (
+	"fmt"
+
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	designate "github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
@@ -28,36 +30,15 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-const (
-	configVolume = "designateunbound-config"
-)
-
 // StatefulSet func
 func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 	configHash string,
 	labels map[string]string,
 	annotations map[string]string,
 ) *appsv1.StatefulSet {
-	var configMode int32 = 0640
-
-	volumes := []corev1.Volume{
-		{
-			Name: configVolume,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &configMode,
-					SecretName:  "designate-unbound-config-data",
-				},
-			},
-		},
-	}
-	mounts := []corev1.VolumeMount{
-		{
-			Name:      configVolume,
-			MountPath: "/etc/unbound/conf.d",
-			ReadOnly:  true,
-		},
-	}
+	serviceName := fmt.Sprintf("%s-unbound", designate.ServiceName)
+	volumes := GetVolumes(serviceName)
+	volumeMounts := GetVolumeMounts()
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -126,7 +107,7 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 							RunAsUser: ptr.To[int64](0),
 						},
 						Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-						VolumeMounts:   mounts,
+						VolumeMounts:   volumeMounts,
 						Resources:      instance.Spec.Resources,
 						ReadinessProbe: readinessProbe,
 						LivenessProbe:  livenessProbe,
