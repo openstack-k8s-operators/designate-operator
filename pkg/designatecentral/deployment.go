@@ -27,7 +27,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	// "k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // Deployment func
@@ -37,15 +36,12 @@ func Deployment(
 	labels map[string]string,
 	annotations map[string]string,
 ) *appsv1.Deployment {
+	// TODO(beagles): running as root should not be necessary here.
 	rootUser := int64(0)
-	// Designate's uid and gid magic numbers come from the 'designate-user' in
-	// https://github.com/openstack/kolla/blob/master/kolla/common/users.py
-	// designateUser := int64(42411)
-	// designateGroup := int64(42411)
 
 	serviceName := fmt.Sprintf("%s-central", designate.ServiceName)
-	volumes := getServicePodVolumes(serviceName)
-	volumeMounts := getServicePodVolumeMounts(serviceName)
+	volumes := designate.GetVolumes(serviceName)
+	volumeMounts := designate.GetVolumeMounts(serviceName)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning

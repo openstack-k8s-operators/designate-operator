@@ -281,15 +281,6 @@ func (r *DesignateBackendbind9Reconciler) reconcileDelete(instance *designatev1b
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateBackendbind9Reconciler) reconcileInit(
-	instance *designatev1beta1.DesignateBackendbind9,
-) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
-
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
-	return ctrl.Result{}, nil
-}
-
 func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9, helper *helper.Helper) (ctrl.Result, error) {
 	r.Log.Info("Reconciling Service")
 
@@ -306,15 +297,6 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	// run check OpenStack secret - end
 
 	//
-	// check for required TransportURL secret holding transport URL string
-	//
-	ctrlResult, err = r.getSecret(ctx, helper, instance, instance.Spec.TransportURLSecret, &configMapVars, "secret-")
-	if err != nil {
-		return ctrlResult, err
-	}
-	// run check TransportURL secret - end
-
-	//
 	// check for required service secrets
 	//
 	for _, secretName := range instance.Spec.CustomServiceConfigSecrets {
@@ -324,24 +306,6 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		}
 	}
 	// run check service secrets - end
-
-	//
-	// check for required Designate config maps that should have been created by parent Designate CR
-	//
-
-	parentDesignateName := designate.GetOwningDesignateName(instance)
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' init: parent name: %s", instance.Name, parentDesignateName))
-
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-scripts", parentDesignateName), &configMapVars, "")
-	if err != nil {
-		return ctrlResult, err
-	}
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-config-data", parentDesignateName), &configMapVars, "")
-	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
-	// when secret is not found
-	if err != nil {
-		return ctrlResult, err
-	}
 
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 	// run check parent Designate CR config maps - end
@@ -442,14 +406,6 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed create network annotation from %s: %w",
 			instance.Spec.NetworkAttachments, err)
-	}
-
-	// Handle service init
-	ctrlResult, err = r.reconcileInit(instance)
-	if err != nil {
-		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
-		return ctrlResult, nil
 	}
 
 	// Handle service update

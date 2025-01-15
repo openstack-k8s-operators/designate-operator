@@ -760,6 +760,8 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
+	// While nsRecordsConfigMap is not used until much later in this function, it's valuable to check this early
+	// as it is an important precondition.
 	nsRecordsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
 	nsRecordsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.NsRecordsConfigMap, nsRecordsLabels)
 	if err != nil {
@@ -825,76 +827,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if err != nil {
 		Log.Info("Unable to create config map for bind ips...")
 		return ctrl.Result{}, err
-	}
-
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if len(nsRecordsConfigMap.Data) > 0 {
-		poolsYamlConfigMap := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      designate.PoolsYamlConfigMap,
-				Namespace: instance.GetNamespace(),
-				Labels:    bindLabels,
-			},
-			Data: make(map[string]string),
-		}
-		poolsYaml, err := designate.GeneratePoolsYamlData(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		Log.Info(fmt.Sprintf("pools.yaml content is\n%v", poolsYaml))
-		updatedPoolsYaml := make(map[string]string)
-		updatedPoolsYaml[designate.PoolsYamlContent] = poolsYaml
-
-		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), poolsYamlConfigMap, func() error {
-			poolsYamlConfigMap.Labels = util.MergeStringMaps(poolsYamlConfigMap.Labels, bindLabels)
-			poolsYamlConfigMap.Data = updatedPoolsYaml
-			return controllerutil.SetControllerReference(instance, poolsYamlConfigMap, helper.GetScheme())
-		})
-		if err != nil {
-			Log.Info("Unable to create config map for pools.yaml file")
-			return ctrl.Result{}, err
-		}
-		configMaps := []interface{}{
-			poolsYamlConfigMap.Data,
-		}
-
-		poolsYamlsEnvVars := make(map[string]env.Setter)
-		_, changed, err := r.createHashOfInputHashes(ctx, instance, designate.PoolsYamlHash, poolsYamlsEnvVars, configMaps)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if changed {
-			Log.Info("PoolsYamlHash has changed, creating a pool update job")
-
-			var poolUpdateHash string
-			var ok bool
-			if poolUpdateHash, ok = instance.Status.Hash[designatev1beta1.PoolUpdateHash]; !ok {
-				instance.Status.Hash[designatev1beta1.PoolUpdateHash] = ""
-				poolUpdateHash = ""
-			}
-			jobDef := designate.PoolUpdateJob(instance, serviceLabels, serviceAnnotations)
-
-			Log.Info("Initializing pool update job")
-			poolUpdatejob := job.NewJob(
-				jobDef,
-				designatev1beta1.PoolUpdateHash,
-				instance.Spec.PreserveJobs,
-				time.Duration(15)*time.Second,
-				poolUpdateHash,
-			)
-			_, err = poolUpdatejob.DoJob(ctx, helper)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolUpdatejob.GetHash()
-			err = r.Client.Status().Update(ctx, instance)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			Log.Info("Pool update job completed successfully")
-		}
 	}
 
 	// deploy designate-central
@@ -1143,6 +1075,76 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	Log.Info("Deployment Unbound task reconciled")
 
+	if len(nsRecordsConfigMap.Data) > 0 {
+		poolsYamlConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      designate.PoolsYamlConfigMap,
+				Namespace: instance.GetNamespace(),
+				Labels:    bindLabels,
+			},
+			Data: make(map[string]string),
+		}
+		poolsYaml, err := designate.GeneratePoolsYamlData(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+		if err != nil {
+			Log.Error(err, "Pool data creation failed")
+			return ctrl.Result{}, err
+		}
+		Log.Info(fmt.Sprintf("pools.yaml content is\n%v", poolsYaml))
+		updatedPoolsYaml := make(map[string]string)
+		updatedPoolsYaml[designate.PoolsYamlContent] = poolsYaml
+
+		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), poolsYamlConfigMap, func() error {
+			poolsYamlConfigMap.Labels = util.MergeStringMaps(poolsYamlConfigMap.Labels, bindLabels)
+			poolsYamlConfigMap.Data = updatedPoolsYaml
+			return controllerutil.SetControllerReference(instance, poolsYamlConfigMap, helper.GetScheme())
+		})
+		if err != nil {
+			Log.Info("Unable to create config map for pools.yaml file")
+			return ctrl.Result{}, err
+		}
+		configMaps := []interface{}{
+			poolsYamlConfigMap.Data,
+		}
+
+		if designateCentral.Status.ReadyCount == *designateCentral.Spec.Replicas {
+			poolsYamlsEnvVars := make(map[string]env.Setter)
+			_, changed, err := r.createHashOfInputHashes(ctx, instance, designate.PoolsYamlHash, poolsYamlsEnvVars, configMaps)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if changed {
+				Log.Info("PoolsYamlHash has changed, creating a pool update job")
+
+				var poolUpdateHash string
+				var ok bool
+				if poolUpdateHash, ok = instance.Status.Hash[designatev1beta1.PoolUpdateHash]; !ok {
+					instance.Status.Hash[designatev1beta1.PoolUpdateHash] = ""
+					poolUpdateHash = ""
+				}
+				jobDef := designate.PoolUpdateJob(instance, serviceLabels, serviceAnnotations)
+
+				Log.Info("Initializing pool update job")
+				poolUpdatejob := job.NewJob(
+					jobDef,
+					designatev1beta1.PoolUpdateHash,
+					instance.Spec.PreserveJobs,
+					time.Duration(15)*time.Second,
+					poolUpdateHash,
+				)
+				_, err = poolUpdatejob.DoJob(ctx, helper)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolUpdatejob.GetHash()
+				err = r.Client.Status().Update(ctx, instance)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				Log.Info("Pool update job completed successfully")
+			}
+		}
+	}
+
 	// remove finalizers from unused MariaDBAccount records
 	err = mariadbv1.DeleteUnusedMariaDBAccountFinalizers(ctx, helper, designate.DatabaseCRName, instance.Spec.DatabaseAccount, instance.Namespace)
 	if err != nil {
@@ -1154,6 +1156,9 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	if instance.Status.Conditions.AllSubConditionIsTrue() {
 		instance.Status.Conditions.MarkTrue(
 			condition.ReadyCondition, condition.ReadyMessage)
+	} else {
+		Log.Info("Conditions for readiness not all true")
+		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 	}
 	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil
