@@ -22,6 +22,7 @@ import (
 	"sort"
 	"time"
 
+	"gopkg.in/yaml.v2"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -231,10 +232,11 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 // fields to index to reconcile when change
 const (
-	passwordSecretField     = ".spec.secret"
-	caBundleSecretNameField = ".spec.tls.caBundleSecretName"
-	tlsAPIInternalField     = ".spec.tls.api.internal.secretName"
-	tlsAPIPublicField       = ".spec.tls.api.public.secretName"
+	passwordSecretField                 = ".spec.secret"
+	caBundleSecretNameField             = ".spec.tls.caBundleSecretName"
+	tlsAPIInternalField                 = ".spec.tls.api.internal.secretName"
+	tlsAPIPublicField                   = ".spec.tls.api.public.secretName"
+	httpdCustomServiceConfigSecretField = ".spec.httpdCustomization.customServiceConfigSecret"
 )
 
 // SetupWithManager sets up the controller with the Manager.
@@ -1401,6 +1403,13 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 		return err
 	}
 	templateParameters["AdminPassword"] = string(adminPasswordSecret.Data["DesignatePassword"])
+
+	// Marshal the templateParameters map to YAML
+	yamlData, err := yaml.Marshal(templateParameters)
+	if err != nil {
+		return fmt.Errorf("Error marshalling to YAML: %w", err)
+	}
+	customData[common.TemplateParameters] = string(yamlData)
 
 	cms := []util.Template{
 		// ScriptsConfigMap

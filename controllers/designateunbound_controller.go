@@ -25,6 +25,7 @@ import (
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designateunbound"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -426,6 +427,13 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	templateParameters["ListenIP"] = "0.0.0.0"
 	templateParameters["ExternalNetCidr"] = "0.0.0.0/0"
 
+	// Marshal the templateParameters map to YAML
+	yamlData, err := yaml.Marshal(templateParameters)
+	if err != nil {
+		return fmt.Errorf("Error marshalling to YAML: %w", err)
+	}
+	customData[common.TemplateParameters] = string(yamlData)
+
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
@@ -447,7 +455,7 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 			Labels:        cmLabels,
 		},
 	}
-	err := secret.EnsureSecrets(ctx, h, instance, cms, envVars)
+	err = secret.EnsureSecrets(ctx, h, instance, cms, envVars)
 
 	if err != nil {
 		r.Log.Error(err, "uanble to process config map")

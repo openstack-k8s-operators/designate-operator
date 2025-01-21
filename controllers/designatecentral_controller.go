@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -813,6 +814,13 @@ func (r *DesignateCentralReconciler) generateServiceConfigMaps(
 	}
 	templateParameters["TransportURL"] = string(transportURLSecret.Data["transport_url"])
 	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
+
+	// Marshal the templateParameters map to YAML
+	yamlData, err := yaml.Marshal(templateParameters)
+	if err != nil {
+		return fmt.Errorf("Error marshalling to YAML: %w", err)
+	}
+	customData[common.TemplateParameters] = string(yamlData)
 
 	cms := []util.Template{
 		// ScriptsConfigMap
