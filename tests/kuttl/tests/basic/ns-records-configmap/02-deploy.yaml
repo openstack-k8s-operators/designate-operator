@@ -2,5 +2,5 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
   - script: |
-      cp ../../../../demo/examples/ns_records_CR_example.yaml deploy
+      cp ../../../../demo/examples/ns_records/ns_records_CR_example.yaml deploy
       oc kustomize deploy | oc apply -n $NAMESPACE -f -

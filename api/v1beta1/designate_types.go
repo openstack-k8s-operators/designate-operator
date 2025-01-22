@@ -33,6 +33,9 @@ const (
 
 	// Designate API timeout
 	APITimeout = 120
+
+	// PoolUpdateHash hash
+	PoolUpdateHash = "pool-update"
 )
 
 // DesignateAPISpecCore - this version has no containerImage for use with the OpenStackControlplane

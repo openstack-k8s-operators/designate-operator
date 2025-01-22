@@ -78,6 +78,13 @@ func createAndSimulateNSRecordsConfigMap(
 
 	DeferCleanup(k8sClient.Delete, ctx, configMap)
 }
+func simulateCentralReadyCount(designateName types.NamespacedName, readyCount int32) {
+	Eventually(func(g Gomega) {
+		designate := GetDesignate(designateName)
+		designate.Status.DesignateCentralReadyCount = readyCount
+		g.Expect(th.K8sClient.Status().Update(th.Ctx, designate)).To(Succeed())
+	}, th.Timeout, th.Interval).Should(Succeed())
+}
 
 func createAndSimulateDB(spec map[string]interface{}) {
 	DeferCleanup(
@@ -618,6 +625,7 @@ var _ = Describe("Designate controller", func() {
 			createAndSimulateBind9(designateBind9Name)
 			createAndSimulateMdns(designateMdnsName)
 			createAndSimulateNSRecordsConfigMap(designateNSRecordConfigMapName)
+			simulateCentralReadyCount(designateName, 1)
 		})
 
 		It("should have created a valid pools.yaml configmap", func() {
@@ -627,12 +635,12 @@ var _ = Describe("Designate controller", func() {
 			Expect(nsRecordsConfigMap).ToNot(BeNil())
 
 			poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
-				Name:      designate.PoolsYamlsConfigMap,
+				Name:      designate.PoolsYamlConfigMap,
 				Namespace: namespace})
 			Expect(poolsYamlConfigMap).ToNot(BeNil())
 
 			var pools []designate.Pool
-			err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlsConfigMap]), &pools)
+			err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
 			Expect(err).ToNot(HaveOccurred())
 
 			validate := validator.New()

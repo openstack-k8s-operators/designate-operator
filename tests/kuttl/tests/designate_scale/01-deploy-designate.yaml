@@ -2,4 +2,5 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
   - script: |
+      oc kustomize ../../../../demo/examples/ns_records | oc apply -n $NAMESPACE -f -
       oc kustomize ../../../../config/samples | oc apply -n $NAMESPACE -f -
