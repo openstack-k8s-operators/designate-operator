@@ -58,11 +58,11 @@ type Master struct {
 }
 
 type Options struct {
-	Host           string `yaml:"host"`
-	Port           int    `yaml:"port"`
-	RNDCHost       string `yaml:"rndc_host"`
-	RNDCPort       int    `yaml:"rndc_port"`
-	RNDCConfigFile string `yaml:"rndc_config_file"`
+	Host        string `yaml:"host"`
+	Port        int    `yaml:"port"`
+	RNDCHost    string `yaml:"rndc_host"`
+	RNDCPort    int    `yaml:"rndc_port"`
+	RNDCKeyFile string `yaml:"rndc_key_file"`
 }
 
 type CatalogZone struct {
@@ -83,7 +83,7 @@ func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (st
 	// Create targets and nameservers
 	nameservers := []Nameserver{}
 	targets := []Target{}
-	rndcKeyNum := 1
+	rndcKeyNum := 0
 
 	for _, bindIP := range BindMap {
 		nameservers = append(nameservers, Nameserver{
@@ -104,11 +104,11 @@ func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (st
 			Description: fmt.Sprintf("BIND9 Server %d (%s)", rndcKeyNum, bindIP),
 			Masters:     masters,
 			Options: Options{
-				Host:           bindIP,
-				Port:           53,
-				RNDCHost:       bindIP,
-				RNDCPort:       953,
-				RNDCConfigFile: fmt.Sprintf("%s/%s-%d.conf", RndcConfDir, DesignateRndcKey, rndcKeyNum),
+				Host:        bindIP,
+				Port:        53,
+				RNDCHost:    bindIP,
+				RNDCPort:    953,
+				RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, rndcKeyNum),
 			},
 		}
 		targets = append(targets, target)

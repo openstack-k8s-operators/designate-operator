@@ -680,7 +680,7 @@ var _ = Describe("Designate controller", func() {
 					Expect(target.Type).To(Equal("bind9"), "Only Bind9 is a supported Designate backend")
 
 					// Check description format
-					serverNum := i + 1
+					serverNum := i
 					expectedDesc := fmt.Sprintf("BIND9 Server %d (%s)", serverNum, target.Options.Host)
 					Expect(target.Description).To(Equal(expectedDesc), "Target description format mismatch")
 
@@ -712,8 +712,8 @@ var _ = Describe("Designate controller", func() {
 					Expect(target.Options.RNDCPort).To(BeNumerically(">", 0), "RNDC port should be a positive number")
 
 					// Validate RNDC config file path
-					expectedRndcPath := fmt.Sprintf("/etc/designate/rndc-keys/rndc-key-%d.conf", serverNum)
-					Expect(target.Options.RNDCConfigFile).To(Equal(expectedRndcPath), "RNDC config file path mismatch")
+					expectedRndcPath := fmt.Sprintf("/etc/designate/rndc-keys/rndc-key-%d", serverNum)
+					Expect(target.Options.RNDCKeyFile).To(Equal(expectedRndcPath), "RNDC config file path mismatch")
 				}
 
 				// Validate len(nameservers) == len(hosts) - which are all Bind9 hosts
