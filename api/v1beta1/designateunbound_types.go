@@ -50,6 +50,10 @@ type DesignateUnboundSpecBase struct {
 	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate Unbound Replicas
 	Replicas *int32 `json:"replicas"`
+
+	// +kubebuilder:validation:Optional
+	// AddressPool
+	AddressPool string `json:"addressPool"`
 }
 
 // DesignateUnboundStatus defines the observed state of DesignateUnbound

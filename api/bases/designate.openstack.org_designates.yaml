@@ -1174,6 +1174,9 @@ spec:
                 description: DesignateUnbound - Spec definition for the Unbound Resolver
                   service of this Designate deployment
                 properties:
+                  addressPool:
+                    description: AddressPool
+                    type: string
                   containerImage:
                     description: ContainerImage - Designate Container Image URL (will
                       be set to environmental default if empty)

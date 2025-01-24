@@ -48,6 +48,9 @@ spec:
           spec:
             description: DesignateUnboundSpec defines the desired state of DesignateUnbound
             properties:
+              addressPool:
+                description: AddressPool
+                type: string
               containerImage:
                 description: ContainerImage - Designate Container Image URL (will
                   be set to environmental default if empty)
