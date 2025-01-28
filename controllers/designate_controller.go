@@ -833,7 +833,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	Log.Info("Bind configmap was created successfully")
-
 	if len(nsRecordsConfigMap.Data) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
 		Log.Info("len(nsRecordsConfigMap.Data) > 0")
 		poolsYamlConfigMap := &corev1.ConfigMap{
@@ -844,11 +843,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			},
 			Data: make(map[string]string),
 		}
-		Log.Info("before designate.GeneratePoolsYamlData")
-		poolsYaml, err := designate.GeneratePoolsYamlData(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+
+		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
+
 		Log.Info(fmt.Sprintf("pools.yaml content is\n%v", poolsYaml))
 		updatedPoolsYaml := make(map[string]string)
 		updatedPoolsYaml[designate.PoolsYamlContent] = poolsYaml
@@ -862,40 +862,32 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Log.Info("Unable to create config map for pools.yaml file")
 			return ctrl.Result{}, err
 		}
-		configMaps := []interface{}{
-			poolsYamlConfigMap.Data,
+
+		if instance.Status.Hash == nil {
+			instance.Status.Hash = make(map[string]string)
 		}
 
-		poolsYamlsEnvVars := make(map[string]env.Setter)
-		_, changed, err := r.createHashOfInputHashes(ctx, instance, designate.PoolsYamlHash, poolsYamlsEnvVars, configMaps)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if changed {
-			Log.Info("PoolsYamlHash has changed, creating a pool update job")
+		oldHash := instance.Status.Hash[designatev1beta1.PoolUpdateHash]
+		if oldHash != poolsYamlHash {
+			Log.Info(fmt.Sprintf("Old poolsYamlHash %s is different than new poolsYamlHash %s.\nLaunching pool update job", oldHash, poolsYamlHash))
 
-			var poolUpdateHash string
-			var ok bool
-			if poolUpdateHash, ok = instance.Status.Hash[designatev1beta1.PoolUpdateHash]; !ok {
-				instance.Status.Hash[designatev1beta1.PoolUpdateHash] = ""
-				poolUpdateHash = ""
+			instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolsYamlHash
+			if err := r.Client.Status().Update(ctx, instance); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to update status hash: %w", err)
 			}
 			jobDef := designate.PoolUpdateJob(instance, serviceLabels, serviceAnnotations)
 
 			Log.Info("Initializing pool update job")
+
 			poolUpdatejob := job.NewJob(
 				jobDef,
 				designatev1beta1.PoolUpdateHash,
 				instance.Spec.PreserveJobs,
 				time.Duration(15)*time.Second,
-				poolUpdateHash,
+				oldHash,
 			)
-			_, err = poolUpdatejob.DoJob(ctx, helper)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolUpdatejob.GetHash()
-			err = r.Client.Status().Update(ctx, instance)
+
+			_, err := poolUpdatejob.DoJob(ctx, helper)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
