@@ -52,6 +52,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -297,6 +298,8 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Owns(&designatev1beta1.DesignateProducer{}).
 		Owns(&designatev1beta1.DesignateBackendbind9{}).
 		Owns(&designatev1beta1.DesignateUnbound{}).
+		Owns(&corev1.Secret{}).
+		Owns(&appsv1.Deployment{}).
 		Owns(&rabbitmqv1.TransportURL{}).
 		Owns(&redisv1.Redis{}).
 		Owns(&batchv1.Job{}).
@@ -1640,7 +1643,6 @@ func (r *DesignateReconciler) mdnsStatefulSetCreateOrUpdate(ctx context.Context,
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
 		statefulSet.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
 		statefulSet.Spec.NodeSelector = instance.Spec.DesignateMdns.NodeSelector
-		statefulSet.Spec.Replicas = instance.Spec.DesignateMdns.Replicas
 
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
