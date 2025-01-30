@@ -7,6 +7,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"time"
 )
 
 const (
@@ -85,9 +86,10 @@ func PoolUpdateJob(
 		},
 	)
 
+	jobName := fmt.Sprintf("%s-pool-update-%d", ServiceName, time.Now().Unix())
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceName + "-pool-update",
+			Name:      jobName,
 			Namespace: instance.Namespace,
 			Labels:    labels,
 		},
@@ -101,7 +103,7 @@ func PoolUpdateJob(
 					ServiceAccountName: instance.RbacResourceName(),
 					Containers: []corev1.Container{
 						{
-							Name:  ServiceName + "-pool-update",
+							Name:  jobName,
 							Image: instance.Spec.DesignateCentral.ContainerImage,
 							Env: []corev1.EnvVar{
 								{

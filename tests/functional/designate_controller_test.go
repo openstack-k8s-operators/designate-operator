@@ -644,7 +644,6 @@ var _ = Describe("Designate controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			validate := validator.New()
-
 			for _, pool := range pools {
 				Expect(pool.Name).ToNot(BeEmpty(), "Pool name should not be an empty string")
 				Expect(pool.Description).ToNot(BeEmpty(), "Pool description should not be an empty string")
@@ -724,6 +723,25 @@ var _ = Describe("Designate controller", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(pool.CatalogZone.Refresh).To(BeNumerically(">", 0), "catalog_zone_refresh should be a positive number")
 				}
+			}
+		})
+
+		It("should create the same pools.yaml hash when provided the same designate configmaps", func() {
+			bindConfigMap := th.GetConfigMap(types.NamespacedName{
+				Name:      designate.BindPredIPConfigMap,
+				Namespace: namespace})
+			mdnsConfigMap := th.GetConfigMap(types.NamespacedName{
+				Name:      designate.MdnsPredIPConfigMap,
+				Namespace: namespace})
+			nsRecordsConfigMap := th.GetConfigMap(types.NamespacedName{
+				Name:      designate.NsRecordsConfigMap,
+				Namespace: namespace})
+			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+			Expect(err).ToNot(HaveOccurred())
+			for i := 0; i < 10; i++ {
+				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(poolsYamlHash).Should(Equal(newPoolsYamlHash))
 			}
 		})
 	})

@@ -15,9 +15,12 @@ package designate
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"text/template"
 
 	"gopkg.in/yaml.v2"
@@ -70,49 +73,73 @@ type CatalogZone struct {
 	Refresh int    `yaml:"refresh"`
 }
 
-func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (string, error) {
-	// Create ns_records
+// We sort all pool resources to get the correct hash every time
+func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap, NsRecordsMap map[string]string) (string, string, error) {
 	nsRecords := []NSRecord{}
 	for _, data := range NsRecordsMap {
 		err := yaml.Unmarshal([]byte(data), &nsRecords)
 		if err != nil {
-			return "", fmt.Errorf("error unmarshalling yaml: %w", err)
+			return "", "", fmt.Errorf("error unmarshalling yaml: %w", err)
+		}
+	}
+	sort.Slice(nsRecords, func(i, j int) bool {
+		if nsRecords[i].Hostname != nsRecords[j].Hostname {
+			return nsRecords[i].Hostname < nsRecords[j].Hostname
+		}
+		return nsRecords[i].Priority < nsRecords[j].Priority
+	})
+
+	bindIPs := make([]string, 0, len(BindMap))
+	for _, ip := range BindMap {
+		bindIPs = append(bindIPs, ip)
+	}
+	sort.Strings(bindIPs)
+
+	masterHosts := make([]string, 0, len(MdnsMap))
+	for _, host := range MdnsMap {
+		masterHosts = append(masterHosts, host)
+	}
+	sort.Strings(masterHosts)
+
+	nameservers := make([]Nameserver, len(bindIPs))
+	for i, bindIP := range bindIPs {
+		nameservers[i] = Nameserver{
+			Host: bindIP,
+			Port: 53,
 		}
 	}
 
-	// Create targets and nameservers
-	nameservers := []Nameserver{}
-	targets := []Target{}
-	rndcKeyNum := 0
-
-	for _, bindIP := range BindMap {
-		nameservers = append(nameservers, Nameserver{
-			Host: bindIP,
-			Port: 53,
-		})
-
-		masters := []Master{}
-		for _, masterHost := range MdnsMap {
-			masters = append(masters, Master{
+	targets := make([]Target, len(bindIPs))
+	for i, bindIP := range bindIPs {
+		masters := make([]Master, len(masterHosts))
+		for j, masterHost := range masterHosts {
+			masters[j] = Master{
 				Host: masterHost,
 				Port: 5354,
-			})
+			}
 		}
 
-		target := Target{
+		targets[i] = Target{
 			Type:        "bind9",
-			Description: fmt.Sprintf("BIND9 Server %d (%s)", rndcKeyNum, bindIP),
+			Description: fmt.Sprintf("BIND9 Server %d (%s)", i, bindIP),
 			Masters:     masters,
 			Options: Options{
 				Host:        bindIP,
 				Port:        53,
 				RNDCHost:    bindIP,
 				RNDCPort:    953,
-				RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, rndcKeyNum),
+				RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, i),
 			},
 		}
-		targets = append(targets, target)
-		rndcKeyNum++
+	}
+
+	sort.Slice(targets, func(i, j int) bool {
+		return targets[i].Options.Host < targets[j].Options.Host
+	})
+
+	for i := range targets {
+		targets[i].Description = fmt.Sprintf("BIND9 Server %d (%s)", i, targets[i].Options.Host)
+		targets[i].Options.RNDCKeyFile = fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, i)
 	}
 
 	// Catalog zone is an optional section
@@ -132,25 +159,32 @@ func GeneratePoolsYamlData(BindMap, MdnsMap, NsRecordsMap map[string]string) (st
 		CatalogZone: nil, // set to catalogZone if this section should be presented
 	}
 
+	poolBytes, err := yaml.Marshal(pool)
+	if err != nil {
+		return "", "", fmt.Errorf("error marshalling pool for hash: %w", err)
+	}
+	hasher := sha256.New()
+	hasher.Write(poolBytes)
+	poolHash := hex.EncodeToString(hasher.Sum(nil))
+
 	opTemplates, err := util.GetTemplatesPath()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	poolsYamlPath := path.Join(opTemplates, PoolsYamlPath)
 	poolsYaml, err := os.ReadFile(poolsYamlPath)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	tmpl, err := template.New("pool").Parse(string(poolsYaml))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, pool)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return buf.String(), nil
+	return buf.String(), poolHash, nil
 }
