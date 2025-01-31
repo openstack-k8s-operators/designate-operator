@@ -1,0 +1,81 @@
+#
+# Check for:
+#
+# - Designate CR with all services scaled down to 0 replicas
+# - Designate Deployment with no pods
+#
+
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  finalizers:
+  - openstack.org/designate
+  name: designate
+spec:
+  designateAPI:
+    replicas: 0
+  # Commenting the following lines until the team decides what to do about bind replica count = 0
+  # designateBackendbind9:
+  #   replicas: 0
+  designateCentral:
+    replicas: 0
+  # Commenting the following lines until the team decides what to do about mdns replica count = 0
+  # designateMdns:
+  #   replicas: 0
+  designateProducer:
+    replicas: 0
+  designateUnbound:
+    replicas: 0
+  designateWorker:
+    replicas: 0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: designate-api
+spec:
+  replicas: 0
+# Commenting the following lines until the team decides what to do about bind replica count = 0
+# ---
+# apiVersion: apps/v1
+# kind: StatefulSet
+# metadata:
+#   name: designate-backendbind9
+# spec:
+#   replicas: 0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: designate-central
+spec:
+  replicas: 0
+# Commenting the following lines until the team decides what to do about mdns replica count = 0
+# ---
+# apiVersion: apps/v1
+# kind: StatefulSet
+# metadata:
+#   name: designate-mdns
+# spec:
+#   replicas: 0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: designate-producer
+spec:
+  replicas: 0
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-unbound
+spec:
+  replicas: 0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: designate-worker
+spec:
+  replicas: 0
