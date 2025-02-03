@@ -740,25 +740,6 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	// run check service secrets - end
 
 	//
-	// check for required Designate config maps that should have been created by parent Designate CR
-	//
-
-	parentDesignateName := designate.GetOwningDesignateName(instance)
-
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-scripts", parentDesignateName), &configMapVars, "")
-	if err != nil {
-		return ctrlResult, err
-	}
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-config-data", parentDesignateName), &configMapVars, "")
-	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
-	// when secret is not found
-	if err != nil {
-		return ctrlResult, err
-	}
-
-	// run check parent Designate CR config maps - end
-
-	//
 	// Create ConfigMaps required as input for the Service and calculate an overall hash of hashes
 	//
 

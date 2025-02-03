@@ -35,7 +35,3 @@ cp -a ${SVC_CFG} ${SVC_CFG_MERGED}
 for dir in /var/lib/config-data/default; do
     merge_config_dir ${dir}
 done
-
-# NOTE:dkehn - REMOVED because Kolla_set & start copy eveyrthing.
-# I'm doing this to get the designate.conf w/all the tags with values.
-cp -a ${SVC_CFG_MERGED} ${SVC_CFG}

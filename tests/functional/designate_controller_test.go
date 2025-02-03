@@ -358,55 +358,6 @@ var _ = Describe("Designate controller", func() {
 			)
 		})
 
-		It("should create the designate.conf file in a Secret", func() {
-			instance := GetDesignate(designateName)
-
-			configData := th.GetSecret(
-				types.NamespacedName{
-					Namespace: designateName.Namespace,
-					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
-			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["designate.conf"])
-			Expect(conf).Should(
-				ContainSubstring(
-					fmt.Sprintf(
-						"username=%s\n",
-						instance.Spec.ServiceUser)))
-
-			dbs := []struct {
-				Name            string
-				DatabaseAccount string
-				Keyword         string
-			}{
-				{
-					Name:            designate.DatabaseName,
-					DatabaseAccount: instance.Spec.DatabaseAccount,
-					Keyword:         "connection",
-				},
-			}
-
-			for _, db := range dbs {
-				databaseAccount := mariadb.GetMariaDBAccount(
-					types.NamespacedName{
-						Namespace: namespace,
-						Name:      db.DatabaseAccount})
-				databaseSecret := th.GetSecret(
-					types.NamespacedName{
-						Namespace: namespace,
-						Name:      databaseAccount.Spec.Secret})
-
-				Expect(conf).Should(
-					ContainSubstring(
-						fmt.Sprintf(
-							"%s=mysql+pymysql://%s:%s@%s/%s?read_default_file=/etc/my.cnf",
-							db.Keyword,
-							databaseAccount.Spec.UserName,
-							databaseSecret.Data[mariadbv1.DatabasePasswordSelector],
-							instance.Status.DatabaseHostname,
-							db.Name)))
-			}
-		})
-
 		It("should create a Secret for the scripts", func() {
 			scriptData := th.GetSecret(
 				types.NamespacedName{
