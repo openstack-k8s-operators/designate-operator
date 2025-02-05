@@ -1,0 +1,6 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      SVC_REPLICA_COUNT=1
+      for svc in API Backendbind9 Central Mdns Producer Unbound Worker; do oc patch designate -n $NAMESPACE designate --type='json' -p='[{"op": "replace", "path": "/spec/designate'"${svc}"'/replicas", "value":'"${SVC_REPLICA_COUNT}"'}]'; done

@@ -1,5 +1,0 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestStep
-commands:
-  - script: |
-      oc patch designate -n $NAMESPACE designate --type='json' -p='[{"op": "replace", "path": "/spec/designateAPI/replicas", "value":1}]'
