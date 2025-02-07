@@ -22,6 +22,12 @@
       "perm": "0775"
     },
     {
+      "path": "/run/named",
+      "owner": "root:named",
+      "recurse": "true",
+      "perm": "0775"
+    },
+    {
       "path": "/var/named-persistent",
       "owner": "root:named",
       "perm": "0770"
