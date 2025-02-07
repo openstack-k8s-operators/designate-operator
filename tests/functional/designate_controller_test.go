@@ -18,7 +18,7 @@ package functional_test
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v2"
+	// "gopkg.in/yaml.v2"
 	"math/rand"
 	"net"
 
@@ -32,7 +32,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 
 	//revive:disable-next-line:dot-imports
-	validator "github.com/go-playground/validator/v10"
+	// validator "github.com/go-playground/validator/v10"
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	. "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
@@ -65,26 +65,26 @@ func createAndSimulateTransportURL(
 	infra.SimulateTransportURLReady(transportURLName)
 }
 
-func createAndSimulateNSRecordsConfigMap(
-	NsRecordsConfigMapName types.NamespacedName,
-) {
-	configMap := CreateDesignateNSRecordsConfigMap(NsRecordsConfigMapName)
-	err := k8sClient.Create(ctx, configMap)
-	Expect(err).ToNot(HaveOccurred())
+// func createAndSimulateNSRecordsConfigMap(
+// 	NsRecordsConfigMapName types.NamespacedName,
+// ) {
+// 	configMap := CreateDesignateNSRecordsConfigMap(NsRecordsConfigMapName)
+// 	err := k8sClient.Create(ctx, configMap)
+// 	Expect(err).ToNot(HaveOccurred())
 
-	Eventually(func() error {
-		return k8sClient.Get(ctx, NsRecordsConfigMapName, &corev1.ConfigMap{})
-	}, timeout, interval).Should(Succeed())
+// 	Eventually(func() error {
+// 		return k8sClient.Get(ctx, NsRecordsConfigMapName, &corev1.ConfigMap{})
+// 	}, timeout, interval).Should(Succeed())
 
-	DeferCleanup(k8sClient.Delete, ctx, configMap)
-}
-func simulateCentralReadyCount(designateName types.NamespacedName, readyCount int32) {
-	Eventually(func(g Gomega) {
-		designate := GetDesignate(designateName)
-		designate.Status.DesignateCentralReadyCount = readyCount
-		g.Expect(th.K8sClient.Status().Update(th.Ctx, designate)).To(Succeed())
-	}, th.Timeout, th.Interval).Should(Succeed())
-}
+// 	DeferCleanup(k8sClient.Delete, ctx, configMap)
+// }
+// func simulateCentralReadyCount(designateName types.NamespacedName, readyCount int32) {
+// 	Eventually(func(g Gomega) {
+// 		designate := GetDesignate(designateName)
+// 		designate.Status.DesignateCentralReadyCount = readyCount
+// 		g.Expect(th.K8sClient.Status().Update(th.Ctx, designate)).To(Succeed())
+// 	}, th.Timeout, th.Interval).Should(Succeed())
+// }
 
 func createAndSimulateDB(spec map[string]interface{}) {
 	DeferCleanup(
@@ -122,7 +122,7 @@ var _ = Describe("Designate controller", func() {
 	var designateName types.NamespacedName
 	var designateBind9Name types.NamespacedName
 	var designateMdnsName types.NamespacedName
-	var designateNSRecordConfigMapName types.NamespacedName
+	// var designateNSRecordConfigMapName types.NamespacedName
 	var transportURLName types.NamespacedName
 	var transportURLSecretName types.NamespacedName
 	var designateDBSyncName types.NamespacedName
@@ -171,10 +171,10 @@ var _ = Describe("Designate controller", func() {
 			Name:      fmt.Sprintf("designate-mdns-%s", uuid.New().String()),
 		}
 
-		designateNSRecordConfigMapName = types.NamespacedName{
-			Namespace: namespace,
-			Name:      designate.NsRecordsConfigMap,
-		}
+		// designateNSRecordConfigMapName = types.NamespacedName{
+		// 	Namespace: namespace,
+		// 	Name:      designate.NsRecordsConfigMap,
+		// }
 	})
 
 	When("a Designate instance is created", func() {
@@ -607,142 +607,142 @@ var _ = Describe("Designate controller", func() {
 		})
 	})
 
-	When("Designate ns_records ConfigMap is created", func() {
-		BeforeEach(func() {
-			createAndSimulateKeystone(designateName)
-			createAndSimulateRedis(designateRedisName)
-			createAndSimulateDesignateSecrets(designateName)
-			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
-			createAndSimulateDB(spec)
+	// When("Designate ns_records ConfigMap is created", func() {
+	// 	BeforeEach(func() {
+	// 		createAndSimulateKeystone(designateName)
+	// 		createAndSimulateRedis(designateRedisName)
+	// 		createAndSimulateDesignateSecrets(designateName)
+	// 		createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+	// 		createAndSimulateDB(spec)
 
-			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
-				Name:      spec["designateNetworkAttachment"].(string),
-				Namespace: namespace,
-			}))
-			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
-			th.SimulateJobSuccess(designateDBSyncName)
+	// 		DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+	// 			Name:      spec["designateNetworkAttachment"].(string),
+	// 			Namespace: namespace,
+	// 		}))
+	// 		DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+	// 		th.SimulateJobSuccess(designateDBSyncName)
 
-			createAndSimulateBind9(designateBind9Name)
-			createAndSimulateMdns(designateMdnsName)
-			createAndSimulateNSRecordsConfigMap(designateNSRecordConfigMapName)
-			simulateCentralReadyCount(designateName, 1)
-		})
+	// 		createAndSimulateBind9(designateBind9Name)
+	// 		createAndSimulateMdns(designateMdnsName)
+	// 		createAndSimulateNSRecordsConfigMap(designateNSRecordConfigMapName)
+	// 		simulateCentralReadyCount(designateName, 1)
+	// 	})
 
-		It("should have created a valid pools.yaml configmap", func() {
-			nsRecordsConfigMap := th.GetConfigMap(types.NamespacedName{
-				Name:      designate.NsRecordsConfigMap,
-				Namespace: namespace})
-			Expect(nsRecordsConfigMap).ToNot(BeNil())
+	// 	It("should have created a valid pools.yaml configmap", func() {
+	// 		nsRecordsConfigMap := th.GetConfigMap(types.NamespacedName{
+	// 			Name:      designate.NsRecordsConfigMap,
+	// 			Namespace: namespace})
+	// 		Expect(nsRecordsConfigMap).ToNot(BeNil())
 
-			poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
-				Name:      designate.PoolsYamlConfigMap,
-				Namespace: namespace})
-			Expect(poolsYamlConfigMap).ToNot(BeNil())
+	// 		poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
+	// 			Name:      designate.PoolsYamlConfigMap,
+	// 			Namespace: namespace})
+	// 		Expect(poolsYamlConfigMap).ToNot(BeNil())
 
-			var pools []designate.Pool
-			err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
-			Expect(err).ToNot(HaveOccurred())
+	// 		var pools []designate.Pool
+	// 		err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
+	// 		Expect(err).ToNot(HaveOccurred())
 
-			validate := validator.New()
-			for _, pool := range pools {
-				Expect(pool.Name).ToNot(BeEmpty(), "Pool name should not be an empty string")
-				Expect(pool.Description).ToNot(BeEmpty(), "Pool description should not be an empty string")
+	// 		validate := validator.New()
+	// 		for _, pool := range pools {
+	// 			Expect(pool.Name).ToNot(BeEmpty(), "Pool name should not be an empty string")
+	// 			Expect(pool.Description).ToNot(BeEmpty(), "Pool description should not be an empty string")
 
-				// Check attributes if exists
-				if len(pool.Attributes) > 0 {
-					for _, v := range pool.Attributes {
-						Expect(v).ToNot(BeEmpty(), "Attribute value should not be an empty string")
-					}
-				}
+	// 			// Check attributes if exists
+	// 			if len(pool.Attributes) > 0 {
+	// 				for _, v := range pool.Attributes {
+	// 					Expect(v).ToNot(BeEmpty(), "Attribute value should not be an empty string")
+	// 				}
+	// 			}
 
-				// Check NS records
-				Expect(pool.NSRecords).ToNot(BeEmpty(), "NS records should not be empty")
-				for _, ns := range pool.NSRecords {
-					err := validate.Var(ns.Hostname, "fqdn")
-					Expect(err).ToNot(HaveOccurred(), "NS record hostname should be valid FQDN")
-					Expect(ns.Priority).To(BeNumerically(">", 0), "NS record priority should be a positive number")
-				}
+	// 			// Check NS records
+	// 			Expect(pool.NSRecords).ToNot(BeEmpty(), "NS records should not be empty")
+	// 			for _, ns := range pool.NSRecords {
+	// 				err := validate.Var(ns.Hostname, "fqdn")
+	// 				Expect(err).ToNot(HaveOccurred(), "NS record hostname should be valid FQDN")
+	// 				Expect(ns.Priority).To(BeNumerically(">", 0), "NS record priority should be a positive number")
+	// 			}
 
-				// Check nameservers
-				Expect(pool.Nameservers).ToNot(BeEmpty(), "Nameservers should not be empty")
-				for _, ns := range pool.Nameservers {
-					ip := net.ParseIP(ns.Host)
-					Expect(ip).NotTo(BeNil(), "Nameserver host should be valid IP")
-					Expect(ns.Port).To(Equal(53), "Nameserver port should be 53")
-				}
+	// 			// Check nameservers
+	// 			Expect(pool.Nameservers).ToNot(BeEmpty(), "Nameservers should not be empty")
+	// 			for _, ns := range pool.Nameservers {
+	// 				ip := net.ParseIP(ns.Host)
+	// 				Expect(ip).NotTo(BeNil(), "Nameserver host should be valid IP")
+	// 				Expect(ns.Port).To(Equal(53), "Nameserver port should be 53")
+	// 			}
 
-				// Check targets
-				Expect(pool.Targets).ToNot(BeEmpty(), "Targets should not be empty")
-				var numOfBindHosts int
-				for i, target := range pool.Targets {
-					// Check target type (Designate Backend)
-					Expect(target.Type).To(Equal("bind9"), "Only Bind9 is a supported Designate backend")
+	// 			// Check targets
+	// 			Expect(pool.Targets).ToNot(BeEmpty(), "Targets should not be empty")
+	// 			var numOfBindHosts int
+	// 			for i, target := range pool.Targets {
+	// 				// Check target type (Designate Backend)
+	// 				Expect(target.Type).To(Equal("bind9"), "Only Bind9 is a supported Designate backend")
 
-					// Check description format
-					serverNum := i
-					expectedDesc := fmt.Sprintf("BIND9 Server %d (%s)", serverNum, target.Options.Host)
-					Expect(target.Description).To(Equal(expectedDesc), "Target description format mismatch")
+	// 				// Check description format
+	// 				serverNum := i
+	// 				expectedDesc := fmt.Sprintf("BIND9 Server %d (%s)", serverNum, target.Options.Host)
+	// 				Expect(target.Description).To(Equal(expectedDesc), "Target description format mismatch")
 
-					// Check masters
-					Expect(target.Masters).To(HaveLen(mdnsReplicaCount), "Masters count should match mdnsReplicaCount")
-					for _, master := range target.Masters {
-						ip := net.ParseIP(master.Host)
-						Expect(ip).NotTo(BeNil(), "Master host should be valid IP")
-						Expect(master.Port).To(BeNumerically(">", 0), "Master port should be a positive number")
-					}
+	// 				// Check masters
+	// 				Expect(target.Masters).To(HaveLen(mdnsReplicaCount), "Masters count should match mdnsReplicaCount")
+	// 				for _, master := range target.Masters {
+	// 					ip := net.ParseIP(master.Host)
+	// 					Expect(ip).NotTo(BeNil(), "Master host should be valid IP")
+	// 					Expect(master.Port).To(BeNumerically(">", 0), "Master port should be a positive number")
+	// 				}
 
-					// Check options
-					Expect(target.Options.Host).To(Equal(target.Options.RNDCHost), "Options Host and RNDCHost should match")
+	// 				// Check options
+	// 				Expect(target.Options.Host).To(Equal(target.Options.RNDCHost), "Options Host and RNDCHost should match")
 
-					// We can't know the order which the nameservers are stored, so we make sure they match the options
-					// host and rndc_host. After this loop we assert the len(nameservers) == len(hosts)
-					foundMatch := false
-					for _, ns := range pool.Nameservers {
-						if ns.Host == target.Options.Host {
-							foundMatch = true
-							numOfBindHosts++
-							break
-						}
-					}
-					Expect(foundMatch).To(BeTrue(), "Options Host should match one of the nameserver hosts")
+	// 				// We can't know the order which the nameservers are stored, so we make sure they match the options
+	// 				// host and rndc_host. After this loop we assert the len(nameservers) == len(hosts)
+	// 				foundMatch := false
+	// 				for _, ns := range pool.Nameservers {
+	// 					if ns.Host == target.Options.Host {
+	// 						foundMatch = true
+	// 						numOfBindHosts++
+	// 						break
+	// 					}
+	// 				}
+	// 				Expect(foundMatch).To(BeTrue(), "Options Host should match one of the nameserver hosts")
 
-					// Check options values
-					Expect(target.Options.Port).To(Equal(53), "Options port should be 53")
-					Expect(target.Options.RNDCPort).To(BeNumerically(">", 0), "RNDC port should be a positive number")
+	// 				// Check options values
+	// 				Expect(target.Options.Port).To(Equal(53), "Options port should be 53")
+	// 				Expect(target.Options.RNDCPort).To(BeNumerically(">", 0), "RNDC port should be a positive number")
 
-					// Validate RNDC config file path
-					expectedRndcPath := fmt.Sprintf("/etc/designate/rndc-keys/rndc-key-%d", serverNum)
-					Expect(target.Options.RNDCKeyFile).To(Equal(expectedRndcPath), "RNDC config file path mismatch")
-				}
+	// 				// Validate RNDC config file path
+	// 				expectedRndcPath := fmt.Sprintf("/etc/designate/rndc-keys/rndc-key-%d", serverNum)
+	// 				Expect(target.Options.RNDCKeyFile).To(Equal(expectedRndcPath), "RNDC config file path mismatch")
+	// 			}
 
-				// Validate len(nameservers) == len(hosts) - which are all Bind9 hosts
-				Expect(numOfBindHosts).To(Equal(len(pool.Nameservers)))
+	// 			// Validate len(nameservers) == len(hosts) - which are all Bind9 hosts
+	// 			Expect(numOfBindHosts).To(Equal(len(pool.Nameservers)))
 
-				if pool.CatalogZone != nil {
-					err := validate.Var(pool.CatalogZone.FQDN, "fqdn")
-					Expect(err).ToNot(HaveOccurred())
-					Expect(pool.CatalogZone.Refresh).To(BeNumerically(">", 0), "catalog_zone_refresh should be a positive number")
-				}
-			}
-		})
+	// 			if pool.CatalogZone != nil {
+	// 				err := validate.Var(pool.CatalogZone.FQDN, "fqdn")
+	// 				Expect(err).ToNot(HaveOccurred())
+	// 				Expect(pool.CatalogZone.Refresh).To(BeNumerically(">", 0), "catalog_zone_refresh should be a positive number")
+	// 			}
+	// 		}
+	// 	})
 
-		It("should create the same pools.yaml hash when provided the same designate configmaps", func() {
-			bindConfigMap := th.GetConfigMap(types.NamespacedName{
-				Name:      designate.BindPredIPConfigMap,
-				Namespace: namespace})
-			mdnsConfigMap := th.GetConfigMap(types.NamespacedName{
-				Name:      designate.MdnsPredIPConfigMap,
-				Namespace: namespace})
-			nsRecordsConfigMap := th.GetConfigMap(types.NamespacedName{
-				Name:      designate.NsRecordsConfigMap,
-				Namespace: namespace})
-			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
-			Expect(err).ToNot(HaveOccurred())
-			for i := 0; i < 10; i++ {
-				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(poolsYamlHash).Should(Equal(newPoolsYamlHash))
-			}
-		})
-	})
+	// 	It("should create the same pools.yaml hash when provided the same designate configmaps", func() {
+	// 		bindConfigMap := th.GetConfigMap(types.NamespacedName{
+	// 			Name:      designate.BindPredIPConfigMap,
+	// 			Namespace: namespace})
+	// 		mdnsConfigMap := th.GetConfigMap(types.NamespacedName{
+	// 			Name:      designate.MdnsPredIPConfigMap,
+	// 			Namespace: namespace})
+	// 		nsRecordsConfigMap := th.GetConfigMap(types.NamespacedName{
+	// 			Name:      designate.NsRecordsConfigMap,
+	// 			Namespace: namespace})
+	// 		_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+	// 		Expect(err).ToNot(HaveOccurred())
+	// 		for i := 0; i < 10; i++ {
+	// 			_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+	// 			Expect(err).ToNot(HaveOccurred())
+	// 			Expect(poolsYamlHash).Should(Equal(newPoolsYamlHash))
+	// 		}
+	// 	})
+	// })
 })

@@ -763,12 +763,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
-	nsRecordsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
-	nsRecordsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.NsRecordsConfigMap, nsRecordsLabels)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	allocatedIPs := make(map[string]bool)
 	for _, predIP := range bindConfigMap.Data {
 		allocatedIPs[predIP] = true
@@ -833,8 +827,10 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	Log.Info("Bind configmap was created successfully")
-	if len(nsRecordsConfigMap.Data) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
-		Log.Info("len(nsRecordsConfigMap.Data) > 0")
+
+	nsRecords := instance.Spec.DesignateAPI.NSRecords
+	Log.Info(fmt.Sprintf("nsRecords: %v", nsRecords))
+	if len(nsRecords) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
 		poolsYamlConfigMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      designate.PoolsYamlConfigMap,
@@ -844,7 +840,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Data: make(map[string]string),
 		}
 
-		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecords)
 		if err != nil {
 			return ctrl.Result{}, err
 		}

@@ -1,0 +1,27 @@
+apiVersion: core.openstack.org/v1beta1
+kind: OpenStackControlPlane
+metadata:
+  name: openstack-galera-network-isolation
+  namespace: openstack
+spec:
+  neutron:
+    template:
+      customServiceConfig: |
+        [DEFAULT]
+        debug = true
+        dns_domain = example.org.
+        external_dns_driver = designate
+        [designate]
+        url = https://designate-public-openstack.apps-crc.testing/
+        auth_type = password
+        auth_url = https://keystone-public-openstack.apps-crc.testing
+        username = designate
+        password = PASSWORD
+        project_name = service
+        project_domain_name = Default
+        user_domain_name = Default
+        allow_reverse_dns_lookup = True
+        ipv4_ptr_zone_prefix_size = 24
+        ipv6_ptr_zone_prefix_size = 116
+        ptr_zone_email = admin@example.org
+        cafile = /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem

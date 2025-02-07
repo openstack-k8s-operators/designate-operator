@@ -167,6 +167,26 @@ spec:
                       NodeSelector to target subset of worker nodes running this service. Setting here overrides
                       any global NodeSelector settings within the Designate CR.
                     type: object
+                  nsRecords:
+                    description: NSRecords contains the list of nameserver records
+                      for the Designate pool
+                    items:
+                      description: DesignateNSRecord defines a DNS nameserver record
+                      properties:
+                        hostname:
+                          description: Hostname of the nameserver
+                          minLength: 1
+                          type: string
+                        priority:
+                          description: Priority of the nameserver
+                          minimum: 1
+                          type: integer
+                      required:
+                      - hostname
+                      - priority
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
                   override:
                     description: Override, provides the ability to override the generated
                       manifest of several child resources.

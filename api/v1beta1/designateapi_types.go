@@ -47,6 +47,19 @@ type DesignateAPISpec struct {
 	DesignateServiceTemplate `json:",inline"`
 }
 
+// DesignateNSRecord defines a DNS nameserver record
+type DesignateNSRecord struct {
+	// Hostname of the nameserver
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Hostname string `json:"hostname"`
+
+	// Priority of the nameserver
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	Priority int `json:"priority"`
+}
+
 // DesignateAPISpecBase -
 type DesignateAPISpecBase struct {
 	// Common input parameters for all Designate services
@@ -82,6 +95,11 @@ type DesignateAPISpecBase struct {
 	// +kubebuilder:validation:Optional
 	// APITimeout for HAProxy and Apache defaults to DesignateSpecCore APITimeout (seconds)
 	APITimeout int `json:"apiTimeout"`
+
+	// +kubebuilder:validation:Optional
+	// +listType=atomic
+	// NSRecords contains the list of nameserver records for the Designate pool
+	NSRecords []DesignateNSRecord `json:"nsRecords,omitempty"`
 }
 
 // APIOverrideSpec to override the generated manifest of several child resources.
