@@ -19,6 +19,7 @@ package v1beta1
 import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 )
 
 // DesignateUnboundSpecCore - this version has no containerImage for use with the OpenStackControlplane
@@ -50,6 +51,16 @@ type DesignateUnboundSpecBase struct {
 	// +kubebuilder:validation:Minimum=0
 	// Replicas - Designate Unbound Replicas
 	Replicas *int32 `json:"replicas"`
+
+	// Allows services to be configured for accessing each Unbound pod. For best results, there should be
+	// an override for each replica.
+	// +kubebuilder:validation:Optional
+	Override UnboundOverrideSpec `json:"override,omitempty"`
+}
+
+type UnboundOverrideSpec struct {
+	// +listType=atomic
+	Services []service.OverrideSpec `json:"services,omitempty"`
 }
 
 // DesignateUnboundStatus defines the observed state of DesignateUnbound

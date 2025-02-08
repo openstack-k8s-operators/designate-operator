@@ -495,14 +495,43 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	// all cert input checks out so report InputReady
 	instance.Status.Conditions.MarkTrue(condition.TLSInputReadyCondition, condition.InputReadyMessage)
 
-	//
-	// Create ConfigMaps required as input for the Service and calculate an overall hash of hashes
-	//
-
 	serviceLabels := map[string]string{
 		common.AppSelector:       instance.ObjectMeta.Name,
 		common.ComponentSelector: designatemdns.Component,
 	}
+
+	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
+	for i := 0; i < serviceCount; i++ {
+		svc, err := designate.CreateDNSService(
+			fmt.Sprintf("designate-mdns-%d", i),
+			instance.Namespace,
+			&instance.Spec.Override.Services[i],
+			serviceLabels,
+			5354,
+		)
+
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.CreateServiceReadyErrorMessage,
+				err.Error()))
+			return ctrl.Result{}, err
+		}
+
+		ctrlResult, err := svc.CreateOrPatch(ctx, helper)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.CreateServiceReadyErrorMessage,
+				err.Error()))
+			return ctrlResult, err
+		}
+	}
+	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
 
 	//
 	// create custom Configmap for this designate volume service

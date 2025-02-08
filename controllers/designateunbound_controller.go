@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
+	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designateunbound"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,7 +44,6 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
-	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	"k8s.io/apimachinery/pkg/types"
@@ -60,6 +60,13 @@ type UnboundReconciler struct {
 	Kclient kubernetes.Interface
 	Log     logr.Logger
 	Scheme  *runtime.Scheme
+}
+
+func min(i int, j int) int {
+	if i < j {
+		return i
+	}
+	return j
 }
 
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds,verbs=get;list;watch;create;update;patch;delete
@@ -267,62 +274,46 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		return ctrl.Result{}, nil
 	}
 
-	exportLabels := labels.GetLabels(instance, designateunbound.ServiceName, map[string]string{
-		"owner": "designate",
-		"crc":   instance.GetName(),
-		"app":   designateunbound.ServiceName,
-	})
-
 	serviceLabels := map[string]string{
-		common.AppSelector: designateunbound.ServiceName,
+		common.AppSelector:       instance.ObjectMeta.Name,
+		common.ComponentSelector: designateunbound.Component,
 	}
 
-	// XXX(beagles) I think this is wrong - in as sense. It's not a traditional
-	// service endpoint in that we might want to have an externally addressable
-	// IP for each pod. I don't know what the pattern is for that.
+	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
+	for i := 0; i < serviceCount; i++ {
+		svc, err := designate.CreateDNSService(
+			fmt.Sprintf("designate-unbound-%d", i),
+			instance.Namespace,
+			&instance.Spec.Override.Services[i],
+			serviceLabels,
+			53,
+		)
 
-	svc, err := service.NewService(
-		service.GenericService(&service.GenericServiceDetails{
-			Name:      instance.GetName(),
-			Namespace: instance.Namespace,
-			Labels:    exportLabels,
-			Selector:  serviceLabels,
-			Port: service.GenericServicePort{
-				Name:     "designate-unbound",
-				Port:     53,
-				Protocol: corev1.ProtocolTCP,
-			},
-		}),
-		time.Duration(5)*time.Second,
-		&service.OverrideSpec{}, // XXX(beagles): this should be something real. Check other service definitions.
-	)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.CreateServiceReadyErrorMessage,
+				err.Error()))
+			return ctrl.Result{}, err
+		}
 
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.CreateServiceReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.CreateServiceReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-
-	// XXX annotations?
-
-	ctrlResult, err := svc.CreateOrPatch(ctx, helper)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.CreateServiceReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.CreateServiceReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, err
+		ctrlResult, err := svc.CreateOrPatch(ctx, helper)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.CreateServiceReadyErrorMessage,
+				err.Error()))
+			return ctrlResult, err
+		}
 	}
 	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
 
 	configMapVars := make(map[string]env.Setter)
-	err = r.generateServiceConfigMaps(ctx, instance, helper, &configMapVars)
+	err := r.generateServiceConfigMaps(ctx, instance, helper, &configMapVars)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -383,7 +374,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(instance, helper)
+	ctrlResult, err := r.reconcileUpdate(instance, helper)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -532,7 +523,7 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	envVars *map[string]env.Setter,
 ) error {
 	r.Log.Info("Generating service config map")
-	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designateunbound.ServiceName), map[string]string{})
+	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designateunbound.Component), map[string]string{})
 	customData := map[string]string{common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig}
 	for key, data := range instance.Spec.DefaultConfigOverwrite {
 		customData[key] = data

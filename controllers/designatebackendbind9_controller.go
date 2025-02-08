@@ -420,16 +420,49 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	}
 
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
-	// run check parent Designate CR config maps - end
-
-	//
-	// Create ConfigMaps required as input for the Service and calculate an overall hash of hashes
-	//
 
 	serviceLabels := map[string]string{
 		common.AppSelector:       instance.ObjectMeta.Name,
 		common.ComponentSelector: designatebackendbind9.Component,
 	}
+
+	// TODO(beagles): we really should create a single point of truth for what things are named or
+	// what the names will be based on.
+	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
+	for i := 0; i < serviceCount; i++ {
+		svc, err := designate.CreateDNSService(
+			fmt.Sprintf("designate-backendbind9-%d", i),
+			instance.Namespace,
+			&instance.Spec.Override.Services[i],
+			serviceLabels,
+			53,
+		)
+
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.CreateServiceReadyErrorMessage,
+				err.Error()))
+			return ctrl.Result{}, err
+		}
+
+		ctrlResult, err := svc.CreateOrPatch(ctx, helper)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.CreateServiceReadyErrorMessage,
+				err.Error()))
+			return ctrlResult, err
+		}
+	}
+	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
+	//
+	// Create ConfigMaps required as input for the Service and calculate an overall hash of hashes
+	//
 
 	//
 	// create custom Configmap for this designate volume service

@@ -20,6 +20,7 @@ import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 )
 
 // DesignateMdnsSpecCore -
@@ -76,6 +77,16 @@ type DesignateMdnsSpecBase struct {
 	// +kubebuilder:validation:Optional
 	// NetUtilsImage - NetUtils container image
 	NetUtilsImage string `json:"netUtilsImage"`
+
+	// Allows services to be configured for accessing each mdns pod. For best results, there should be
+	// an override for each replica.
+	// +kubebuilder:validation:Optional
+	Override MdnsOverrideSpec `json:"override,omitempty"`
+}
+
+type MdnsOverrideSpec struct {
+	// +listType=atomic
+	Services []service.OverrideSpec `json:"services,omitempty"`
 }
 
 // DesignateMdnsStatus defines the observed state of DesignateMdns
