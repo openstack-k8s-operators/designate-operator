@@ -23,9 +23,9 @@ import (
 	"sort"
 	"text/template"
 
-	"gopkg.in/yaml.v2"
-
+	designate "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
+	"gopkg.in/yaml.v2"
 )
 
 type Pool struct {
@@ -74,12 +74,12 @@ type CatalogZone struct {
 }
 
 // We sort all pool resources to get the correct hash every time
-func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap, NsRecordsMap map[string]string) (string, string, error) {
-	nsRecords := []NSRecord{}
-	for _, data := range NsRecordsMap {
-		err := yaml.Unmarshal([]byte(data), &nsRecords)
-		if err != nil {
-			return "", "", fmt.Errorf("error unmarshalling yaml: %w", err)
+func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, designateNSRecords []designate.DesignateNSRecord) (string, string, error) {
+	nsRecords := make([]NSRecord, len(designateNSRecords))
+	for i, record := range designateNSRecords {
+		nsRecords[i] = NSRecord{
+			Hostname: record.Hostname,
+			Priority: record.Priority,
 		}
 	}
 	sort.Slice(nsRecords, func(i, j int) bool {

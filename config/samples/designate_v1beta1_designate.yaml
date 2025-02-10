@@ -19,6 +19,11 @@ spec:
       debug = true
     databaseAccount: designate
     rabbitMqClusterName: rabbitmq
+    nSRecords: |
+      - hostname: ns1.example.com.
+        priority: 1
+      - hostname: ns2.example.com.
+        priority: 2
   designateBackendbind9:
     secret: osp-secret
     serviceUser: designate
