@@ -31,6 +31,7 @@ import (
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	. "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
 
+	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 )
 
@@ -243,6 +244,64 @@ var _ = Describe("DesignateAPI controller", func() {
 			conf := string(configData.Data["custom.conf"])
 			Expect(conf).Should(
 				ContainSubstring("[DEFAULT]\ndebug=True\n"))
+		})
+	})
+
+	When("A DesignateAPI is created with HttpdCustomization.CustomConfigSecret", func() {
+		var keystonePublicEndpoint string
+
+		BeforeEach(func() {
+			customServiceConfigSecretName := types.NamespacedName{Name: "foo", Namespace: namespace}
+			customConfig := []byte(`CustomParam "foo"
+CustomKeystonePublicURL "{{ .KeystonePublicURL }}"`)
+			th.CreateSecret(
+				customServiceConfigSecretName,
+				map[string][]byte{
+					"bar.conf": customConfig,
+				},
+			)
+			keystoneName := keystone.CreateKeystoneAPI(namespace)
+			DeferCleanup(keystone.DeleteKeystoneAPI, keystoneName)
+			keystoneInternalEndpoint := fmt.Sprintf("http://keystone-for-%s-internal", designateAPIName.Name)
+			keystonePublicEndpoint = fmt.Sprintf("http://keystone-for-%s-public", designateAPIName.Name)
+			SimulateKeystoneReady(keystoneName, keystonePublicEndpoint, keystoneInternalEndpoint)
+
+			DeferCleanup(k8sClient.Delete, ctx, CreateDesignateSecret(namespace))
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(transportURLSecretName))
+			spec["httpdCustomization"] = map[string]interface{}{
+				"customConfigSecret": customServiceConfigSecretName.Name,
+			}
+			DeferCleanup(th.DeleteInstance, CreateDesignateAPI(designateAPIName, spec))
+
+			mariaDBDatabaseName := mariadb.CreateMariaDBDatabase(namespace, designate.DatabaseCRName, mariadbv1.MariaDBDatabaseSpec{})
+			mariaDBDatabase := mariadb.GetMariaDBDatabase(mariaDBDatabaseName)
+			DeferCleanup(k8sClient.Delete, ctx, mariaDBDatabase)
+
+			designateAPI := GetDesignateAPI(designateAPIName)
+			apiMariaDBAccount, apiMariaDBSecret := mariadb.CreateMariaDBAccountAndSecret(
+				types.NamespacedName{
+					Namespace: namespace,
+					Name:      designateAPI.Spec.DatabaseAccount,
+				}, mariadbv1.MariaDBAccountSpec{})
+			DeferCleanup(k8sClient.Delete, ctx, apiMariaDBAccount)
+			DeferCleanup(k8sClient.Delete, ctx, apiMariaDBSecret)
+		})
+
+		It("it renders the custom template and adds it to the designateapi-config-data secret", func() {
+			scrt := th.GetSecret(types.NamespacedName{
+				Namespace: designateAPIName.Namespace,
+				Name:      fmt.Sprintf("%s-config-data", designateAPIName.Name)})
+			Expect(scrt).ShouldNot(BeNil())
+			Expect(scrt.Data).Should(HaveKey(common.TemplateParameters))
+			configData := string(scrt.Data[common.TemplateParameters])
+			Expect(configData).Should(ContainSubstring(fmt.Sprintf("KeystonePublicURL: %s", keystonePublicEndpoint)))
+
+			for _, cfg := range []string{"httpd_custom_internal_bar.conf", "httpd_custom_public_bar.conf"} {
+				Expect(scrt.Data).Should(HaveKey(cfg))
+				configData := string(scrt.Data[cfg])
+				Expect(configData).Should(ContainSubstring("CustomParam \"foo\""))
+				Expect(configData).Should(ContainSubstring(fmt.Sprintf("CustomKeystonePublicURL \"%s\"", keystonePublicEndpoint)))
+			}
 		})
 	})
 

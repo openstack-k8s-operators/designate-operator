@@ -13,7 +13,7 @@ require (
 	github.com/openstack-k8s-operators/designate-operator/api v0.1.1-0.20240807132522-6c2eca7c6bbb
 	github.com/openstack-k8s-operators/infra-operator/apis v0.5.1-0.20241213080025-18e54a028c8b
 	github.com/openstack-k8s-operators/keystone-operator/api v0.5.1-0.20241212135809-dc78e7221d12
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.5.1-0.20241216113837-d172b3ac0f4e
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.5.1-0.20250116145727-01a8948d5dd7
 	github.com/openstack-k8s-operators/lib-common/modules/test v0.5.1-0.20241029151503-4878b3fa3333
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.5.1-0.20241212160155-4e7d8f749820
 	gopkg.in/yaml.v2 v2.4.0

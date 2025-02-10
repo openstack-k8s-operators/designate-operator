@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -268,6 +269,18 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 		return err
 	}
 
+	// index httpdOverrideSecretField
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &designatev1beta1.DesignateAPI{}, httpdCustomServiceConfigSecretField, func(rawObj client.Object) []string {
+		// Extract the secret name from the spec, if one is provided
+		cr := rawObj.(*designatev1beta1.DesignateAPI)
+		if cr.Spec.HttpdCustomization.CustomConfigSecret == nil {
+			return nil
+		}
+		return []string{*cr.Spec.HttpdCustomization.CustomConfigSecret}
+	}); err != nil {
+		return err
+	}
+
 	svcSecretFn := func(ctx context.Context, o client.Object) []reconcile.Request {
 		var namespace string = o.GetNamespace()
 		var secretName string = o.GetName()
@@ -363,6 +376,7 @@ func (r *DesignateAPIReconciler) findObjectsForSrc(ctx context.Context, src clie
 		caBundleSecretNameField,
 		tlsAPIInternalField,
 		tlsAPIPublicField,
+		httpdCustomServiceConfigSecretField,
 	}
 
 	for _, field := range allWatchFields {
@@ -1070,6 +1084,14 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 		return err
 	}
 
+	httpdOverrideSecret := &corev1.Secret{}
+	if instance.Spec.HttpdCustomization.CustomConfigSecret != nil && *instance.Spec.HttpdCustomization.CustomConfigSecret != "" {
+		httpdOverrideSecret, _, err = oko_secret.GetSecret(ctx, h, *instance.Spec.HttpdCustomization.CustomConfigSecret, instance.Namespace)
+		if err != nil {
+			return err
+		}
+	}
+
 	customData[common.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
 
 	databaseAccount, dbSecret, err := mariadbv1.GetAccountAndSecret(
@@ -1105,6 +1127,7 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 	templateParameters["TimeOut"] = instance.Spec.APITimeout
 
 	// create httpd  vhost template parameters
+	customTemplates := map[string]string{}
 	httpdVhostConfig := map[string]interface{}{}
 	for _, endpt := range []service.Endpoint{service.EndpointInternal, service.EndpointPublic} {
 		endptConfig := map[string]interface{}{}
@@ -1114,6 +1137,16 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 			endptConfig["TLS"] = true
 			endptConfig["SSLCertificateFile"] = fmt.Sprintf("/etc/pki/tls/certs/%s.crt", endpt.String())
 			endptConfig["SSLCertificateKeyFile"] = fmt.Sprintf("/etc/pki/tls/private/%s.key", endpt.String())
+		}
+
+		endptConfig["Override"] = false
+		if len(httpdOverrideSecret.Data) > 0 {
+			endptConfig["Override"] = true
+			for key, data := range httpdOverrideSecret.Data {
+				if len(data) > 0 {
+					customTemplates["httpd_custom_"+endpt.String()+"_"+key] = string(data)
+				}
+			}
 		}
 		httpdVhostConfig[endpt.String()] = endptConfig
 	}
@@ -1161,6 +1194,13 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 	}
 	templateParameters["AdminPassword"] = string(adminPasswordSecret.Data["DesignatePassword"])
 
+	// Marshal the templateParameters map to YAML
+	yamlData, err := yaml.Marshal(templateParameters)
+	if err != nil {
+		return fmt.Errorf("Error marshalling to YAML: %w", err)
+	}
+	customData[common.TemplateParameters] = string(yamlData)
+
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
@@ -1173,13 +1213,14 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 		},
 		// Custom ConfigMap
 		{
-			Name:          fmt.Sprintf("%s-config-data", instance.Name),
-			Namespace:     instance.Namespace,
-			Type:          util.TemplateTypeConfig,
-			InstanceType:  instance.Kind,
-			CustomData:    customData,
-			ConfigOptions: templateParameters,
-			Labels:        cmLabels,
+			Name:           fmt.Sprintf("%s-config-data", instance.Name),
+			Namespace:      instance.Namespace,
+			Type:           util.TemplateTypeConfig,
+			InstanceType:   instance.Kind,
+			CustomData:     customData,
+			ConfigOptions:  templateParameters,
+			StringTemplate: customTemplates,
+			Labels:         cmLabels,
 		},
 	}
 
