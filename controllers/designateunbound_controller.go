@@ -25,9 +25,11 @@ import (
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designateunbound"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -44,6 +46,12 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // UnboundReconciler -
@@ -58,6 +66,7 @@ type UnboundReconciler struct {
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/finalizers,verbs=update;patch
 //+kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
+//+kubebuilder:rbac:groups=topology.openstack.org,resources=topologies,verbs=get;list;watch;update
 
 // Reconcile implementation for designate's Unbound resolver
 func (r *UnboundReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
@@ -140,8 +149,14 @@ func (r *UnboundReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		instance.Status.NetworkAttachments = map[string][]string{}
 	}
 
+	// Init Topology condition if there's a reference
+	if instance.Spec.TopologyRef != nil {
+		c := condition.UnknownCondition(condition.TopologyReadyCondition, condition.InitReason, condition.TopologyReadyInitMessage)
+		cl.Set(c)
+	}
+
 	if !instance.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(instance, helper)
+		return r.reconcileDelete(ctx, instance, helper)
 	}
 
 	return r.reconcileNormal(ctx, instance, helper)
@@ -149,19 +164,85 @@ func (r *UnboundReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 
 // SetupWithManager for setting up the reconciler for the unbound resolver.
 func (r *UnboundReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	// index topologyField
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &designatev1.DesignateUnbound{}, topologyField, func(rawObj client.Object) []string {
+		// Extract the topology name from the spec, if one is provided
+		cr := rawObj.(*designatev1.DesignateUnbound)
+		if cr.Spec.TopologyRef == nil {
+			return nil
+		}
+		return []string{cr.Spec.TopologyRef.Name}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&designatev1.DesignateUnbound{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&appsv1.StatefulSet{}).
+		Watches(&topologyv1.Topology{},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
-func (r *UnboundReconciler) reconcileDelete(instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
+func (r *UnboundReconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
+	requests := []reconcile.Request{}
+
+	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateMdns")
+
+	allWatchFields := []string{
+		topologyField,
+	}
+
+	for _, field := range allWatchFields {
+		crList := &designatev1.DesignateUnboundList{}
+		listOps := &client.ListOptions{
+			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
+			Namespace:     src.GetNamespace(),
+		}
+		err := r.Client.List(context.TODO(), crList, listOps)
+		if err != nil {
+			l.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
+			return requests
+		}
+
+		for _, item := range crList.Items {
+			l.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
+
+			requests = append(requests,
+				reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      item.GetName(),
+						Namespace: item.GetNamespace(),
+					},
+				},
+			)
+		}
+	}
+
+	return requests
+}
+
+func (r *UnboundReconciler) reconcileDelete(ctx context.Context, instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
 	util.LogForObject(helper, "Reconciling Service delete", instance)
 	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
 
+	// Remove finalizer on the Topology CR
+	if ctrlResult, err := topologyv1.EnsureDeletedTopologyRef(
+		ctx,
+		helper,
+		&topologyv1.TopoRef{
+			Name:      instance.Status.LastAppliedTopology,
+			Namespace: instance.Namespace,
+		},
+		instance.Name,
+	); err != nil {
+		return ctrlResult, err
+	}
 	util.LogForObject(helper, "Service deleted successfully", instance)
 	return ctrl.Result{}, nil
 }
@@ -317,8 +398,45 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		return ctrlResult, nil
 	}
 
+	//
+	// Handle Topology
+	//
+	lastTopologyRef := topologyv1.TopoRef{
+		Name:      instance.Status.LastAppliedTopology,
+		Namespace: instance.Namespace,
+	}
+	topology, err := ensureDesignateTopology(
+		ctx,
+		helper,
+		instance.Spec.TopologyRef,
+		&lastTopologyRef,
+		instance.Name,
+		designateunbound.ServiceName,
+	)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.TopologyReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.TopologyReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, fmt.Errorf("waiting for Topology requirements: %w", err)
+	}
+
+	// If TopologyRef is present and ensureDesignateTopology returned a valid
+	// topology object, set .Status.LastAppliedTopology to the referenced one
+	// and mark the condition as true
+	if instance.Spec.TopologyRef != nil {
+		// update the Status with the last retrieved Topology name
+		instance.Status.LastAppliedTopology = instance.Spec.TopologyRef.Name
+		// update the TopologyRef associated condition
+		instance.Status.Conditions.MarkTrue(condition.TopologyReadyCondition, condition.TopologyReadyMessage)
+	} else {
+		// remove LastAppliedTopology from the .Status
+		instance.Status.LastAppliedTopology = ""
+	}
 	// Define a new Unbound StatefulSet object
-	statefulSetDef := designateunbound.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations)
+	statefulSetDef := designateunbound.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations, topology)
 	statefulSet := statefulset.NewStatefulSet(
 		statefulSetDef,
 		time.Duration(5)*time.Second,

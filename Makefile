@@ -66,6 +66,9 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+PROCS?=$(shell expr $(shell nproc --ignore 2) / 4)
+PROC_CMD = --procs ${PROCS}
+
 DOCKER_BUILD_ARGS ?=
 
 .PHONY: all

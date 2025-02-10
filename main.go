@@ -47,6 +47,7 @@ import (
 
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/controllers"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -63,6 +64,7 @@ func init() {
 	utilruntime.Must(rabbitmqv1.AddToScheme(scheme))
 	utilruntime.Must(redisv1.AddToScheme(scheme))
 	utilruntime.Must(networkv1.AddToScheme(scheme))
+	utilruntime.Must(topologyv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 

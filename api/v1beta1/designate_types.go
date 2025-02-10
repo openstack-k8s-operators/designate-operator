@@ -20,6 +20,7 @@ import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	"github.com/openstack-k8s-operators/lib-common/modules/storage"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -198,6 +199,11 @@ type DesignateSpecBase struct {
 	// +kubebuilder:default=120
 	// Designate API timeout
 	APITimeout int `json:"apiTimeout"`
+
+	// +kubebuilder:validation:Optional
+	// TopologyRef to apply the Topology defined by the associated CR referenced
+	// by name
+	TopologyRef *topologyv1.TopoRef `json:"topologyRef,omitempty"`
 }
 
 // DesignateStatus defines the observed state of Designate

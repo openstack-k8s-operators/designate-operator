@@ -231,6 +231,30 @@ func GetDesignateAPI(name types.NamespacedName) *designatev1.DesignateAPI {
 	return instance
 }
 
+func GetDesignateAPISpec(name types.NamespacedName) designatev1.DesignateAPISpec {
+	instance := &designatev1.DesignateAPI{}
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, name, instance)).Should(Succeed())
+	}, timeout, interval).Should(Succeed())
+	return instance.Spec
+}
+
+func GetDesignateCentralSpec(name types.NamespacedName) designatev1.DesignateCentralSpec {
+	instance := &designatev1.DesignateCentral{}
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, name, instance)).Should(Succeed())
+	}, timeout, interval).Should(Succeed())
+	return instance.Spec
+}
+
+func GetDesignateProducerSpec(name types.NamespacedName) designatev1.DesignateProducerSpec {
+	instance := &designatev1.DesignateProducer{}
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, name, instance)).Should(Succeed())
+	}, timeout, interval).Should(Succeed())
+	return instance.Spec
+}
+
 func DesignateAPIConditionGetter(name types.NamespacedName) condition.Conditions {
 	instance := GetDesignateAPI(name)
 	return instance.Status.Conditions
@@ -352,6 +376,14 @@ func GetDesignateCentral(name types.NamespacedName) *designatev1.DesignateCentra
 	return instance
 }
 
+func GetDesignateWorker(name types.NamespacedName) *designatev1.DesignateWorker {
+	instance := &designatev1.DesignateWorker{}
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, name, instance)).Should(Succeed())
+	}, timeout, interval).Should(Succeed())
+	return instance
+}
+
 func DesignateCentralConditionGetter(name types.NamespacedName) condition.Conditions {
 	instance := GetDesignateCentral(name)
 	return instance.Status.Conditions
@@ -462,4 +494,39 @@ func CreateDesignateNSRecordsConfigMap(name types.NamespacedName) client.Object 
   priority: 2`,
 		},
 	}
+}
+
+// GetSampleTopologySpec - A sample (and opinionated) Topology Spec used to
+// test Service components
+func GetSampleTopologySpec(labelSvc string) map[string]interface{} {
+	// Build the topology Spec
+	topologySpec := map[string]interface{}{
+		"topologySpreadConstraints": []map[string]interface{}{
+			{
+				"maxSkew":           1,
+				"topologyKey":       corev1.LabelHostname,
+				"whenUnsatisfiable": "ScheduleAnyway",
+				"labelSelector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"service": labelSvc,
+					},
+				},
+			},
+		},
+	}
+	return topologySpec
+}
+
+// CreateTopology - Creates a Topology CR based on the spec passed as input
+func CreateTopology(topology types.NamespacedName, spec map[string]interface{}) client.Object {
+	raw := map[string]interface{}{
+		"apiVersion": "topology.openstack.org/v1beta1",
+		"kind":       "Topology",
+		"metadata": map[string]interface{}{
+			"name":      topology.Name,
+			"namespace": topology.Namespace,
+		},
+		"spec": spec,
+	}
+	return th.CreateUnstructured(raw)
 }

@@ -26,6 +26,7 @@ import (
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -122,6 +123,8 @@ func (r *Designate) ValidateCreate() (admission.Warnings, error) {
 
 	var allErrs field.ErrorList
 	basePath := field.NewPath("spec")
+
+	allErrs = r.Spec.ValidateDesignateTopology(basePath, r.Namespace)
 	if err := r.Spec.ValidateCreate(basePath); err != nil {
 		allErrs = append(allErrs, err...)
 	}
@@ -171,6 +174,7 @@ func (r *Designate) ValidateUpdate(old runtime.Object) (admission.Warnings, erro
 	var allErrs field.ErrorList
 	basePath := field.NewPath("spec")
 
+	allErrs = r.Spec.ValidateDesignateTopology(basePath, r.Namespace)
 	if err := r.Spec.ValidateUpdate(oldDesignate.Spec, basePath); err != nil {
 		allErrs = append(allErrs, err...)
 	}
@@ -246,4 +250,81 @@ func (spec *DesignateSpecCore) SetDefaultRouteAnnotations(annotations map[string
 	timeout := fmt.Sprintf("%ds", spec.APITimeout)
 	annotations[designateAnno] = timeout
 	annotations[haProxyAnno] = timeout
+}
+
+// ValidateDesignateTopology - Returns an ErrorList if the Topology is referenced
+// on a different namespace
+func (spec *DesignateSpec) ValidateDesignateTopology(basePath *field.Path, namespace string) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// When a TopologyRef CR is referenced, fail if a different Namespace is
+	// referenced because is not supported
+	if spec.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(spec.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
+	// When a TopologyRef CR is referenced with an override to DesignateAPI, fail
+	// if a different Namespace is referenced because not supported
+	if spec.DesignateAPI.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(spec.DesignateAPI.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
+	// When a TopologyRef CR is referenced with an override to DesignateBackendbind9
+	// fail if a different Namespace is referenced because not supported
+	if spec.DesignateBackendbind9.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(spec.DesignateBackendbind9.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
+	// When a TopologyRef CR is referenced with an override to an instance of
+	// DesignateCentral, fail if a different Namespace is referenced because not
+	// supported
+	if spec.DesignateCentral.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(spec.DesignateCentral.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
+	// When a TopologyRef CR is referenced with an override to an instance of
+	// DesignateMDNS, fail if a different Namespace is referenced because not
+	// supported
+	if spec.DesignateMdns.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(spec.DesignateMdns.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
+	// When a TopologyRef CR is referenced with an override to an instance of
+	// DesignateProducer, fail if a different Namespace is referenced because not
+	// supported
+	if spec.DesignateProducer.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(spec.DesignateProducer.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
+	// When a TopologyRef CR is referenced with an override to an instance of
+	// DesignateUnbound, fail if a different Namespace is referenced because not
+	// supported
+	if spec.DesignateUnbound.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(spec.DesignateUnbound.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
+	// When a TopologyRef CR is referenced with an override to an instance of
+	// DesignateWorker, fail if a different Namespace is referenced because not
+	// supported
+	if spec.DesignateWorker.TopologyRef != nil {
+		if err := topologyv1.ValidateTopologyNamespace(spec.DesignateWorker.TopologyRef.Namespace, *basePath, namespace); err != nil {
+			allErrs = append(allErrs, err)
+		}
+	}
+
+	return allErrs
 }

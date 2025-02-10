@@ -30,6 +30,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	//revive:disable-next-line:dot-imports
 	validator "github.com/go-playground/validator/v10"
@@ -120,6 +122,9 @@ var _ = Describe("Designate controller", func() {
 	var name string
 	var spec map[string]interface{}
 	var designateName types.NamespacedName
+	var designateAPIName types.NamespacedName
+	var designateCentralName types.NamespacedName
+	var designateProducerName types.NamespacedName
 	var designateBind9Name types.NamespacedName
 	var designateMdnsName types.NamespacedName
 	var designateNSRecordConfigMapName types.NamespacedName
@@ -129,6 +134,7 @@ var _ = Describe("Designate controller", func() {
 	var designateRedisName types.NamespacedName
 	var bind9ReplicaCount int
 	var mdnsReplicaCount int
+	var designateTopologies []types.NamespacedName
 
 	BeforeEach(func() {
 		name = fmt.Sprintf("designate-%s", uuid.New().String())
@@ -139,6 +145,21 @@ var _ = Describe("Designate controller", func() {
 		designateName = types.NamespacedName{
 			Namespace: namespace,
 			Name:      name,
+		}
+
+		designateAPIName = types.NamespacedName{
+			Namespace: namespace,
+			Name:      fmt.Sprintf("%s-api", name),
+		}
+
+		designateCentralName = types.NamespacedName{
+			Namespace: namespace,
+			Name:      fmt.Sprintf("%s-central", name),
+		}
+
+		designateProducerName = types.NamespacedName{
+			Namespace: namespace,
+			Name:      fmt.Sprintf("%s-producer", name),
 		}
 
 		transportURLName = types.NamespacedName{
@@ -174,6 +195,24 @@ var _ = Describe("Designate controller", func() {
 		designateNSRecordConfigMapName = types.NamespacedName{
 			Namespace: namespace,
 			Name:      designate.NsRecordsConfigMap,
+		}
+		designateTopologies = []types.NamespacedName{
+			{
+				Namespace: namespace,
+				Name:      fmt.Sprintf("%s-global-topology", designateName.Name),
+			},
+			{
+				Namespace: namespace,
+				Name:      fmt.Sprintf("%s-api-topology", designateName.Name),
+			},
+			{
+				Namespace: namespace,
+				Name:      fmt.Sprintf("%s-central-topology", designateName.Name),
+			},
+			{
+				Namespace: namespace,
+				Name:      fmt.Sprintf("%s-producer-topology", designateName.Name),
+			},
 		}
 	})
 
@@ -744,5 +783,148 @@ var _ = Describe("Designate controller", func() {
 				Expect(poolsYamlHash).Should(Equal(newPoolsYamlHash))
 			}
 		})
+	})
+
+	When("Designate is created with topologyref", func() {
+		BeforeEach(func() {
+			// Build the topology Spec
+			topologySpec := GetSampleTopologySpec(designateName.Name)
+			// Create Test Topology
+			for _, t := range designateTopologies {
+				CreateTopology(t, topologySpec)
+			}
+			CreateTopology(designateName, topologySpec)
+			spec := GetDefaultDesignateSpec(1, 1)
+			spec["topologyRef"] = map[string]interface{}{
+				"name": designateTopologies[0].Name,
+			}
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			createAndSimulateDB(spec)
+
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+			createAndSimulateMdns(designateMdnsName)
+			createAndSimulateNSRecordsConfigMap(designateNSRecordConfigMapName)
+		})
+		It("sets topology in CR status", func() {
+			Eventually(func(g Gomega) {
+				designateAPI := GetDesignateAPI(designateAPIName)
+				g.Expect(designateAPI.Status.LastAppliedTopology).To(Equal(designateTopologies[0].Name))
+				designateCentral := GetDesignateCentral(designateCentralName)
+				g.Expect(designateCentral.Status.LastAppliedTopology).To(Equal(designateTopologies[0].Name))
+				designateProducer := GetDesignateProducer(designateProducerName)
+				g.Expect(designateProducer.Status.LastAppliedTopology).To(Equal(designateTopologies[0].Name))
+				//NOTE: MDNS and bind9 are simulated and the logic is the same
+			}, timeout, interval).Should(Succeed())
+		})
+		It("updates topology when the reference changes", func() {
+			Eventually(func(g Gomega) {
+				designate := GetDesignate(designateName)
+				designate.Spec.TopologyRef.Name = designateTopologies[1].Name
+				g.Expect(k8sClient.Update(ctx, designate)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				th.SimulateJobSuccess(designateDBSyncName)
+				designateAPI := GetDesignateAPI(designateAPIName)
+				g.Expect(designateAPI.Status.LastAppliedTopology).To(Equal(designateTopologies[1].Name))
+				designateCentral := GetDesignateCentral(designateCentralName)
+				g.Expect(designateCentral.Status.LastAppliedTopology).To(Equal(designateTopologies[1].Name))
+				designateProducer := GetDesignateProducer(designateProducerName)
+				g.Expect(designateProducer.Status.LastAppliedTopology).To(Equal(designateTopologies[1].Name))
+			}, timeout, interval).Should(Succeed())
+		})
+		It("overrides topology when the reference changes", func() {
+			Eventually(func(g Gomega) {
+				designate := GetDesignate(designateName)
+				//Patch DesignateAPI Spec
+				newAPI := GetDesignateAPISpec(designateAPIName)
+				newAPI.TopologyRef.Name = designateTopologies[1].Name
+				designate.Spec.DesignateAPI = newAPI
+				//Patch DesignateCentral Spec
+				newCentral := GetDesignateCentralSpec(designateCentralName)
+				newCentral.TopologyRef.Name = designateTopologies[2].Name
+				designate.Spec.DesignateCentral = newCentral
+				//Patch DesignateProducer Spec
+				newPr := GetDesignateProducerSpec(designateProducerName)
+				newPr.TopologyRef.Name = designateTopologies[3].Name
+				designate.Spec.DesignateProducer = newPr
+				g.Expect(k8sClient.Update(ctx, designate)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				th.SimulateJobSuccess(designateDBSyncName)
+				designateAPI := GetDesignateAPI(designateAPIName)
+				g.Expect(designateAPI.Status.LastAppliedTopology).To(Equal(designateTopologies[1].Name))
+				designateCentral := GetDesignateCentral(designateCentralName)
+				g.Expect(designateCentral.Status.LastAppliedTopology).To(Equal(designateTopologies[2].Name))
+				designateProducer := GetDesignateProducer(designateProducerName)
+				g.Expect(designateProducer.Status.LastAppliedTopology).To(Equal(designateTopologies[3].Name))
+			}, timeout, interval).Should(Succeed())
+		})
+		It("removes topologyRef from the spec", func() {
+			Eventually(func(g Gomega) {
+				designate := GetDesignate(designateName)
+				// Remove the TopologyRef from the existing Designate .Spec
+				designate.Spec.TopologyRef = nil
+				g.Expect(k8sClient.Update(ctx, designate)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				th.SimulateJobSuccess(designateDBSyncName)
+				designateAPI := GetDesignateAPI(designateAPIName)
+				g.Expect(designateAPI.Status.LastAppliedTopology).Should(BeEmpty())
+				designateCentral := GetDesignateCentral(designateCentralName)
+				g.Expect(designateCentral.Status.LastAppliedTopology).Should(BeEmpty())
+				designateProducer := GetDesignateProducer(designateProducerName)
+				g.Expect(designateProducer.Status.LastAppliedTopology).Should(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+})
+
+var _ = Describe("Designate webhook validation", func() {
+	It("rejects a wrong TopologyRef on a different namespace", func() {
+		name := fmt.Sprintf("designate-%s", uuid.New().String())
+
+		designateName := types.NamespacedName{
+			Namespace: namespace,
+			Name:      name,
+		}
+
+		spec := GetDefaultDesignateSpec(1, 1)
+		// Reference a top-level topology
+		spec["topologyRef"] = map[string]interface{}{
+			"name":      "bar",
+			"namespace": "foo",
+		}
+
+		raw := map[string]interface{}{
+			"apiVersion": "designate.openstack.org/v1beta1",
+			"kind":       "Designate",
+			"metadata": map[string]interface{}{
+				"name":      designateName.Name,
+				"namespace": designateName.Namespace,
+			},
+			"spec": spec,
+		}
+
+		unstructuredObj := &unstructured.Unstructured{Object: raw}
+		_, err := controllerutil.CreateOrPatch(
+			th.Ctx, th.K8sClient, unstructuredObj, func() error { return nil })
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(
+			ContainSubstring(
+				"Invalid value: \"namespace\": Customizing namespace field is not supported"),
+		)
 	})
 })
