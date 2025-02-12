@@ -3,4 +3,4 @@ kind: Kustomization
 resources:
 - ./designate_nad.yaml
 - ./designate_v1beta1_designate.yaml
-- ./designate_redis.yaml
+- ./redis.yaml
