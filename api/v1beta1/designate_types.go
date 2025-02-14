@@ -105,6 +105,19 @@ type DesignateSpec struct {
 	DesignateUnbound DesignateUnboundSpec `json:"designateUnbound"`
 }
 
+// DesignateNSRecord defines a DNS nameserver record
+type DesignateNSRecord struct {
+	// Hostname of the nameserver
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Hostname string `json:"hostname"`
+
+	// Priority of the nameserver
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	Priority int `json:"priority"`
+}
+
 // DesignateSpecBase -
 type DesignateSpecBase struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -204,6 +217,11 @@ type DesignateSpecBase struct {
 	// TopologyRef to apply the Topology defined by the associated CR referenced
 	// by name
 	TopologyRef *topologyv1.TopoRef `json:"topologyRef,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +listType=atomic
+	// NSRecords contains the list of nameserver records for the Designate pool
+	NSRecords []DesignateNSRecord `json:"nsRecords,omitempty"`
 }
 
 // DesignateStatus defines the observed state of Designate
