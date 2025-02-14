@@ -27,6 +27,7 @@ import (
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	designateproducer "github.com/openstack-k8s-operators/designate-operator/pkg/designateproducer"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/deployment"
@@ -91,6 +92,7 @@ func (r *DesignateProducerReconciler) GetLogger(ctx context.Context) logr.Logger
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
+//+kubebuilder:rbac:groups=topology.openstack.org,resources=topologies,verbs=get;list;watch;update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -183,6 +185,12 @@ func (r *DesignateProducerReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		instance.Status.NetworkAttachments = map[string][]string{}
 	}
 
+	// Init Topology condition if there's a reference
+	if instance.Spec.TopologyRef != nil {
+		c := condition.UnknownCondition(condition.TopologyReadyCondition, condition.InitReason, condition.TopologyReadyInitMessage)
+		cl.Set(c)
+	}
+
 	// Handle service delete
 	if !instance.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, instance, helper)
@@ -218,6 +226,18 @@ func (r *DesignateProducerReconciler) SetupWithManager(ctx context.Context, mgr 
 			return nil
 		}
 		return []string{cr.Spec.TLS.CaBundleSecretName}
+	}); err != nil {
+		return err
+	}
+
+	// index topologyField
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &designatev1beta1.DesignateProducer{}, topologyField, func(rawObj client.Object) []string {
+		// Extract the topology name from the spec, if one is provided
+		cr := rawObj.(*designatev1beta1.DesignateProducer)
+		if cr.Spec.TopologyRef == nil {
+			return nil
+		}
+		return []string{cr.Spec.TopologyRef.Name}
 	}); err != nil {
 		return err
 	}
@@ -306,6 +326,9 @@ func (r *DesignateProducerReconciler) SetupWithManager(ctx context.Context, mgr 
 		// watch the config CMs we don't own
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(configMapFn)).
+		Watches(&topologyv1.Topology{},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
@@ -317,6 +340,7 @@ func (r *DesignateProducerReconciler) findObjectsForSrc(ctx context.Context, src
 	allWatchFields := []string{
 		passwordSecretField,
 		caBundleSecretNameField,
+		topologyField,
 	}
 
 	for _, field := range allWatchFields {
@@ -352,6 +376,19 @@ func (r *DesignateProducerReconciler) reconcileDelete(ctx context.Context, insta
 	Log := r.GetLogger(ctx)
 
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
+
+	// Remove finalizer on the Topology CR
+	if ctrlResult, err := topologyv1.EnsureDeletedTopologyRef(
+		ctx,
+		helper,
+		&topologyv1.TopoRef{
+			Name:      instance.Status.LastAppliedTopology,
+			Namespace: instance.Namespace,
+		},
+		designateproducer.Component,
+	); err != nil {
+		return ctrlResult, err
+	}
 
 	// We did all the cleanup on the objects we created so we can remove the
 	// finalizer from ourselves to allow the deletion
@@ -579,11 +616,49 @@ func (r *DesignateProducerReconciler) reconcileNormal(ctx context.Context, insta
 	}
 
 	//
+	// Handle Topology
+	//
+	lastTopologyRef := topologyv1.TopoRef{
+		Name:      instance.Status.LastAppliedTopology,
+		Namespace: instance.Namespace,
+	}
+	topology, err := ensureDesignateTopology(
+		ctx,
+		helper,
+		instance.Spec.TopologyRef,
+		&lastTopologyRef,
+		designateproducer.Component,
+		designateproducer.Component,
+	)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.TopologyReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.TopologyReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, fmt.Errorf("waiting for Topology requirements: %w", err)
+	}
+
+	// If TopologyRef is present and ensureDesignateTopology returned a valid
+	// topology object, set .Status.LastAppliedTopology to the referenced one
+	// and mark the condition as true
+	if instance.Spec.TopologyRef != nil {
+		// update the Status with the last retrieved Topology name
+		instance.Status.LastAppliedTopology = instance.Spec.TopologyRef.Name
+		// update the TopologyRef associated condition
+		instance.Status.Conditions.MarkTrue(condition.TopologyReadyCondition, condition.TopologyReadyMessage)
+	} else {
+		// remove LastAppliedTopology from the .Status
+		instance.Status.LastAppliedTopology = ""
+	}
+
+	//
 	// normal reconcile tasks
 	//
 
 	// Define a new Deployment object
-	deplDef := designateproducer.Deployment(instance, inputHash, serviceLabels, serviceAnnotations)
+	deplDef := designateproducer.Deployment(instance, inputHash, serviceLabels, serviceAnnotations, topology)
 	depl := deployment.NewDeployment(
 		deplDef,
 		time.Duration(5)*time.Second,

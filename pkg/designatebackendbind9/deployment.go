@@ -20,6 +20,7 @@ import (
 
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	designate "github.com/openstack-k8s-operators/designate-operator/pkg/designate"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
@@ -46,6 +47,7 @@ func StatefulSet(
 	configHash string,
 	labels map[string]string,
 	annotations map[string]string,
+	topology *topologyv1.Topology,
 ) *appsv1.StatefulSet {
 
 	// TODO(beagles): Dbl check that running as the default kolla/tcib user works okay here. Permissions on some of the
@@ -146,6 +148,33 @@ func StatefulSet(
 		},
 	}
 
+	if instance.Spec.NodeSelector != nil {
+		statefulSet.Spec.Template.Spec.NodeSelector = *instance.Spec.NodeSelector
+	}
+
+	if topology != nil {
+		// Get the Topology .Spec
+		ts := topology.Spec
+		// Process TopologySpreadConstraints if defined in the referenced Topology
+		if ts.TopologySpreadConstraints != nil {
+			statefulSet.Spec.Template.Spec.TopologySpreadConstraints = *topology.Spec.TopologySpreadConstraints
+		}
+		// Process Affinity if defined in the referenced Topology
+		if ts.Affinity != nil {
+			statefulSet.Spec.Template.Spec.Affinity = ts.Affinity
+		}
+	} else {
+		// If possible two pods of the same service should not
+		// run on the same worker node. If this is not possible
+		// the get still created on the same worker node.
+		statefulSet.Spec.Template.Spec.Affinity = affinity.DistributePods(
+			common.AppSelector,
+			[]string{
+				serviceName,
+			},
+			corev1.LabelHostname,
+		)
+	}
 	// If possible two pods of the same service should not run on the same worker node. If this is not possible they
 	// will be scheduled on the same node. Where the bind servers are stateful, it's best to have them all available
 	// even if they are on the same host.
@@ -156,10 +185,6 @@ func StatefulSet(
 		},
 		corev1.LabelHostname,
 	)
-	if instance.Spec.NodeSelector != nil {
-		statefulSet.Spec.Template.Spec.NodeSelector = *instance.Spec.NodeSelector
-	}
-
 	// TODO: bind's init container doesn't need most of this stuff. It doesn't use rabbitmq, redis or access the
 	// database. Should clean this up!
 	envVars = map[string]env.Setter{}
