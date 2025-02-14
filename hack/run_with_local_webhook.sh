@@ -16,8 +16,8 @@ SKIP_CERT=${SKIP_CERT:-false}
 CRC_IP=${CRC_IP:-$(/sbin/ip -o -4 addr list crc | awk '{print $4}' | cut -d/ -f1)}
 
 #Open 9443
-sudo firewall-cmd --zone=libvirt --add-port=9443/tcp
-sudo firewall-cmd --runtime-to-permanent
+#sudo firewall-cmd --zone=libvirt --add-port=9443/tcp
+#sudo firewall-cmd --runtime-to-permanent
 
 # Generate the certs and the ca bundle
 if [ "$SKIP_CERT" = false ] ; then
@@ -120,4 +120,9 @@ if [ -n "${CSV_NAME}" ]; then
     oc patch "${CSV_NAME}" -n openstack-operators --type=json -p="[{'op': 'replace', 'path': '/spec/webhookdefinitions', 'value': []}]"
 fi
 
-go run ./main.go -metrics-bind-address ":${METRICS_PORT}" -health-probe-bind-address ":${HEALTH_PORT}"
+LOG=${LOG:false}
+LOG_CMD=""
+if [ "$LOG" = "true" ]; then
+    LOG_CMD='2>&1 | tee -a designate-operator.log'
+fi
+go run ./main.go -metrics-bind-address ":${METRICS_PORT}" -health-probe-bind-address ":${HEALTH_PORT}" "${LOG_CMD}"
