@@ -17,9 +17,6 @@ limitations under the License.
 package designateunbound
 
 const (
-	// ServiceName -
+	Component   = "designate-unbound"
 	ServiceName = "designateunbound"
-
-	// UnboundPublicPort -
-	UnboundPublicPort int32 = 53
 )

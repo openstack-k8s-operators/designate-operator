@@ -18,7 +18,7 @@ package v1beta1
 
 import (
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
-	// "github.com/openstack-k8s-operators/lib-common/modules/common/util"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -82,6 +82,16 @@ type DesignateBackendbind9SpecBase struct {
 	// +kubebuilder:validation:Optional
 	// NetUtilsImage - NetUtils container image
 	NetUtilsImage string `json:"netUtilsImage"`
+
+	// Allows services to be configured for accessing each designate bind pod. For best results, there should be
+	// an override for each replica.
+	// +kubebuilder:validation:Optional
+	Override Bind9OverrideSpec `json:"override,omitempty"`
+}
+
+type Bind9OverrideSpec struct {
+	// +listType=atomic
+	Services []service.OverrideSpec `json:"services,omitempty"`
 }
 
 // DesignateBackendbind9Status defines the observed state of DesignateBackendbind9
