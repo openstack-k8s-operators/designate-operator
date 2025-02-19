@@ -817,11 +817,21 @@ var _ = Describe("Designate controller", func() {
 		It("sets topology in CR status", func() {
 			Eventually(func(g Gomega) {
 				designateAPI := GetDesignateAPI(designateAPIName)
-				g.Expect(designateAPI.Status.LastAppliedTopology).To(Equal(designateTopologies[0].Name))
+				g.Expect(designateAPI.Status.LastAppliedTopology).ToNot(BeNil())
 				designateCentral := GetDesignateCentral(designateCentralName)
-				g.Expect(designateCentral.Status.LastAppliedTopology).To(Equal(designateTopologies[0].Name))
+				g.Expect(designateCentral.Status.LastAppliedTopology).ToNot(BeNil())
 				designateProducer := GetDesignateProducer(designateProducerName)
-				g.Expect(designateProducer.Status.LastAppliedTopology).To(Equal(designateTopologies[0].Name))
+				g.Expect(designateProducer.Status.LastAppliedTopology).ToNot(BeNil())
+				//NOTE: MDNS and bind9 are simulated and the logic is the same
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				designateAPI := GetDesignateAPI(designateAPIName)
+				g.Expect(designateAPI.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[0].Name))
+				designateCentral := GetDesignateCentral(designateCentralName)
+				g.Expect(designateCentral.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[0].Name))
+				designateProducer := GetDesignateProducer(designateProducerName)
+				g.Expect(designateProducer.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[0].Name))
 				//NOTE: MDNS and bind9 are simulated and the logic is the same
 			}, timeout, interval).Should(Succeed())
 		})
@@ -835,11 +845,11 @@ var _ = Describe("Designate controller", func() {
 			Eventually(func(g Gomega) {
 				th.SimulateJobSuccess(designateDBSyncName)
 				designateAPI := GetDesignateAPI(designateAPIName)
-				g.Expect(designateAPI.Status.LastAppliedTopology).To(Equal(designateTopologies[1].Name))
+				g.Expect(designateAPI.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
 				designateCentral := GetDesignateCentral(designateCentralName)
-				g.Expect(designateCentral.Status.LastAppliedTopology).To(Equal(designateTopologies[1].Name))
+				g.Expect(designateCentral.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
 				designateProducer := GetDesignateProducer(designateProducerName)
-				g.Expect(designateProducer.Status.LastAppliedTopology).To(Equal(designateTopologies[1].Name))
+				g.Expect(designateProducer.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
 			}, timeout, interval).Should(Succeed())
 		})
 		It("overrides topology when the reference changes", func() {
@@ -863,11 +873,11 @@ var _ = Describe("Designate controller", func() {
 			Eventually(func(g Gomega) {
 				th.SimulateJobSuccess(designateDBSyncName)
 				designateAPI := GetDesignateAPI(designateAPIName)
-				g.Expect(designateAPI.Status.LastAppliedTopology).To(Equal(designateTopologies[1].Name))
+				g.Expect(designateAPI.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
 				designateCentral := GetDesignateCentral(designateCentralName)
-				g.Expect(designateCentral.Status.LastAppliedTopology).To(Equal(designateTopologies[2].Name))
+				g.Expect(designateCentral.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[2].Name))
 				designateProducer := GetDesignateProducer(designateProducerName)
-				g.Expect(designateProducer.Status.LastAppliedTopology).To(Equal(designateTopologies[3].Name))
+				g.Expect(designateProducer.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[3].Name))
 			}, timeout, interval).Should(Succeed())
 		})
 		It("removes topologyRef from the spec", func() {
@@ -881,11 +891,11 @@ var _ = Describe("Designate controller", func() {
 			Eventually(func(g Gomega) {
 				th.SimulateJobSuccess(designateDBSyncName)
 				designateAPI := GetDesignateAPI(designateAPIName)
-				g.Expect(designateAPI.Status.LastAppliedTopology).Should(BeEmpty())
+				g.Expect(designateAPI.Status.LastAppliedTopology).Should(BeNil())
 				designateCentral := GetDesignateCentral(designateCentralName)
-				g.Expect(designateCentral.Status.LastAppliedTopology).Should(BeEmpty())
+				g.Expect(designateCentral.Status.LastAppliedTopology).Should(BeNil())
 				designateProducer := GetDesignateProducer(designateProducerName)
-				g.Expect(designateProducer.Status.LastAppliedTopology).Should(BeEmpty())
+				g.Expect(designateProducer.Status.LastAppliedTopology).Should(BeNil())
 			}, timeout, interval).Should(Succeed())
 		})
 	})

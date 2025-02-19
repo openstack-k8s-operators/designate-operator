@@ -21,6 +21,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 )
 
 // DesignateAPITemplate defines the input parameters for the Designate API service
@@ -115,7 +116,7 @@ type DesignateAPIStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// LastAppliedTopology - the last applied Topology
-	LastAppliedTopology string `json:"lastAppliedTopology,omitempty"`
+	LastAppliedTopology *topologyv1.TopoRef `json:"lastAppliedTopology,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -149,4 +150,19 @@ func init() {
 // IsReady - returns true if service is ready to serve requests
 func (instance DesignateAPI) IsReady() bool {
 	return instance.Status.ReadyCount == *(instance.Spec.Replicas)
+}
+
+// GetSpecTopologyRef - Returns the LastAppliedTopology Set in the Status
+func (instance *DesignateAPI) GetSpecTopologyRef() *topologyv1.TopoRef {
+	return instance.Spec.TopologyRef
+}
+
+// GetLastAppliedTopology - Returns the LastAppliedTopology Set in the Status
+func (instance *DesignateAPI) GetLastAppliedTopology() *topologyv1.TopoRef {
+	return instance.Status.LastAppliedTopology
+}
+
+// SetLastAppliedTopology - Sets the LastAppliedTopology value in the Status
+func (instance *DesignateAPI) SetLastAppliedTopology(topologyRef *topologyv1.TopoRef) {
+	instance.Status.LastAppliedTopology = topologyRef
 }
