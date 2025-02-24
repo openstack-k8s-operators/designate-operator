@@ -382,10 +382,7 @@ func (r *DesignateCentralReconciler) reconcileDelete(ctx context.Context, instan
 	if ctrlResult, err := topologyv1.EnsureDeletedTopologyRef(
 		ctx,
 		helper,
-		&topologyv1.TopoRef{
-			Name:      instance.Status.LastAppliedTopology,
-			Namespace: instance.Namespace,
-		},
+		instance.Status.LastAppliedTopology,
 		designatecentral.Component,
 	); err != nil {
 		return ctrlResult, err
@@ -618,17 +615,16 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	//
 	// Handle Topology
 	//
-	lastTopologyRef := topologyv1.TopoRef{
-		Name:      instance.Status.LastAppliedTopology,
-		Namespace: instance.Namespace,
-	}
-	topology, err := ensureDesignateTopology(
+	topology, err := ensureTopology(
 		ctx,
 		helper,
-		instance.Spec.TopologyRef,
-		&lastTopologyRef,
-		designatecentral.Component,
-		designatecentral.Component,
+		instance,                   // topologyHandler
+		designatecentral.Component, // finalizer
+		&instance.Status.Conditions,
+		labels.GetSingleLabelSelector(
+			common.ComponentSelector,
+			designatecentral.Component,
+		),
 	)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -638,19 +634,6 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 			condition.TopologyReadyErrorMessage,
 			err.Error()))
 		return ctrl.Result{}, fmt.Errorf("waiting for Topology requirements: %w", err)
-	}
-
-	// If TopologyRef is present and ensureDesignateTopology returned a valid
-	// topology object, set .Status.LastAppliedTopology to the referenced one
-	// and mark the condition as true
-	if instance.Spec.TopologyRef != nil {
-		// update the Status with the last retrieved Topology name
-		instance.Status.LastAppliedTopology = instance.Spec.TopologyRef.Name
-		// update the TopologyRef associated condition
-		instance.Status.Conditions.MarkTrue(condition.TopologyReadyCondition, condition.TopologyReadyMessage)
-	} else {
-		// remove LastAppliedTopology from the .Status
-		instance.Status.LastAppliedTopology = ""
 	}
 
 	//
