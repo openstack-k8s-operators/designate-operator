@@ -514,10 +514,6 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	}
 
 	templateParameters := make(map[string]interface{})
-	// TODO(beagles): these are defaulting to everything and might actually be fine because of how this
-	// is addressed but the network cidr should be derivable if there are network attachments ... I think.
-	templateParameters["ListenIP"] = "0.0.0.0"
-	templateParameters["ExternalNetCidr"] = "0.0.0.0/0"
 
 	cms := []util.Template{
 		// ScriptsConfigMap
