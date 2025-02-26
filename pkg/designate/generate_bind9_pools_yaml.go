@@ -89,11 +89,11 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap, NsRecordsMap map[string]stri
 		return nsRecords[i].Priority < nsRecords[j].Priority
 	})
 
-	bindIPs := make([]string, 0, len(BindMap))
-	for _, ip := range BindMap {
-		bindIPs = append(bindIPs, ip)
+	bindIPs := make([]string, len(BindMap))
+	key_tmpl := "bind_address_%d"
+	for i := 0; i < len(BindMap); i++ {
+		bindIPs[i] = BindMap[fmt.Sprintf(key_tmpl, i)]
 	}
-	sort.Strings(bindIPs)
 
 	masterHosts := make([]string, 0, len(MdnsMap))
 	for _, host := range MdnsMap {
@@ -101,16 +101,9 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap, NsRecordsMap map[string]stri
 	}
 	sort.Strings(masterHosts)
 
-	nameservers := make([]Nameserver, len(bindIPs))
-	for i, bindIP := range bindIPs {
-		nameservers[i] = Nameserver{
-			Host: bindIP,
-			Port: 53,
-		}
-	}
-
 	targets := make([]Target, len(bindIPs))
-	for i, bindIP := range bindIPs {
+	nameservers := make([]Nameserver, len(bindIPs))
+	for i := 0; i < len(bindIPs); i++ {
 		masters := make([]Master, len(masterHosts))
 		for j, masterHost := range masterHosts {
 			masters[j] = Master{
@@ -118,7 +111,12 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap, NsRecordsMap map[string]stri
 				Port: 5354,
 			}
 		}
+		bindIP := bindIPs[i]
 
+		nameservers[i] = Nameserver{
+			Host: bindIP,
+			Port: 53,
+		}
 		targets[i] = Target{
 			Type:        "bind9",
 			Description: fmt.Sprintf("BIND9 Server %d (%s)", i, bindIP),
@@ -131,15 +129,6 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap, NsRecordsMap map[string]stri
 				RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, i),
 			},
 		}
-	}
-
-	sort.Slice(targets, func(i, j int) bool {
-		return targets[i].Options.Host < targets[j].Options.Host
-	})
-
-	for i := range targets {
-		targets[i].Description = fmt.Sprintf("BIND9 Server %d (%s)", i, targets[i].Options.Host)
-		targets[i].Options.RNDCKeyFile = fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, i)
 	}
 
 	// Catalog zone is an optional section
