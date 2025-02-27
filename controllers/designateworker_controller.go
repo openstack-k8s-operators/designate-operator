@@ -617,10 +617,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 		instance,      // topologyHandler
 		instance.Name, // finalizer
 		&instance.Status.Conditions,
-		labels.GetSingleLabelSelector(
-			common.ComponentSelector,
-			designateworker.Component,
-		),
+		labels.GetLabelSelector(serviceLabels),
 	)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(

@@ -621,10 +621,7 @@ func (r *DesignateProducerReconciler) reconcileNormal(ctx context.Context, insta
 		instance,                    // topologyHandler
 		designateproducer.Component, // finalizer
 		&instance.Status.Conditions,
-		labels.GetSingleLabelSelector(
-			common.ComponentSelector,
-			designateproducer.Component,
-		),
+		labels.GetLabelSelector(serviceLabels),
 	)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
