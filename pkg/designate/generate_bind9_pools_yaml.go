@@ -90,9 +90,9 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap, NsRecordsMap map[string]stri
 	})
 
 	bindIPs := make([]string, len(BindMap))
-	key_tmpl := "bind_address_%d"
+	keyTmpl := "bind_address_%d"
 	for i := 0; i < len(BindMap); i++ {
-		bindIPs[i] = BindMap[fmt.Sprintf(key_tmpl, i)]
+		bindIPs[i] = BindMap[fmt.Sprintf(keyTmpl, i)]
 	}
 
 	masterHosts := make([]string, 0, len(MdnsMap))
