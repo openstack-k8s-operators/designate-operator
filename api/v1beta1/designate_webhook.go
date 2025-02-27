@@ -24,9 +24,9 @@ package v1beta1
 import (
 	"fmt"
 
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -46,7 +46,7 @@ type DesignateDefaults struct {
 	Backendbind9ContainerImageURL string
 	UnboundContainerImageURL      string
 	NetUtilsURL                   string
-	DesignateAPIRouteTimeout         int
+	DesignateAPIRouteTimeout      int
 }
 
 var designateDefaults DesignateDefaults

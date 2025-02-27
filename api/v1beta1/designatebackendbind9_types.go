@@ -17,10 +17,10 @@ limitations under the License.
 package v1beta1
 
 import (
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 )
 
 // DesignateBackendbind9SpecCore - this version has no containerImage for use with the OpenStackControlplane
@@ -165,6 +165,7 @@ func (instance *DesignateBackendbind9) GetLastAppliedTopology() *topologyv1.Topo
 func (instance *DesignateBackendbind9) SetLastAppliedTopology(topologyRef *topologyv1.TopoRef) {
 	instance.Status.LastAppliedTopology = topologyRef
 }
+
 // // RbacConditionsSet - set the conditions for the rbac object
 // func (instance DesignateBackendbind9) RbacConditionsSet(c *condition.Condition) {
 // 	instance.Status.Conditions.Set(c)
