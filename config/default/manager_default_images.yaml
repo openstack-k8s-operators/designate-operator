@@ -25,5 +25,5 @@ spec:
           value: quay.io/podified-antelope-centos9/openstack-designate-backend-bind9:current-podified
         - name: RELATED_IMAGE_DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT
           value: quay.io/podified-antelope-centos9/openstack-unbound:current-podified
-        - name: RELATED_IMAGE_NETUTILS_IMAGE_URL_DEFAULT
+        - name: RELATED_IMAGE_NET_UTILS_IMAGE_URL_DEFAULT
           value: quay.io/podified-antelope-centos9/openstack-netutils:current-podified

@@ -324,7 +324,7 @@ func SetupDefaults() {
 		WorkerContainerImageURL:       util.GetEnvVar("RELATED_IMAGE_DESIGNATE_WORKER_IMAGE_URL_DEFAULT", DesignateWorkerContainerImage),
 		UnboundContainerImageURL:      util.GetEnvVar("RELATED_IMAGE_DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT", DesignateUnboundContainerImage),
 		Backendbind9ContainerImageURL: util.GetEnvVar("RELATED_IMAGE_DESIGNATE_BACKENDBIND9_IMAGE_URL_DEFAULT", DesignateBackendbind9ContainerImage),
-		NetUtilsURL:                   util.GetEnvVar("RELATED_IMAGE_NETUTILS_IMAGE_URL_DEFAULT", NetUtilsContainerImage),
+		NetUtilsURL:                   util.GetEnvVar("RELATED_IMAGE_NET_UTILS_IMAGE_URL_DEFAULT", NetUtilsContainerImage),
 		DesignateAPIRouteTimeout:      APITimeout,
 	}
 
