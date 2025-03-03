@@ -48,7 +48,7 @@ func StatefulSet(
 	labels map[string]string,
 	annotations map[string]string,
 	topology *topologyv1.Topology,
-) *appsv1.StatefulSet {
+) (*appsv1.StatefulSet, error) {
 
 	// TODO(beagles): Dbl check that running as the default kolla/tcib user works okay here. Permissions on some of the
 	// directories require serious care.
@@ -74,6 +74,12 @@ func StatefulSet(
 	}
 	readinessProbe.TCPSocket = &corev1.TCPSocketAction{
 		Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(953)},
+	}
+
+	// Parse the storageRequest defined in the CR
+	storageRequest, err := resource.ParseQuantity(instance.Spec.StorageRequest)
+	if err != nil {
+		return nil, err
 	}
 
 	envVars := map[string]env.Setter{}
@@ -141,7 +147,7 @@ func StatefulSet(
 				StorageClassName: &instance.Spec.StorageClass,
 				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse(instance.Spec.StorageRequest),
+						corev1.ResourceStorage: storageRequest,
 					},
 				},
 			},
@@ -201,5 +207,5 @@ func StatefulSet(
 		designate.PredictableIPContainer(predIPContainerDetails),
 	}
 
-	return statefulSet
+	return statefulSet, nil
 }

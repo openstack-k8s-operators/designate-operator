@@ -600,7 +600,10 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	//
 
 	// Define a new StatefulSet object
-	deplDef := designatebackendbind9.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations, topology)
+	deplDef, err := designatebackendbind9.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations, topology)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	depl := statefulset.NewStatefulSet(
 		deplDef,
 		time.Duration(5)*time.Second,
