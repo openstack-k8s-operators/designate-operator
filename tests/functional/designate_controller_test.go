@@ -18,9 +18,10 @@ package functional_test
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"math/rand"
 	"net"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2" //revive:disable:dot-imports
@@ -818,19 +819,12 @@ var _ = Describe("Designate controller", func() {
 			Eventually(func(g Gomega) {
 				designateAPI := GetDesignateAPI(designateAPIName)
 				g.Expect(designateAPI.Status.LastAppliedTopology).ToNot(BeNil())
-				designateCentral := GetDesignateCentral(designateCentralName)
-				g.Expect(designateCentral.Status.LastAppliedTopology).ToNot(BeNil())
-				designateProducer := GetDesignateProducer(designateProducerName)
-				g.Expect(designateProducer.Status.LastAppliedTopology).ToNot(BeNil())
-				//NOTE: MDNS and bind9 are simulated and the logic is the same
-			}, timeout, interval).Should(Succeed())
-
-			Eventually(func(g Gomega) {
-				designateAPI := GetDesignateAPI(designateAPIName)
 				g.Expect(designateAPI.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[0].Name))
 				designateCentral := GetDesignateCentral(designateCentralName)
+				g.Expect(designateCentral.Status.LastAppliedTopology).ToNot(BeNil())
 				g.Expect(designateCentral.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[0].Name))
 				designateProducer := GetDesignateProducer(designateProducerName)
+				g.Expect(designateProducer.Status.LastAppliedTopology).ToNot(BeNil())
 				g.Expect(designateProducer.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[0].Name))
 				//NOTE: MDNS and bind9 are simulated and the logic is the same
 			}, timeout, interval).Should(Succeed())
@@ -845,10 +839,13 @@ var _ = Describe("Designate controller", func() {
 			Eventually(func(g Gomega) {
 				th.SimulateJobSuccess(designateDBSyncName)
 				designateAPI := GetDesignateAPI(designateAPIName)
+				g.Expect(designateAPI.Status.LastAppliedTopology).ToNot(BeNil())
 				g.Expect(designateAPI.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
 				designateCentral := GetDesignateCentral(designateCentralName)
+				g.Expect(designateCentral.Status.LastAppliedTopology).ToNot(BeNil())
 				g.Expect(designateCentral.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
 				designateProducer := GetDesignateProducer(designateProducerName)
+				g.Expect(designateProducer.Status.LastAppliedTopology).ToNot(BeNil())
 				g.Expect(designateProducer.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
 			}, timeout, interval).Should(Succeed())
 		})
@@ -873,10 +870,13 @@ var _ = Describe("Designate controller", func() {
 			Eventually(func(g Gomega) {
 				th.SimulateJobSuccess(designateDBSyncName)
 				designateAPI := GetDesignateAPI(designateAPIName)
+				g.Expect(designateAPI.Status.LastAppliedTopology).ToNot(BeNil())
 				g.Expect(designateAPI.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
 				designateCentral := GetDesignateCentral(designateCentralName)
+				g.Expect(designateCentral.Status.LastAppliedTopology).ToNot(BeNil())
 				g.Expect(designateCentral.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[2].Name))
 				designateProducer := GetDesignateProducer(designateProducerName)
+				g.Expect(designateProducer.Status.LastAppliedTopology).ToNot(BeNil())
 				g.Expect(designateProducer.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[3].Name))
 			}, timeout, interval).Should(Succeed())
 		})
