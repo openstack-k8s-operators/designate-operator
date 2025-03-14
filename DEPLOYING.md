@@ -130,6 +130,11 @@ access the DNS based services deployed by designate (i.e. the Unbound resolver
   and the bind servers). MetalLB is used to provide management of dedicated
 address pools so the services can enjoy a static mapping of Services to Pods.
 
+> In some environments, the interface may be the from of `baseinterface.vlan
+> id`. In other environments, it might take the name from the
+> *NodeNetworkConfigurationPolicy*. If in doubt, check the interfaces on a
+> worker node to see how names are being mapped.
+
 For example, create a file named *designate_metallb_resources.yaml* that contains
 the following:
 
@@ -189,6 +194,12 @@ The *designate* network attachment definition is required to connect the DNS
 backend services to the dedicated designate specific network. Note that
 designate requires exclusive use of this network and it's IP allocation range.
 Do not try to use this network attachment for other functions.
+
+> In some environments, the master interface in the
+> *NetworkAttachmentDefinition*  may be the from of `baseinterface.vlan id`. In
+> other environments, it might take the name from the
+> *NodeNetworkConfigurationPolicy*. If in doubt, check the interfaces on a
+> worker node to see how names are being mapped.
 
 For example, create a file named *designate\_nad.yaml* with the following
 contents.
@@ -307,6 +318,8 @@ below exists but has a different value, change it to the value specified.
 Add the following under the designateAPI section.
 
 ```yaml
+    networkAttachments:
+    - internalapi
     override:
       service:
         internal:
@@ -334,6 +347,8 @@ additional dedicated network is used to reach the bind servers.
 Add the following under the designateBackendbind9 section:
 
 ```yaml
+    controlNetworkName: designate  # FR2 Only
+    databaseAccount: designate     # FR2 Only
     networkAttachments:
       - designate
     override:
@@ -353,7 +368,7 @@ Add the following under the designateBackendbind9 section:
           spec:
             type: LoadBalancer
     replicas: 2
-    storageClass: local-storage
+    storageClass: local-storage    # Appropriate storageClass environment specific
     storageRequest: 10G
 ```
 
@@ -366,6 +381,7 @@ Add the following under the designateBackendbind9 section:
 Add the following under the designateMdns section:
 
 ```yaml
+    controlNetworkName: designate  # FR2 only
     networkAttachments:
       - designate
 ```

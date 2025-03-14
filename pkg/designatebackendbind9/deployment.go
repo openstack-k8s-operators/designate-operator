@@ -120,19 +120,15 @@ func StatefulSet(
 
 	statefulSet.Spec.PersistentVolumeClaimRetentionPolicy = &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
 		WhenDeleted: appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
-		WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+		WhenScaled:  appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
 	}
-	blockOwnerDeletion := false
-	ownerRef := metav1.NewControllerRef(instance, instance.GroupVersionKind())
-	ownerRef.BlockOwnerDeletion = &blockOwnerDeletion
 
 	statefulSet.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            instance.Name + PVCSuffix,
-				Namespace:       instance.Namespace,
-				Labels:          labels,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name:      instance.Name + PVCSuffix,
+				Namespace: instance.Namespace,
+				Labels:    labels,
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{
