@@ -206,7 +206,7 @@ spec:
       "cniVersion": "0.3.1",
       "name": "designate",
       "type": "macvlan",
-      "master": "designate",
+      "master": "enp7s0.25",
       "ipam": {
         "type": "whereabouts",
         "range": "172.28.0.0/24",
@@ -226,7 +226,7 @@ spec:
       "cniVersion": "0.3.1",
       "name": "designateext",
       "type": "macvlan",
-      "master": "designateext",
+      "master": "enp7s0.26",
       "ipam": {
         "type": "whereabouts",
         "range": "172.50.0.0/24",
