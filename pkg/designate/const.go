@@ -43,6 +43,8 @@ const (
 
 	NsRecordsConfigMap = "designate-ns-records-params"
 
+	NsRecordsCRContent = "designate-ns-records"
+
 	BindPredIPConfigMap = "designate-bind-ip-map"
 
 	RndcConfDir = "/etc/designate/rndc-keys"
