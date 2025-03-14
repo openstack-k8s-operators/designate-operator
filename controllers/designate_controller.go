@@ -22,6 +22,7 @@ import (
 	"sort"
 	"time"
 
+	"gopkg.in/yaml.v2"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -765,7 +766,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	nsRecordsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
-	nsRecordsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.NsRecordsConfigMap, nsRecordsLabels)
+	nsRecordsData, err := r.getNSRecordsData(ctx, helper, instance, nsRecordsLabels)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -834,8 +835,8 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	Log.Info("Bind configmap was created successfully")
-	if len(nsRecordsConfigMap.Data) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
-		Log.Info("len(nsRecordsConfigMap.Data) > 0")
+	if len(nsRecordsData) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
+		Log.Info("NS records data found")
 		poolsYamlConfigMap := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      designate.PoolsYamlConfigMap,
@@ -845,7 +846,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Data: make(map[string]string),
 		}
 
-		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsData)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -1156,6 +1157,32 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil
+}
+
+func (r *DesignateReconciler) getNSRecordsData(ctx context.Context, helper *helper.Helper, instance *designatev1beta1.Designate, labels map[string]string) (map[string]string, error) {
+	Log := r.GetLogger(ctx)
+
+	// First check if NS records are defined in the CR
+	if len(instance.Spec.NSRecords) > 0 {
+		Log.Info("Using NS records from CR", "count", len(instance.Spec.NSRecords))
+		nsRecordsData := make(map[string]string)
+		nsRecordsYAML, err := yaml.Marshal(instance.Spec.NSRecords)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal NS records to YAML: %w", err)
+		}
+
+		nsRecordsData[designate.NsRecordsCRContent] = string(nsRecordsYAML)
+		return nsRecordsData, nil
+	}
+
+	// If NS records were not created via CR, fall back to ConfigMap
+	Log.Info("No NS records were found in CR, checking ConfigMap")
+	nsRecordsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.NsRecordsConfigMap, labels)
+	if err != nil {
+		return nil, err
+	}
+
+	return nsRecordsConfigMap.Data, nil
 }
 
 func (r *DesignateReconciler) handleConfigMap(ctx context.Context, helper *helper.Helper, instance *designatev1beta1.Designate, configMapName string, labels map[string]string) (*corev1.ConfigMap, error) {
