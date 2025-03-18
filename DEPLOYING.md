@@ -9,7 +9,7 @@ additional configuration that must be configured by the administrator.
 A standard OpenStack deployment configures most of what is needed but there are
 additional optional services that need to be enabled. Designate also requires
 some additional networks to be defined to create the internal designate
-management network and the connectivity for the DNS related services: the bind9
+management network and the connectivity for the DNS related services: the BIND
 nameserver and the unbound DNS resolver.
 
 > The designate-operator is currently under active development. At the time of
@@ -48,7 +48,7 @@ pod/designate-redis-redis-0 condition met
 
 ## Create the Designate Networks
 
-Designate manages the DNS records stored in one or more bind9 servers. This
+Designate manages the DNS records stored in one or more BIND servers. This
 occurs using standard DNS protocols and *rndc* commands over a secure, dedicated
 network link. This requires changes to the *NodeNetworkConnectionPolicy* for the
 worker nodes and a *NetworkAttachmentDefinition* for connecting pods to the
@@ -95,7 +95,7 @@ the source yaml file for the node's configuration policy and re-apply..
       type: vlan
       vlan:
         base-iface: enp7s0
-        id: "25"
+        id: "25"           # Ensure there is no conflicts with existing VLANs
     - description: designate external vlan interface
       ipv4:
         address:
@@ -111,7 +111,7 @@ the source yaml file for the node's configuration policy and re-apply..
       type: vlan
       vlan:
         base-iface: enp7s0
-        id: "26"
+        id: "26"           # Ensure there is no conflicts with existing VLANs
 
 ```
 Confirm all changes were applied by running:
@@ -127,7 +127,7 @@ worker-2     Available   SuccessfullyConfigured
 
 The **designateext** network is used when defining Kubernetes Services to
 access the DNS based services deployed by designate (i.e. the Unbound resolver
-  and the bind servers). MetalLB is used to provide management of dedicated
+  and the BIND servers). MetalLB is used to provide management of dedicated
 address pools so the services can enjoy a static mapping of Services to Pods.
 
 > In some environments, the interface may be the from of `baseinterface.vlan
@@ -337,12 +337,12 @@ OpenstackControlPlane *
 
 ### designateBackendbind9
 
-The bind9 name server uses persistent storage. This example sets the
+The BIND name server uses persistent storage. This example sets the
 `storageClass` to `local-storage` only for testing purposes. It would be more
 appropriate to use a distributed storage class in a production system.
 
 Also note that the networkAttachments might differ in a production system if an
-additional dedicated network is used to reach the bind servers.
+additional dedicated network is used to reach the BIND servers.
 
 Add the following under the designateBackendbind9 section:
 
@@ -445,7 +445,7 @@ A typical section for Unbound might look like:
 > were 3 an additional service should be defined.
 
 If you wish to configure stub-zones that forward particular requests to the
-designate managed bind servers, the unbound server must be connected to the
+designate managed BIND servers, the unbound server must be connected to the
 *designate* network attachment. To add the network attachment, include:
 
 ```yaml
