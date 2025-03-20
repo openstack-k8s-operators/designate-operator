@@ -903,38 +903,74 @@ var _ = Describe("Designate controller", func() {
 })
 
 var _ = Describe("Designate webhook validation", func() {
-	It("rejects a wrong TopologyRef on a different namespace", func() {
-		name := fmt.Sprintf("designate-%s", uuid.New().String())
+	DescribeTable("rejects wrong topology for",
+		func(serviceNameFunc func() (string, string)) {
 
-		designateName := types.NamespacedName{
-			Namespace: namespace,
-			Name:      name,
-		}
+			component, errorPath := serviceNameFunc()
+			expectedErrorMessage := fmt.Sprintf("spec.%s.namespace: Invalid value: \"namespace\": Customizing namespace field is not supported", errorPath)
+			name := fmt.Sprintf("designate-%s", uuid.New().String())
 
-		spec := GetDefaultDesignateSpec(1, 1)
-		// Reference a top-level topology
-		spec["topologyRef"] = map[string]interface{}{
-			"name":      "bar",
-			"namespace": "foo",
-		}
-
-		raw := map[string]interface{}{
-			"apiVersion": "designate.openstack.org/v1beta1",
-			"kind":       "Designate",
-			"metadata": map[string]interface{}{
-				"name":      designateName.Name,
-				"namespace": designateName.Namespace,
-			},
-			"spec": spec,
-		}
-
-		unstructuredObj := &unstructured.Unstructured{Object: raw}
-		_, err := controllerutil.CreateOrPatch(
-			th.Ctx, th.K8sClient, unstructuredObj, func() error { return nil })
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(
-			ContainSubstring(
-				"Invalid value: \"namespace\": Customizing namespace field is not supported"),
-		)
-	})
+			designateName := types.NamespacedName{
+				Namespace: namespace,
+				Name:      name,
+			}
+			spec := GetDefaultDesignateSpec(1, 1)
+			// Reference topology
+			if component != "top-level" {
+				spec[component] = map[string]interface{}{
+					"topologyRef": map[string]interface{}{
+						"name":      "bar",
+						"namespace": "foo",
+					},
+				}
+			} else {
+				spec["topologyRef"] = map[string]interface{}{
+					"name":      "bar",
+					"namespace": "foo",
+				}
+			}
+			raw := map[string]interface{}{
+				"apiVersion": "designate.openstack.org/v1beta1",
+				"kind":       "Designate",
+				"metadata": map[string]interface{}{
+					"name":      designateName.Name,
+					"namespace": designateName.Namespace,
+				},
+				"spec": spec,
+			}
+			unstructuredObj := &unstructured.Unstructured{Object: raw}
+			_, err := controllerutil.CreateOrPatch(
+				th.Ctx, th.K8sClient, unstructuredObj, func() error { return nil })
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(
+				ContainSubstring(expectedErrorMessage))
+		},
+		Entry("top-level topologyRef", func() (string, string) {
+			return "top-level", "topologyRef"
+		}),
+		Entry("designateAPI topologyRef", func() (string, string) {
+			component := "designateAPI"
+			return component, fmt.Sprintf("%s.topologyRef", component)
+		}),
+		Entry("designateCentral topologyRef", func() (string, string) {
+			component := "designateCentral"
+			return component, fmt.Sprintf("%s.topologyRef", component)
+		}),
+		Entry("designateProducer topologyRef", func() (string, string) {
+			component := "designateProducer"
+			return component, fmt.Sprintf("%s.topologyRef", component)
+		}),
+		Entry("designateMdns topologyRef", func() (string, string) {
+			component := "designateMdns"
+			return component, fmt.Sprintf("%s.topologyRef", component)
+		}),
+		Entry("designateUnbound topologyRef", func() (string, string) {
+			component := "designateUnbound"
+			return component, fmt.Sprintf("%s.topologyRef", component)
+		}),
+		Entry("designateWorker topologyRef", func() (string, string) {
+			component := "designateWorker"
+			return component, fmt.Sprintf("%s.topologyRef", component)
+		}),
+	)
 })
