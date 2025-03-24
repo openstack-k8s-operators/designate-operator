@@ -19,6 +19,7 @@ package v1beta1
 import (
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
 const (
@@ -139,4 +140,16 @@ type PasswordSelector struct {
 	// +kubebuilder:default="DesignatePassword"
 	// Service - Selector to get the designate service password from the Secret
 	Service string `json:"service"`
+}
+
+// ValidateTopology -
+func (instance *DesignateServiceTemplateCore) ValidateTopology(
+	basePath *field.Path,
+	namespace string,
+) field.ErrorList {
+	var allErrs field.ErrorList
+	allErrs = append(allErrs, topologyv1.ValidateTopologyRef(
+		instance.TopologyRef,
+		*basePath.Child("topologyRef"), namespace)...)
+	return allErrs
 }
