@@ -442,7 +442,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		// verify if network attachment matches expectations
 		networkReady := false
 		networkAttachmentStatus := map[string][]string{}
-		if *instance.Spec.Replicas > 0 {
+		if *instance.Spec.Replicas > 0 && len(instance.Spec.NetworkAttachments) > 0 {
 			networkReady, networkAttachmentStatus, err = nad.VerifyNetworkStatusFromAnnotation(
 				ctx,
 				helper,
@@ -526,15 +526,6 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	templateParameters := make(map[string]interface{})
 
 	cms := []util.Template{
-		// ScriptsConfigMap
-		{
-			Name:               fmt.Sprintf("%s-scripts", instance.Name),
-			Namespace:          instance.Namespace,
-			Type:               util.TemplateTypeScripts,
-			InstanceType:       instance.Kind,
-			AdditionalTemplate: map[string]string{"common.sh": "/common/common.sh"},
-			Labels:             cmLabels,
-		},
 		// ConfigMap
 		{
 			Name:          fmt.Sprintf("%s-config-data", instance.Name),
