@@ -313,11 +313,35 @@ If editing the controlplane with `oc edit`, there are many empty values such as
 `backendMdnsServerProtocol: ""` that can be ignored. If a parameter described
 below exists but has a different value, change it to the value specified.
 
+### designate
+
+> *For FR2 Only* Designate has some RBAC related issues. While these will
+> resolved in the future, it is recommended that RBAC policy checks be disabled.
+> This is done by overriding the oslo_policy using customServiceConfig in
+> several sections, including the root designate section, e.g.
+
+```yaml
+    customServiceConfig: |
+      # For FR2 Only.
+      [oslo_policy]
+      enforce_scope = False
+      enforce_new_defaults = False
+
+```
+
+This is tech preview only workaround. Once the RBAC issues are resolved, this
+workaround should no longer be neeeded.
+
 ### designateAPI
 
 Add the following under the designateAPI section.
 
 ```yaml
+    customServiceConfig: |
+      # For FR2 Only.
+      [oslo_policy]
+      enforce_scope = False
+      enforce_new_defaults = False
     networkAttachments:
     - internalapi
     override:
@@ -382,6 +406,11 @@ Add the following under the designateMdns section:
 
 ```yaml
     controlNetworkName: designate  # FR2 only
+    customServiceConfig: |
+      # For FR2 Only.
+      [oslo_policy]
+      enforce_scope = False
+      enforce_new_defaults = False
     networkAttachments:
       - designate
 ```
@@ -391,9 +420,40 @@ Add the following under the designateMdns section:
 Add the following under the designateWorker section:
 
 ```yaml
+    customServiceConfig: |
+      # For FR2 Only.
+      [oslo_policy]
+      enforce_scope = False
+      enforce_new_defaults = False
     networkAttachments:
       - designate
 ```
+
+### designateProducer
+
+Add the following under the designateProducer section:
+
+```yaml
+    customServiceConfig: |
+      # For FR2 Only.
+      [oslo_policy]
+      enforce_scope = False
+      enforce_new_defaults = False
+```
+
+### designateCentral
+
+Add the following under the designateCentral section:
+
+```yaml
+    customServiceConfig: |
+      # For FR2 Only.
+      [oslo_policy]
+      enforce_scope = False
+      enforce_new_defaults = False
+```
+
+
 
 ### designateUnbound
 
@@ -791,4 +851,3 @@ If editing the OpenStackControlPlane directly, this might look like this:
         ptr_zone_email = admin@mycloud.com
         cafile = /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
 ```
-
