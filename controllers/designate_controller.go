@@ -1665,6 +1665,12 @@ func (r *DesignateReconciler) mdnsStatefulSetCreateOrUpdate(ctx context.Context,
 		statefulSet.Spec.NodeSelector = instance.Spec.DesignateMdns.NodeSelector
 		statefulSet.Spec.TopologyRef = instance.Spec.DesignateMdns.TopologyRef
 
+		networkAttachment := "designate"
+		if instance.Spec.DesignateNetworkAttachment != "" {
+			networkAttachment = instance.Spec.DesignateNetworkAttachment
+		}
+		statefulSet.Spec.ControlNetworkName = networkAttachment
+
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
 			return err
@@ -1748,6 +1754,12 @@ func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
 		statefulSet.Spec.NodeSelector = instance.Spec.DesignateBackendbind9.NodeSelector
 		statefulSet.Spec.TopologyRef = instance.Spec.DesignateBackendbind9.TopologyRef
+
+		networkAttachment := "designate"
+		if instance.Spec.DesignateNetworkAttachment != "" {
+			networkAttachment = instance.Spec.DesignateNetworkAttachment
+		}
+		statefulSet.Spec.ControlNetworkName = networkAttachment
 
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
