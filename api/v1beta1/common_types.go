@@ -62,24 +62,24 @@ type DesignateTemplate struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default={service: DesignatePassword}
 	// PasswordSelectors - Selectors to identify the DB and ServiceUser password from the Secret
-	PasswordSelectors PasswordSelector `json:"passwordSelectors"`
+	PasswordSelectors PasswordSelector `json:"passwordSelectors,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// BackendType - Defines the backend service/configuration we are using, i.e. bind9, PowerDNS, BYO, etc..
 	// Helps maintain a single init container/init.sh to do container setup
-	BackendType string `json:"backendType"`
+	BackendType string `json:"backendType,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// BackendTypeProtocol - Defines the backend protocol to be used between the designate-worker &
 	// designate_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
 	// Please Note: this MUST match what is in the /etc/designate.conf ['service:worker']
-	BackendWorkerServerProtocol string `json:"backendWorkerServerProtocol"`
+	BackendWorkerServerProtocol string `json:"backendWorkerServerProtocol,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// BackendTypeProtocol - Defines the backend protocol to be used between the designate-worker &
 	// designate_mdns to/from the DNS server. Acceptable values are: "UDP", "TCP"
 	// Please Note: this MUST match what is in the /etc/designate.conf ['service:mdns']
-	BackendMdnsServerProtocol string `json:"backendMdnsServerProtocol"`
+	BackendMdnsServerProtocol string `json:"backendMdnsServerProtocol,omitempty"`
 }
 
 // DesignateServiceTemplate defines the input parameters that can be defined for a given

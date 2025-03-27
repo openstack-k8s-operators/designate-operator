@@ -35,9 +35,21 @@ func DbSyncJob(
 	annotations map[string]string,
 ) *batchv1.Job {
 	runAsUser := int64(0)
-	initVolumeMounts := GetInitVolumeMounts()
-	volumeMounts := GetVolumeMounts("db-sync")
-	volumes := GetVolumes(instance.Name)
+
+	volumeDefs := []VolumeMapping{
+		VolumeMapping{Name: instance.Name + "-common-scripts", Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		VolumeMapping{Name: instance.Name + "-common-config-data", Type: SecretMount, MountPath: "/var/lib/config-data/default"},
+		VolumeMapping{Name: "db-sync-config-data-merged", Type: MergeMount, MountPath: "/var/lib/config-data/merged"},
+	}
+
+	volumes, initVolumeMounts := ProcessVolumes(volumeDefs)
+
+	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
+		Name:      "db-sync-config-data-merged",
+		MountPath: "/var/lib/kolla/config_files/config.json",
+		SubPath:   "db-sync-config.json",
+		ReadOnly:  true,
+	})
 
 	args := []string{"-c", DBSyncCommand}
 

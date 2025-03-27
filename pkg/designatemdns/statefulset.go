@@ -29,11 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-const (
-	// ServiceCommand -
-	ServiceCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
-)
-
 // StatefulSet func
 func StatefulSet(
 	instance *designatev1beta1.DesignateMdns,
@@ -44,8 +39,26 @@ func StatefulSet(
 ) *appsv1.StatefulSet {
 	rootUser := int64(0)
 	serviceName := instance.Name
-	volumes := GetVolumes(serviceName)
-	volumeMounts := designate.GetVolumeMounts(serviceName)
+
+	volumeDefs := []designate.VolumeMapping{
+		designate.VolumeMapping{Name: instance.Name + "-scripts", Type: designate.ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		designate.VolumeMapping{Name: designate.GetCommonConfigSecretName(instance), Type: designate.SecretMount, MountPath: "/var/lib/config-data/default"},
+		designate.VolumeMapping{Name: instance.Name + "-config-data", Type: designate.SecretMount, MountPath: "/var/lib/config-data/service"},
+		designate.VolumeMapping{Name: instance.Name + "-config-data-merged", Type: designate.MergeMount, MountPath: "/var/lib/config-data/merged"},
+		designate.VolumeMapping{Name: designate.MdnsPredIPConfigMap, Type: designate.ConfigMount, MountPath: "/var/lib/predictableips"},
+		designate.VolumeMapping{Name: instance.Name + "-default-overwrite", Type: designate.SecretMount, MountPath: "/var/lib/config-data/overwrites"},
+		designate.VolumeMapping{Name: designate.GetCommonDefaultOverwritesName(instance), Type: designate.SecretMount, MountPath: "/var/lib/config-data/common-overwrites"},
+		designate.VolumeMapping{Name: instance.Name + "-config-overwrites", Type: designate.MergeMount, MountPath: "/var/lib/config-data/config-overwrites"},
+	}
+
+	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
+
+	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
+		Name:      serviceName + "-config-data-merged",
+		MountPath: "/var/lib/kolla/config_files/config.json",
+		SubPath:   serviceName + "-config.json",
+		ReadOnly:  true,
+	})
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -60,7 +73,6 @@ func StatefulSet(
 		InitialDelaySeconds: 10,
 	}
 
-	args := []string{"-c", ServiceCommand}
 	livenessProbe.TCPSocket = &corev1.TCPSocketAction{
 		Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(5354)},
 	}
@@ -99,11 +111,7 @@ func StatefulSet(
 					Volumes:            volumes,
 					Containers: []corev1.Container{
 						{
-							Name: serviceName,
-							Command: []string{
-								"/bin/bash",
-							},
-							Args:  args,
+							Name:  serviceName,
 							Image: instance.Spec.ContainerImage,
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &rootUser,
@@ -145,12 +153,12 @@ func StatefulSet(
 	podEnv := env.MergeEnvs([]corev1.EnvVar{}, envVars)
 	initContainerDetails := designate.InitContainerDetails{
 		ContainerImage: instance.Spec.ContainerImage,
-		VolumeMounts:   designate.GetInitVolumeMounts(),
+		VolumeMounts:   initVolumeMounts,
 		EnvVars:        podEnv,
 	}
 	predIPContainerDetails := designate.PredIPContainerDetails{
 		ContainerImage: instance.Spec.NetUtilsImage,
-		VolumeMounts:   getPredIPVolumeMounts(),
+		VolumeMounts:   initVolumeMounts,
 		EnvVars:        podEnv,
 		Command:        designate.PredictableIPCommand,
 	}

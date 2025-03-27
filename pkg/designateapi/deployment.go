@@ -47,7 +47,28 @@ func Deployment(
 	topology *topologyv1.Topology,
 ) (*appsv1.Deployment, error) {
 	runAsUser := int64(0)
-	initVolumeMounts := designate.GetInitVolumeMounts()
+	serviceName := fmt.Sprintf("%s-api", designate.ServiceName)
+
+	// Includes a r/w /var/run/desigante for the concurrency lock path
+	volumeDefs := []designate.VolumeMapping{
+		designate.VolumeMapping{Name: designate.GetCommonScriptsSecretName(instance), Type: designate.ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		designate.VolumeMapping{Name: designate.GetCommonConfigSecretName(instance), Type: designate.SecretMount, MountPath: "/var/lib/config-data/default"},
+		designate.VolumeMapping{Name: instance.Name + "-config-data", Type: designate.SecretMount, MountPath: "/var/lib/config-data/service"},
+		designate.VolumeMapping{Name: instance.Name + "-config-data-merged", Type: designate.MergeMount, MountPath: "/var/lib/config-data/merged"},
+		designate.VolumeMapping{Name: instance.Name + "-designate-run", Type: designate.MergeMount, MountPath: "/var/run/designate"},
+		designate.VolumeMapping{Name: instance.Name + "-default-overwrite", Type: designate.SecretMount, MountPath: "/var/lib/config-data/overwrites"},
+		designate.VolumeMapping{Name: designate.GetCommonDefaultOverwritesName(instance), Type: designate.SecretMount, MountPath: "/var/lib/config-data/common-overwrites"},
+		designate.VolumeMapping{Name: instance.Name + "-config-overwrites", Type: designate.MergeMount, MountPath: "/var/lib/config-data/config-overwrites"},
+	}
+
+	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
+
+	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
+		Name:      instance.Name + "-config-data-merged",
+		MountPath: "/var/lib/kolla/config_files/config.json",
+		SubPath:   serviceName + "-config.json",
+		ReadOnly:  true,
+	})
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -76,9 +97,6 @@ func Deployment(
 	}
 
 	// create Volume and VolumeMounts
-	volumes := getVolumes(instance.Name)
-	volumeMounts := getVolumeMounts("designate-api")
-
 	// add CA cert if defined
 	if instance.Spec.TLS.CaBundleSecretName != "" {
 		volumes = append(volumes, instance.Spec.TLS.CreateVolume())
@@ -107,8 +125,6 @@ func Deployment(
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
-
-	serviceName := fmt.Sprintf("%s-api", designate.ServiceName)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
