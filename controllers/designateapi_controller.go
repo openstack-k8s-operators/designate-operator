@@ -306,6 +306,19 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 			Log.Error(err, "Unable to retrieve API CRs")
 			return nil
 		}
+
+		label := o.GetLabels()
+		if l, ok := label[labels.GetOwnerNameLabelSelector(labels.GetGroupLabel(designate.ServiceName))]; ok {
+			for _, cr := range apis.Items {
+				if l == designate.GetOwningDesignateName(&cr) {
+					name := client.ObjectKey{
+						Namespace: namespace,
+						Name:      cr.Name,
+					}
+					result = append(result, reconcile.Request{NamespacedName: name})
+				}
+			}
+		}
 		for _, cr := range apis.Items {
 			for _, v := range cr.Spec.CustomServiceConfigSecrets {
 				if v == secretName {
@@ -313,7 +326,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 						Namespace: namespace,
 						Name:      cr.Name,
 					}
-					Log.Info(fmt.Sprintf("Secret %s is used by Designate CR %s", secretName, cr.Name))
+					Log.Info(fmt.Sprintf("Secret %s is used by DesignateAPI CR %s", secretName, cr.Name))
 					result = append(result, reconcile.Request{NamespacedName: name})
 				}
 			}
@@ -721,7 +734,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	//
 	// check for required OpenStack secret holding passwords for service/admin user and add hash to the vars map
 	//
-	ctrlResult, err := r.getSecret(ctx, helper, instance, instance.Spec.Secret, &configMapVars, "secret-")
+	ctrlResult, err := getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, instance.Spec.Secret, &configMapVars, "secret-")
 	if err != nil {
 		return ctrlResult, err
 	}
@@ -790,43 +803,44 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	instance.Status.Conditions.MarkTrue(condition.TLSInputReadyCondition, condition.InputReadyMessage)
 
 	//
-	// check for required TransportURL secret holding transport URL string
+	// TODO(beagles 03/2025): this block of code repeats throughout designate. It appears that the idea here was to allow custom
+	// config snippets to be stored in secrets and used later on. This was not used anywhere however. Maybe this
+	// was intended to be part of supporting alternate backends? I will comment out for now and add a warning if the
+	// parameter is used.
 	//
-	// ctrlResult, err = r.getSecret(ctx, helper, instance, instance.Spec.TransportURLSecret, &configMapVars, "secret-")
-	// if err != nil {
-	// 	return ctrlResult, err
-	// }
-	// run check TransportURL secret - end
-
-	//
-	// check for required service secrets
-	//
-	for _, secretName := range instance.Spec.CustomServiceConfigSecrets {
-		ctrlResult, err = r.getSecret(ctx, helper, instance, secretName, &configMapVars, "secret-")
-		if err != nil {
-			return ctrlResult, err
-		}
-	}
+	// for _, secretName := range instance.Spec.CustomServiceConfigSecrets {
+	//	ctrlResult, err = r.getSecret(ctx, helper, instance, secretName, &configMapVars, "secret-")
+	//	if err != nil {
+	//		return ctrlResult, err
+	//	}
+	//}
 	// run check service secrets - end
+	if len(instance.Spec.CustomServiceConfigSecrets) > 0 {
+		Log.Info("warning: CustomServiceConfigSecrets is not supported.")
+	}
 
 	//
 	// check for required Designate config maps that should have been created by parent Designate CR
 	//
 
-	parentDesignateName := designate.GetOwningDesignateName(instance)
-
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-scripts", parentDesignateName), &configMapVars, "")
+	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, designate.ScriptsVolumeName(designate.GetOwningDesignateName(instance)), &configMapVars, "")
 	if err != nil {
 		return ctrlResult, err
 	}
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-config-data", parentDesignateName), &configMapVars, "")
+
+	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, designate.ConfigVolumeName(designate.GetOwningDesignateName(instance)), &configMapVars, "")
 	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
 	// when secret is not found
 	if err != nil {
 		return ctrlResult, err
 	}
 
-	// run check parent Designate CR config maps - end
+	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, designate.DefaultsVolumeName(designate.GetOwningDesignateName(instance)), &configMapVars, "")
+	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
+	// when secret is not found
+	if err != nil {
+		return ctrlResult, err
+	}
 
 	//
 	// Create ConfigMaps required as input for the Service and calculate an overall hash of hashes
@@ -850,7 +864,6 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 			err.Error()))
 		return ctrl.Result{}, err
 	}
-	// Create ConfigMaps - end
 
 	//
 	// create hash over all the different input resources to identify if any those changed
@@ -868,6 +881,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	} else if hashChanged {
 		// Hash changed and instance status should be updated (which will be done by main defer func),
 		// so we need to return and reconcile again
+		Log.Info("Detected configuration hash change, re-reconciling")
 		return ctrl.Result{}, nil
 	}
 
@@ -878,9 +892,9 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
 	//
-	// TODO check when/if Init, Update, or Upgrade should/could be skipped
-	//
 	// networks to attach to
+	//
+	// TODO(beagles) The API does not need network attachments, we should consider removing this!
 	nadList := []networkv1.NetworkAttachmentDefinition{}
 	for _, netAtt := range instance.Spec.NetworkAttachments {
 		nad, err := nad.GetNADWithName(ctx, helper, netAtt, instance.Namespace)
@@ -1004,7 +1018,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 		// verify if network attachment matches expectations
 		networkReady := false
 		networkAttachmentStatus := map[string][]string{}
-		if *(instance.Spec.Replicas) > 0 {
+		if *(instance.Spec.Replicas) > 0 && len(instance.Spec.NetworkAttachments) > 0 {
 			networkReady, networkAttachmentStatus, err = nad.VerifyNetworkStatusFromAnnotation(
 				ctx,
 				helper,
@@ -1086,44 +1100,7 @@ func (r *DesignateAPIReconciler) reconcileUpgrade(ctx context.Context, instance 
 	return ctrl.Result{}, nil
 }
 
-// getSecret - get the specified secret, and add its hash to envVars
-func (r *DesignateAPIReconciler) getSecret(
-	ctx context.Context,
-	h *helper.Helper,
-	instance *designatev1beta1.DesignateAPI,
-	secretName string,
-	envVars *map[string]env.Setter,
-	prefix string,
-) (ctrl.Result, error) {
-	secret, hash, err := oko_secret.GetSecret(ctx, h, secretName, instance.Namespace)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			h.GetLogger().Info(fmt.Sprintf("Secret %s not found", secretName))
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
-				condition.InputReadyWaitingMessage))
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-		}
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-
-	// Add a prefix to the var name to avoid accidental collision with other non-secret
-	// vars. The secret names themselves will be unique.
-	(*envVars)[prefix+secret.Name] = env.SetValue(hash)
-
-	return ctrl.Result{}, nil
-}
-
 // generateServiceConfigMaps - create custom configmap to hold service-specific config
-// TODO add DefaultConfigOverwrite
 func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 	ctx context.Context,
 	h *helper.Helper,
@@ -1150,15 +1127,10 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 	}
 
 	// customData hold any customization for the service.
-	// custom.conf is going to be merged into /etc/designate/conder.conf
-	// TODO: make sure custom.conf can not be overwritten
+	// custom.conf is going to be merged into /etc/designate/designate.conf.d/custom.conf
 	customData := map[string]string{
 		common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig,
 		"my.cnf":                           db.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
-	}
-
-	for key, data := range instance.Spec.DefaultConfigOverwrite {
-		customData[key] = data
 	}
 
 	keystoneAPI, err := keystonev1.GetKeystoneAPI(ctx, h, instance.Namespace, map[string]string{})
@@ -1176,37 +1148,11 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 
 	customData[common.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
 
-	databaseAccount, dbSecret, err := mariadbv1.GetAccountAndSecret(
-		ctx, h, instance.Spec.DatabaseAccount, instance.Namespace)
-
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			mariadbv1.MariaDBAccountReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			mariadbv1.MariaDBAccountNotReadyMessage,
-			err.Error()))
-
-		return err
-	}
-
-	instance.Status.Conditions.MarkTrue(
-		mariadbv1.MariaDBAccountReadyCondition,
-		mariadbv1.MariaDBAccountReadyMessage)
-
 	templateParameters := map[string]interface{}{
-		"DatabaseConnection": fmt.Sprintf("mysql+pymysql://%s:%s@%s/%s?read_default_file=/etc/my.cnf",
-			databaseAccount.Spec.UserName,
-			string(dbSecret.Data[mariadbv1.DatabasePasswordSelector]),
-			instance.Spec.DatabaseHostname,
-			designate.DatabaseName,
-		),
+		"KeystoneInternalURL": keystoneInternalURL,
+		"KeystonePublicURL":   keystonePublicURL,
+		"TimeOut":             instance.Spec.APITimeout,
 	}
-
-	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
-	templateParameters["KeystoneInternalURL"] = keystoneInternalURL
-	templateParameters["KeystonePublicURL"] = keystonePublicURL
-	templateParameters["TimeOut"] = instance.Spec.APITimeout
 
 	// create httpd  vhost template parameters
 	httpdVhostConfig := map[string]interface{}{}
@@ -1222,28 +1168,7 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 		httpdVhostConfig[endpt.String()] = endptConfig
 	}
 	templateParameters["VHosts"] = httpdVhostConfig
-
-	transportURLSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Spec.TransportURLSecret, instance.Namespace)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			Log.Info(fmt.Sprintf("TransportURL secret %s not found", instance.Spec.TransportURLSecret))
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
-				condition.InputReadyWaitingMessage))
-			return nil
-		}
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return err
-	}
-	templateParameters["TransportURL"] = string(transportURLSecret.Data["transport_url"])
-
+	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
 	adminPasswordSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Spec.Secret, instance.Namespace)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
@@ -1266,24 +1191,23 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 	templateParameters["AdminPassword"] = string(adminPasswordSecret.Data["DesignatePassword"])
 
 	cms := []util.Template{
-		// ScriptsConfigMap
-		{
-			Name:               fmt.Sprintf("%s-scripts", instance.Name),
-			Namespace:          instance.Namespace,
-			Type:               util.TemplateTypeScripts,
-			InstanceType:       instance.Kind,
-			AdditionalTemplate: map[string]string{"common.sh": "/common/common.sh"},
-			Labels:             cmLabels,
-		},
 		// Custom ConfigMap
 		{
-			Name:          fmt.Sprintf("%s-config-data", instance.Name),
+			Name:          designate.ConfigVolumeName(instance.Name),
 			Namespace:     instance.Namespace,
 			Type:          util.TemplateTypeConfig,
 			InstanceType:  instance.Kind,
 			CustomData:    customData,
 			ConfigOptions: templateParameters,
 			Labels:        cmLabels,
+		},
+		{
+			Name:         designate.DefaultsVolumeName(instance.Name),
+			Namespace:    instance.Namespace,
+			Type:         util.TemplateTypeNone,
+			InstanceType: instance.Kind,
+			CustomData:   instance.Spec.DefaultConfigOverwrite,
+			Labels:       cmLabels,
 		},
 	}
 

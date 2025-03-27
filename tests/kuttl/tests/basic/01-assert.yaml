@@ -79,10 +79,6 @@ status:
     reason: Ready
     status: "True"
     type: MariaDBAccountReady
-  - message: NetworkAttachments completed
-    reason: Ready
-    status: "True"
-    type: NetworkAttachmentsReady
   - message: RabbitMqTransportURL successfully created
     reason: Ready
     status: "True"
