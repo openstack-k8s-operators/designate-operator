@@ -5,19 +5,26 @@
             "source": "/var/lib/config-data/merged/designate.conf",
             "dest": "/etc/designate/designate.conf",
             "owner": "designate",
-            "perm": "0600"
+            "perm": "0644"
         },
         {
             "source": "/var/lib/config-data/merged/custom.conf",
             "dest": "/etc/designate/designate.conf.d/custom.conf",
             "owner": "designate",
-            "perm": "0600"
+            "perm": "0644"
         },
         {
             "source": "/var/lib/config-data/merged/my.cnf",
             "dest": "/etc/my.cnf",
             "owner": "designate",
             "perm": "0644"
+        },
+        {
+            "source": "/var/lib/config-data/config-overwrites/*",
+            "dest": "/etc/designate",
+            "owner": "designate",
+            "perm": "0644",
+            "merge": "true"
         },
         {
             "source": "/var/lib/config-data/merged/httpd.conf",
@@ -53,6 +60,16 @@
             "path": "/run/designate",
             "owner": "designate:designate",
             "recurse": true
+        },
+        {
+            "path": "/etc/designate/api-paste.ini",
+            "owner": "designate",
+            "perm": "0644"
+        },
+        {
+            "path": "/etc/designate",
+            "owner": "designate",
+            "perm": "0755"
         }
     ]
 }
