@@ -25,23 +25,25 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 )
 
 type Pool struct {
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description"`
-	Attributes  map[string]string `yaml:"attributes"`
-	NSRecords   []NSRecord        `yaml:"ns_records"`
-	Nameservers []Nameserver      `yaml:"nameservers"`
-	Targets     []Target          `yaml:"targets"`
-	CatalogZone *CatalogZone      `yaml:"catalog_zone,omitempty"` // it is a pointer because it is optional
+	Name        string                          `yaml:"name"`
+	Description string                          `yaml:"description"`
+	Attributes  map[string]string               `yaml:"attributes"`
+	NSRecords   []designatev1.DesignateNSRecord `yaml:"ns_records"`
+	Nameservers []Nameserver                    `yaml:"nameservers"`
+	Targets     []Target                        `yaml:"targets"`
+	CatalogZone *CatalogZone                    `yaml:"catalog_zone,omitempty"` // it is a pointer because it is optional
 }
 
-type NSRecord struct {
-	Hostname string `yaml:"hostname"`
-	Priority int    `yaml:"priority"`
-}
+// We have the same defined in the API now
+// type NSRecord struct {
+// 	Hostname string `yaml:"hostname"`
+// 	Priority int    `yaml:"priority"`
+// }
 
 type Nameserver struct {
 	Host string `yaml:"host"`
@@ -74,14 +76,7 @@ type CatalogZone struct {
 }
 
 // We sort all pool resources to get the correct hash every time
-func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap, NsRecordsMap map[string]string) (string, string, error) {
-	nsRecords := []NSRecord{}
-	for _, data := range NsRecordsMap {
-		err := yaml.Unmarshal([]byte(data), &nsRecords)
-		if err != nil {
-			return "", "", fmt.Errorf("error unmarshalling yaml: %w", err)
-		}
-	}
+func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord) (string, string, error) {
 	sort.Slice(nsRecords, func(i, j int) bool {
 		if nsRecords[i].Hostname != nsRecords[j].Hostname {
 			return nsRecords[i].Hostname < nsRecords[j].Hostname
