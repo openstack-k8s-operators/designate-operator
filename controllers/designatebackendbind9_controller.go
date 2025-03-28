@@ -52,7 +52,6 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
-	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 )
 
 // GetClient -
@@ -760,33 +759,6 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 
 	customData[common.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
 
-	databaseAccount, dbSecret, err := mariadbv1.GetAccountAndSecret(
-		ctx, h, instance.Spec.DatabaseAccount, instance.Namespace)
-
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			mariadbv1.MariaDBAccountReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			mariadbv1.MariaDBAccountNotReadyMessage,
-			err.Error()))
-
-		return err
-	}
-
-	instance.Status.Conditions.MarkTrue(
-		mariadbv1.MariaDBAccountReadyCondition,
-		mariadbv1.MariaDBAccountReadyMessage)
-
-	templateParameters := map[string]interface{}{
-		"DatabaseConnection": fmt.Sprintf("mysql+pymysql://%s:%s@%s/%s?read_default_file=/etc/my.cnf",
-			databaseAccount.Spec.UserName,
-			string(dbSecret.Data[mariadbv1.DatabasePasswordSelector]),
-			instance.Spec.DatabaseHostname,
-			designate.DatabaseName,
-		),
-	}
-
 	var nadInfo *designate.NADConfig
 	for _, netAtt := range instance.Spec.NetworkAttachments {
 		nad, err := nad.GetNADWithName(ctx, h, netAtt, instance.Namespace)
@@ -829,7 +801,7 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 
 	cidr := nadInfo.IPAM.CIDR.String()
 	if cidr == "" {
-		err = fmt.Errorf("designate control network attachment not configured, check NetworkAttachments and ControlNetworkName")
+		err := fmt.Errorf("designate control network attachment not configured, check NetworkAttachments and ControlNetworkName")
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.NetworkAttachmentsReadyCondition,
 			condition.ErrorReason,
@@ -838,6 +810,7 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 			err))
 		return err
 	}
+	templateParameters := make(map[string]interface{})
 	if nadInfo.IPAM.CIDR.Addr().Is4() {
 		templateParameters["IPVersion"] = "4"
 	} else {
