@@ -38,6 +38,9 @@ import (
 	validator "github.com/go-playground/validator/v10"
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
+	"github.com/openstack-k8s-operators/designate-operator/pkg/designatecentral"
+	"github.com/openstack-k8s-operators/designate-operator/pkg/designateproducer"
+	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	. "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 )
@@ -200,19 +203,19 @@ var _ = Describe("Designate controller", func() {
 		designateTopologies = []types.NamespacedName{
 			{
 				Namespace: namespace,
-				Name:      fmt.Sprintf("%s-global-topology", designateName.Name),
+				Name:      fmt.Sprintf("%s-global", designateName.Name),
 			},
 			{
 				Namespace: namespace,
-				Name:      fmt.Sprintf("%s-api-topology", designateName.Name),
+				Name:      fmt.Sprintf("%s-api", designateName.Name),
 			},
 			{
 				Namespace: namespace,
-				Name:      fmt.Sprintf("%s-central-topology", designateName.Name),
+				Name:      fmt.Sprintf("%s-central", designateName.Name),
 			},
 			{
 				Namespace: namespace,
-				Name:      fmt.Sprintf("%s-producer-topology", designateName.Name),
+				Name:      fmt.Sprintf("%s-producer", designateName.Name),
 			},
 		}
 	})
@@ -787,17 +790,26 @@ var _ = Describe("Designate controller", func() {
 	})
 
 	When("Designate is created with topologyref", func() {
+		var topologyRef, topologyRefAlt *topologyv1.TopoRef
 		BeforeEach(func() {
-			// Build the topology Spec
-			topologySpec := GetSampleTopologySpec(designateName.Name)
 			// Create Test Topology
 			for _, t := range designateTopologies {
+				// Build the topology Spec
+				topologySpec, _ := GetSampleTopologySpec(designateName.Name)
 				CreateTopology(t, topologySpec)
 			}
-			CreateTopology(designateName, topologySpec)
 			spec := GetDefaultDesignateSpec(1, 1)
+
+			topologyRef = &topologyv1.TopoRef{
+				Name:      designateTopologies[0].Name,
+				Namespace: designateTopologies[0].Namespace,
+			}
+			topologyRefAlt = &topologyv1.TopoRef{
+				Name:      designateTopologies[1].Name,
+				Namespace: designateTopologies[1].Namespace,
+			}
 			spec["topologyRef"] = map[string]interface{}{
-				"name": designateTopologies[0].Name,
+				"name": topologyRef.Name,
 			}
 			createAndSimulateKeystone(designateName)
 			createAndSimulateRedis(designateRedisName)
@@ -819,34 +831,63 @@ var _ = Describe("Designate controller", func() {
 			Eventually(func(g Gomega) {
 				designateAPI := GetDesignateAPI(designateAPIName)
 				g.Expect(designateAPI.Status.LastAppliedTopology).ToNot(BeNil())
-				g.Expect(designateAPI.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[0].Name))
+				g.Expect(designateAPI.Status.LastAppliedTopology).To(Equal(topologyRef))
 				designateCentral := GetDesignateCentral(designateCentralName)
 				g.Expect(designateCentral.Status.LastAppliedTopology).ToNot(BeNil())
-				g.Expect(designateCentral.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[0].Name))
+				g.Expect(designateCentral.Status.LastAppliedTopology).To(Equal(topologyRef))
 				designateProducer := GetDesignateProducer(designateProducerName)
 				g.Expect(designateProducer.Status.LastAppliedTopology).ToNot(BeNil())
-				g.Expect(designateProducer.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[0].Name))
+				g.Expect(designateProducer.Status.LastAppliedTopology).To(Equal(topologyRef))
 				//NOTE: MDNS and bind9 are simulated and the logic is the same
 			}, timeout, interval).Should(Succeed())
 		})
 		It("updates topology when the reference changes", func() {
 			Eventually(func(g Gomega) {
 				designate := GetDesignate(designateName)
-				designate.Spec.TopologyRef.Name = designateTopologies[1].Name
+				designate.Spec.TopologyRef.Name = topologyRefAlt.Name
 				g.Expect(k8sClient.Update(ctx, designate)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 
 			Eventually(func(g Gomega) {
 				th.SimulateJobSuccess(designateDBSyncName)
+				expectedTopology := &topologyv1.TopoRef{
+					Name:      topologyRefAlt.Name,
+					Namespace: topologyRefAlt.Namespace,
+				}
+				tp := GetTopology(types.NamespacedName{
+					Name:      expectedTopology.Name,
+					Namespace: expectedTopology.Namespace,
+				})
+				g.Expect(tp.GetFinalizers()).To(HaveLen(3))
+				finalizers := tp.GetFinalizers()
+
 				designateAPI := GetDesignateAPI(designateAPIName)
 				g.Expect(designateAPI.Status.LastAppliedTopology).ToNot(BeNil())
-				g.Expect(designateAPI.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
+				g.Expect(designateAPI.Status.LastAppliedTopology).To(Equal(topologyRefAlt))
+				g.Expect(finalizers).To(ContainElement(
+					fmt.Sprintf("openstack.org/designateapi-%s", designateAPIName.Name)))
+
 				designateCentral := GetDesignateCentral(designateCentralName)
 				g.Expect(designateCentral.Status.LastAppliedTopology).ToNot(BeNil())
-				g.Expect(designateCentral.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
+				g.Expect(designateCentral.Status.LastAppliedTopology).To(Equal(topologyRefAlt))
+				g.Expect(finalizers).To(ContainElement(
+					fmt.Sprintf("openstack.org/designatecentral-%s", designatecentral.Component)))
+
 				designateProducer := GetDesignateProducer(designateProducerName)
 				g.Expect(designateProducer.Status.LastAppliedTopology).ToNot(BeNil())
-				g.Expect(designateProducer.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
+				g.Expect(designateProducer.Status.LastAppliedTopology).To(Equal(topologyRefAlt))
+				g.Expect(finalizers).To(ContainElement(
+					fmt.Sprintf("openstack.org/designateproducer-%s", designateproducer.Component)))
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				// Get the previous topology and verify there are no finalizers
+				// anymore
+				tp := GetTopology(types.NamespacedName{
+					Name:      topologyRef.Name,
+					Namespace: topologyRef.Namespace,
+				})
+				g.Expect(tp.GetFinalizers()).To(BeEmpty())
 			}, timeout, interval).Should(Succeed())
 		})
 		It("overrides topology when the reference changes", func() {
@@ -869,15 +910,63 @@ var _ = Describe("Designate controller", func() {
 
 			Eventually(func(g Gomega) {
 				th.SimulateJobSuccess(designateDBSyncName)
+
+				expectedTopology := &topologyv1.TopoRef{
+					Name:      designateTopologies[1].Name,
+					Namespace: designateTopologies[1].Namespace,
+				}
+				tp := GetTopology(types.NamespacedName{
+					Name:      expectedTopology.Name,
+					Namespace: expectedTopology.Namespace,
+				})
+				finalizers := tp.GetFinalizers()
+				g.Expect(finalizers).To(HaveLen(1))
+
 				designateAPI := GetDesignateAPI(designateAPIName)
 				g.Expect(designateAPI.Status.LastAppliedTopology).ToNot(BeNil())
-				g.Expect(designateAPI.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[1].Name))
+				g.Expect(designateAPI.Status.LastAppliedTopology).To(Equal(expectedTopology))
+				g.Expect(finalizers).To(ContainElement(
+					fmt.Sprintf("openstack.org/designateapi-%s", designateAPIName.Name)))
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				th.SimulateJobSuccess(designateDBSyncName)
+
+				expectedTopology := &topologyv1.TopoRef{
+					Name:      designateTopologies[2].Name,
+					Namespace: designateTopologies[2].Namespace,
+				}
+				tp := GetTopology(types.NamespacedName{
+					Name:      expectedTopology.Name,
+					Namespace: expectedTopology.Namespace,
+				})
+				finalizers := tp.GetFinalizers()
+				g.Expect(finalizers).To(HaveLen(1))
 				designateCentral := GetDesignateCentral(designateCentralName)
 				g.Expect(designateCentral.Status.LastAppliedTopology).ToNot(BeNil())
-				g.Expect(designateCentral.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[2].Name))
+				g.Expect(designateCentral.Status.LastAppliedTopology).To(Equal(expectedTopology))
+				g.Expect(finalizers).To(ContainElement(
+					fmt.Sprintf("openstack.org/designatecentral-%s", designatecentral.Component)))
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				th.SimulateJobSuccess(designateDBSyncName)
+
+				expectedTopology := &topologyv1.TopoRef{
+					Name:      designateTopologies[3].Name,
+					Namespace: designateTopologies[3].Namespace,
+				}
+				tp := GetTopology(types.NamespacedName{
+					Name:      expectedTopology.Name,
+					Namespace: expectedTopology.Namespace,
+				})
+				finalizers := tp.GetFinalizers()
+				g.Expect(finalizers).To(HaveLen(1))
 				designateProducer := GetDesignateProducer(designateProducerName)
 				g.Expect(designateProducer.Status.LastAppliedTopology).ToNot(BeNil())
-				g.Expect(designateProducer.Status.LastAppliedTopology.Name).To(Equal(designateTopologies[3].Name))
+				g.Expect(designateProducer.Status.LastAppliedTopology).To(Equal(expectedTopology))
+				g.Expect(finalizers).To(ContainElement(
+					fmt.Sprintf("openstack.org/designateproducer-%s", designateproducer.Component)))
 			}, timeout, interval).Should(Succeed())
 		})
 		It("removes topologyRef from the spec", func() {
@@ -897,9 +986,19 @@ var _ = Describe("Designate controller", func() {
 				designateProducer := GetDesignateProducer(designateProducerName)
 				g.Expect(designateProducer.Status.LastAppliedTopology).Should(BeNil())
 			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				for _, topology := range designateTopologies {
+					// Get the current topology and verify there are no finalizers
+					tp := GetTopology(types.NamespacedName{
+						Name:      topology.Name,
+						Namespace: topology.Namespace,
+					})
+					g.Expect(tp.GetFinalizers()).To(BeEmpty())
+				}
+			}, timeout, interval).Should(Succeed())
 		})
 	})
-
 })
 
 var _ = Describe("Designate webhook validation", func() {
