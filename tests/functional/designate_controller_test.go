@@ -779,10 +779,21 @@ var _ = Describe("Designate controller", func() {
 			nsRecordsConfigMap := th.GetConfigMap(types.NamespacedName{
 				Name:      designate.NsRecordsConfigMap,
 				Namespace: namespace})
-			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+
+			var allNSRecords []designatev1.DesignateNSRecord
+			for _, data := range nsRecordsConfigMap.Data {
+				var nsRecords []designatev1.DesignateNSRecord
+				err := yaml.Unmarshal([]byte(data), &nsRecords)
+				Expect(err).ToNot(HaveOccurred())
+				allNSRecords = append(allNSRecords, nsRecords...)
+			}
+
+			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords)
 			Expect(err).ToNot(HaveOccurred())
+
+			// we used to have inconsistent ordering, so generate the pools.yaml 10 times and make sure it is has exactly the same content
 			for i := 0; i < 10; i++ {
-				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecordsConfigMap.Data)
+				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(poolsYamlHash).Should(Equal(newPoolsYamlHash))
 			}
