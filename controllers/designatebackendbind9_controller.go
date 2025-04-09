@@ -626,8 +626,9 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 			condition.DeploymentReadyRunningMessage))
 		return ctrlResult, nil
 	}
-	if depl.GetStatefulSet().Generation == depl.GetStatefulSet().Status.ObservedGeneration {
-		instance.Status.ReadyCount = depl.GetStatefulSet().Status.ReadyReplicas
+	deploy := depl.GetStatefulSet()
+	if deploy.Generation == deploy.Status.ObservedGeneration {
+		instance.Status.ReadyCount = deploy.Status.ReadyReplicas
 
 		// verify if network attachment matches expectations
 		networkReady := false
@@ -661,8 +662,20 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 			return ctrl.Result{}, err
 		}
 
-		if instance.Status.ReadyCount == *instance.Spec.Replicas {
+		// Mark the Deployment as Ready only if the number of Replicas is equals
+		// to the Deployed instances (ReadyCount), and the the Status.Replicas
+		// match Status.ReadyReplicas. If a deployment update is in progress,
+		// Replicas > ReadyReplicas.
+		// In addition, make sure the controller sees the last Generation
+		// by comparing it with the ObservedGeneration.
+		if statefulset.IsReady(deploy) {
 			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
+		} else {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.DeploymentReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.DeploymentReadyRunningMessage))
 		}
 	}
 	// create StatefulSet - end
