@@ -35,7 +35,6 @@ import (
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	rabbitmqv1 "github.com/openstack-k8s-operators/infra-operator/apis/rabbitmq/v1beta1"
 	redisv1 "github.com/openstack-k8s-operators/infra-operator/apis/redis/v1beta1"
-	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	condition "github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/endpoint"
 )
@@ -531,27 +530,4 @@ func GetSampleTopologySpec(label string) (map[string]interface{}, []corev1.Topol
 		},
 	}
 	return topologySpec, topologySpecObj
-}
-
-// CreateTopology - Creates a Topology CR based on the spec passed as input
-func CreateTopology(topology types.NamespacedName, spec map[string]interface{}) client.Object {
-	raw := map[string]interface{}{
-		"apiVersion": "topology.openstack.org/v1beta1",
-		"kind":       "Topology",
-		"metadata": map[string]interface{}{
-			"name":      topology.Name,
-			"namespace": topology.Namespace,
-		},
-		"spec": spec,
-	}
-	return th.CreateUnstructured(raw)
-}
-
-// GetTopology - Returns the referenced Topology
-func GetTopology(name types.NamespacedName) *topologyv1.Topology {
-	instance := &topologyv1.Topology{}
-	Eventually(func(g Gomega) {
-		g.Expect(k8sClient.Get(ctx, name, instance)).Should(Succeed())
-	}, timeout, interval).Should(Succeed())
-	return instance
 }

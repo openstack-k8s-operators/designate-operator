@@ -807,7 +807,7 @@ var _ = Describe("Designate controller", func() {
 			for _, t := range designateTopologies {
 				// Build the topology Spec
 				topologySpec, _ := GetSampleTopologySpec(designateName.Name)
-				CreateTopology(t, topologySpec)
+				infra.CreateTopology(t, topologySpec)
 			}
 			spec := GetDefaultDesignateSpec(1, 1)
 
@@ -865,7 +865,7 @@ var _ = Describe("Designate controller", func() {
 					Name:      topologyRefAlt.Name,
 					Namespace: topologyRefAlt.Namespace,
 				}
-				tp := GetTopology(types.NamespacedName{
+				tp := infra.GetTopology(types.NamespacedName{
 					Name:      expectedTopology.Name,
 					Namespace: expectedTopology.Namespace,
 				})
@@ -894,7 +894,7 @@ var _ = Describe("Designate controller", func() {
 			Eventually(func(g Gomega) {
 				// Get the previous topology and verify there are no finalizers
 				// anymore
-				tp := GetTopology(types.NamespacedName{
+				tp := infra.GetTopology(types.NamespacedName{
 					Name:      topologyRef.Name,
 					Namespace: topologyRef.Namespace,
 				})
@@ -926,7 +926,7 @@ var _ = Describe("Designate controller", func() {
 					Name:      designateTopologies[1].Name,
 					Namespace: designateTopologies[1].Namespace,
 				}
-				tp := GetTopology(types.NamespacedName{
+				tp := infra.GetTopology(types.NamespacedName{
 					Name:      expectedTopology.Name,
 					Namespace: expectedTopology.Namespace,
 				})
@@ -947,7 +947,7 @@ var _ = Describe("Designate controller", func() {
 					Name:      designateTopologies[2].Name,
 					Namespace: designateTopologies[2].Namespace,
 				}
-				tp := GetTopology(types.NamespacedName{
+				tp := infra.GetTopology(types.NamespacedName{
 					Name:      expectedTopology.Name,
 					Namespace: expectedTopology.Namespace,
 				})
@@ -967,7 +967,7 @@ var _ = Describe("Designate controller", func() {
 					Name:      designateTopologies[3].Name,
 					Namespace: designateTopologies[3].Namespace,
 				}
-				tp := GetTopology(types.NamespacedName{
+				tp := infra.GetTopology(types.NamespacedName{
 					Name:      expectedTopology.Name,
 					Namespace: expectedTopology.Namespace,
 				})
@@ -1001,7 +1001,7 @@ var _ = Describe("Designate controller", func() {
 			Eventually(func(g Gomega) {
 				for _, topology := range designateTopologies {
 					// Get the current topology and verify there are no finalizers
-					tp := GetTopology(types.NamespacedName{
+					tp := infra.GetTopology(types.NamespacedName{
 						Name:      topology.Name,
 						Namespace: topology.Namespace,
 					})
