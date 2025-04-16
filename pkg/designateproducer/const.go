@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package designateproducer contains designate producer constants and configuration.
 package designateproducer
 
 const (

@@ -20,6 +20,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// PredIPContainerDetails contains configuration for predictable IP containers
 type PredIPContainerDetails struct {
 	ContainerImage string
 	VolumeMounts   []corev1.VolumeMount
@@ -27,6 +28,7 @@ type PredIPContainerDetails struct {
 	EnvVars        []corev1.EnvVar
 }
 
+// PredictableIPContainer creates a container with predictable IP configuration
 func PredictableIPContainer(init PredIPContainerDetails) corev1.Container {
 
 	args := []string{

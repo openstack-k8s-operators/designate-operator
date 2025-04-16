@@ -103,7 +103,7 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 
 	// Fetch the DesignateBackendbind9 instance
 	instance := &designatev1beta1.DesignateBackendbind9{}
-	err := r.Client.Get(ctx, req.NamespacedName, instance)
+	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -245,7 +245,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(ctx context.Context, 
 		listOpts := []client.ListOption{
 			client.InNamespace(o.GetNamespace()),
 		}
-		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
+		if err := r.List(context.Background(), apis, listOpts...); err != nil {
 			Log.Error(err, "Unable to retrieve Backendbind9 CRs %v")
 			return nil
 		}
@@ -313,7 +313,7 @@ func (r *DesignateBackendbind9Reconciler) findObjectsForSrc(ctx context.Context,
 			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
 			Namespace:     src.GetNamespace(),
 		}
-		err := r.Client.List(context.TODO(), crList, listOps)
+		err := r.List(context.TODO(), crList, listOps)
 		if err != nil {
 			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
 			return requests
@@ -398,7 +398,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
 	serviceLabels := map[string]string{
-		common.AppSelector:       instance.ObjectMeta.Name,
+		common.AppSelector:       instance.Name,
 		common.ComponentSelector: designatebackendbind9.Component,
 	}
 
@@ -631,7 +631,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		if networkReady {
 			instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
 		} else {
-			err := fmt.Errorf("not all pods have interfaces with ips as configured in NetworkAttachments: %s", instance.Spec.NetworkAttachments)
+			err := fmt.Errorf("%w: %s", designate.ErrNetworkAttachmentConfig, instance.Spec.NetworkAttachments)
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.NetworkAttachmentsReadyCondition,
 				condition.ErrorReason,
@@ -705,7 +705,7 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 	// - %-config-data configmap holding custom config for the service's designate.conf
 	//
 
-	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), serviceLabels)
+	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.Name), serviceLabels)
 
 	// customData hold any customization for the service.
 	// custom.conf is going to be merged into /etc/designate/designate.conf.d/custom.conf
@@ -751,12 +751,12 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 		}
 	}
 	if nadInfo == nil {
-		return fmt.Errorf("unable to locate network attachment %s", instance.Spec.ControlNetworkName)
+		return fmt.Errorf("%w: %s", designate.ErrNetworkAttachmentNotFound, instance.Spec.ControlNetworkName)
 	}
 
 	cidr := nadInfo.IPAM.CIDR.String()
 	if cidr == "" {
-		err := fmt.Errorf("designate control network attachment not configured, check NetworkAttachments and ControlNetworkName")
+		err := designate.ErrControlNetworkNotConfigured
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.NetworkAttachmentsReadyCondition,
 			condition.ErrorReason,

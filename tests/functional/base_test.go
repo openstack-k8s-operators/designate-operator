@@ -42,12 +42,12 @@ import (
 
 const (
 	SecretName         = "test-secret"
-	KeystoneSecretName = "%s-keystone-secret"
+	KeystoneSecretName = "%s-keystone-secret" // #nosec G101
 	RabbitmqSecretName = "rabbitmq-secret"
 
-	PublicCertSecretName   = "public-tls-certs"
-	InternalCertSecretName = "internal-tls-certs"
-	CABundleSecretName     = "combined-ca-bundle"
+	PublicCertSecretName   = "public-tls-certs"   // #nosec G101
+	InternalCertSecretName = "internal-tls-certs" // #nosec G101
+	CABundleSecretName     = "combined-ca-bundle" // #nosec G101
 
 	timeout  = time.Second * 5
 	interval = timeout / 100
@@ -179,17 +179,17 @@ func GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount int, unboundRep
 	}
 	spec["designateBackendbind9"] = designatev1.DesignateBackendbind9Spec{
 		DesignateBackendbind9SpecBase: designatev1.DesignateBackendbind9SpecBase{
-			Replicas: ptr.To(int32(bind9ReplicaCount)),
+			Replicas: ptr.To(int32(bind9ReplicaCount)), // #nosec G115
 		},
 	}
 	spec["designateMdns"] = designatev1.DesignateMdnsSpec{
 		DesignateMdnsSpecBase: designatev1.DesignateMdnsSpecBase{
-			Replicas: ptr.To(int32(mdnsReplicaCount)),
+			Replicas: ptr.To(int32(mdnsReplicaCount)), // #nosec G115
 		},
 	}
 	spec["designateUnbound"] = designatev1.DesignateUnboundSpec{
 		DesignateUnboundSpecBase: designatev1.DesignateUnboundSpecBase{
-			Replicas: ptr.To(int32(unboundReplicaCount)),
+			Replicas: ptr.To(int32(unboundReplicaCount)), // #nosec G115
 		},
 	}
 	return spec
