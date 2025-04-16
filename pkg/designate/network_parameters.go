@@ -34,12 +34,14 @@ type NADConfig struct {
 	IPAM NADIpam `json:"ipam"`
 }
 
+// NADIpam represents network attachment definition IPAM configuration
 type NADIpam struct {
 	CIDR       netip.Prefix `json:"range"`
 	RangeStart netip.Addr   `json:"range_start"`
 	RangeEnd   netip.Addr   `json:"range_end"`
 }
 
+// GetNADConfig parses and returns the NAD configuration from a NetworkAttachmentDefinition
 func GetNADConfig(
 	nad *networkv1.NetworkAttachmentDefinition,
 ) (*NADConfig, error) {
@@ -76,7 +78,7 @@ func GetNetworkParametersFromNAD(
 	end := networkParameters.ProviderAllocationStart
 	for i := 0; i < BindProvPredictablePoolSize; i++ {
 		if !networkParameters.CIDR.Contains(end) {
-			return nil, fmt.Errorf("cannot allocate %d IP addresses in %s", BindProvPredictablePoolSize, networkParameters.CIDR)
+			return nil, fmt.Errorf("%w: %d IP addresses in %s", ErrCannotAllocateIPAddresses, BindProvPredictablePoolSize, networkParameters.CIDR)
 		}
 		end = end.Next()
 	}

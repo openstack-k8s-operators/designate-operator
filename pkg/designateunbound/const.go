@@ -14,9 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package designateunbound contains designate unbound constants and configuration.
 package designateunbound
 
 const (
-	Component   = "designate-unbound"
+	// Component represents the designate unbound component name
+	Component = "designate-unbound"
+	// ServiceName is the name of the designate unbound service
 	ServiceName = "designateunbound"
 )

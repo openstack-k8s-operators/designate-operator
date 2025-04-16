@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// VolumeMapping represents a volume mapping configuration for containers
 type VolumeMapping struct {
 	Name      string
 	Type      string
@@ -28,12 +29,17 @@ type VolumeMapping struct {
 }
 
 const (
+	// ScriptMount represents the script mount type
 	ScriptMount = "script-mount"
+	// SecretMount represents the secret mount type
 	SecretMount = "secret-mount"
+	// ConfigMount represents the config mount type
 	ConfigMount = "config-mount"
-	MergeMount  = "merge-mount"
+	// MergeMount represents the merge mount type
+	MergeMount = "merge-mount"
 )
 
+// GetStandardVolumeMapping returns the standard volume mappings for a designate instance
 func GetStandardVolumeMapping(instance client.Object) []VolumeMapping {
 	return []VolumeMapping{
 		{Name: ScriptsVolumeName(GetOwningDesignateName(instance)), Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
@@ -62,7 +68,8 @@ func ProcessVolumes(volumeDefs []VolumeMapping) ([]corev1.Volume, []corev1.Volum
 		accessMode := modeMap[v.Type]
 		var newVolume corev1.Volume
 		var newMount corev1.VolumeMount
-		if v.Type == SecretMount || v.Type == ScriptMount {
+		switch v.Type {
+		case SecretMount, ScriptMount:
 			source := v.Name
 			if len(v.Source) > 0 {
 				source = v.Source
@@ -81,7 +88,7 @@ func ProcessVolumes(volumeDefs []VolumeMapping) ([]corev1.Volume, []corev1.Volum
 				MountPath: v.MountPath,
 				ReadOnly:  true,
 			}
-		} else if v.Type == ConfigMount {
+		case ConfigMount:
 			source := v.Name
 			if len(v.Source) > 0 {
 				source = v.Source
@@ -102,7 +109,7 @@ func ProcessVolumes(volumeDefs []VolumeMapping) ([]corev1.Volume, []corev1.Volum
 				MountPath: v.MountPath,
 				ReadOnly:  true,
 			}
-		} else {
+		default:
 			newVolume = corev1.Volume{
 				Name: v.Name,
 				VolumeSource: corev1.VolumeSource{

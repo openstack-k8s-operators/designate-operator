@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package functional_test contains functional tests for the designate operator.
 package functional_test
 
 import (
@@ -24,7 +25,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 
-	. "github.com/onsi/ginkgo/v2" //revive:disable:dot-imports
+	. "github.com/onsi/ginkgo/v2" //nolint:staticcheck,revive // ST1001,dot-imports: dot imports are standard practice for Ginkgo tests
 
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/users"
@@ -61,6 +62,7 @@ func keystoneHandleProjects(
 	}
 }
 
+// GetProject returns a project by name from the keystone projects list
 func GetProject(name string) *projects.Project {
 	for _, p := range keystoneProjects {
 		if p.Name == name {
@@ -89,14 +91,16 @@ func keystoneGetProject(
 	}
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(200)
-	fmt.Fprint(w, string(bytes))
-	f.APIFixture.Log.Info(fmt.Sprintf("GetProject returns %s", string(bytes)))
+	_, _ = fmt.Fprint(w, string(bytes))
+	f.Log.Info(fmt.Sprintf("GetProject returns %s", string(bytes)))
 }
 
+// APIFixtures contains test fixtures for API testing
 type APIFixtures struct {
 	Keystone *keystone_helpers.KeystoneAPIFixture
 }
 
+// SetupAPIFixtures sets up and returns API fixtures for testing
 func SetupAPIFixtures(logger logr.Logger) APIFixtures {
 	keystone := keystone_helpers.NewKeystoneAPIFixtureWithServer(logger)
 	keystone.Users = map[string]users.User{
