@@ -28,7 +28,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	// "k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // Deployment func
@@ -40,14 +39,28 @@ func Deployment(
 	topology *topologyv1.Topology,
 ) *appsv1.Deployment {
 	rootUser := int64(0)
-	// Designate's uid and gid magic numbers come from the 'designate-user' in
-	// https://github.com/openstack/kolla/blob/master/kolla/common/users.py
-	// designateUser := int64(42411)
-	// designateGroup := int64(42411)
-
 	serviceName := fmt.Sprintf("%s-central", designate.ServiceName)
-	volumes := getServicePodVolumes(serviceName)
-	volumeMounts := getServicePodVolumeMounts(serviceName)
+
+	// Includes a r/w /var/run/desigante for the concurrency lock path
+	volumeDefs := []designate.VolumeMapping{
+		designate.VolumeMapping{Name: designate.GetCommonScriptsSecretName(instance), Type: designate.ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		designate.VolumeMapping{Name: designate.GetCommonConfigSecretName(instance), Type: designate.SecretMount, MountPath: "/var/lib/config-data/default"},
+		designate.VolumeMapping{Name: instance.Name + "-config-data", Type: designate.SecretMount, MountPath: "/var/lib/config-data/service"},
+		designate.VolumeMapping{Name: instance.Name + "-config-data-merged", Type: designate.MergeMount, MountPath: "/var/lib/config-data/merged"},
+		designate.VolumeMapping{Name: instance.Name + "-designate-run", Type: designate.MergeMount, MountPath: "/var/run/designate"},
+		designate.VolumeMapping{Name: instance.Name + "-default-overwrite", Type: designate.SecretMount, MountPath: "/var/lib/config-data/overwrites"},
+		designate.VolumeMapping{Name: designate.GetCommonDefaultOverwritesName(instance), Type: designate.SecretMount, MountPath: "/var/lib/config-data/common-overwrites"},
+		designate.VolumeMapping{Name: instance.Name + "-config-overwrites", Type: designate.MergeMount, MountPath: "/var/lib/config-data/config-overwrites"},
+	}
+
+	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
+
+	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
+		Name:      instance.Name + "-config-data-merged",
+		MountPath: "/var/lib/kolla/config_files/config.json",
+		SubPath:   serviceName + "-config.json",
+		ReadOnly:  true,
+	})
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -141,7 +154,7 @@ func Deployment(
 		OSPSecret:            instance.Spec.Secret,
 		TransportURLSecret:   instance.Spec.TransportURLSecret,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		VolumeMounts:         designate.GetInitVolumeMounts(),
+		VolumeMounts:         initVolumeMounts,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 

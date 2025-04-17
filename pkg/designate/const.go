@@ -65,4 +65,13 @@ const (
 
 	// PredictableIPCommand -
 	PredictableIPCommand = "/usr/local/bin/container-scripts/setipalias.sh"
+
+	// CommonScriptsTemplate sprintf template for common scripts secret
+	CommonScriptsTemplate = "%s-common-scripts"
+
+	// CommonConfigDataTemplate sprintf template for common config data secret
+	CommonConfigDataTemplate = "%s-common-config-data"
+
+	// CommonDefaultOverwriteTemplate sprintf template for common default overwrite secret
+	CommonDefaultOverwriteTemplate = "%s-common-default-overwrite"
 )

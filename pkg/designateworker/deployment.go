@@ -46,8 +46,25 @@ func Deployment(
 	rootUser := int64(0)
 	serviceName := fmt.Sprintf("%s-worker", designate.ServiceName)
 
-	volumes := GetVolumes(designate.GetOwningDesignateName(instance))
-	volumeMounts := GetVolumeMounts(serviceName)
+	volumeDefs := []designate.VolumeMapping{
+		designate.VolumeMapping{Name: designate.GetCommonScriptsSecretName(instance), Type: designate.ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		designate.VolumeMapping{Name: designate.GetCommonConfigSecretName(instance), Type: designate.SecretMount, MountPath: "/var/lib/config-data/default"},
+		designate.VolumeMapping{Name: instance.Name + "-config-data", Type: designate.SecretMount, MountPath: "/var/lib/config-data/service"},
+		designate.VolumeMapping{Name: instance.Name + "-config-data-merged", Type: designate.MergeMount, MountPath: "/var/lib/config-data/merged"},
+		designate.VolumeMapping{Name: designate.DesignateBindKeySecret, Type: designate.SecretMount, MountPath: "/etc/designate/rndc-keys"},
+		designate.VolumeMapping{Name: instance.Name + "-default-overwrite", Type: designate.SecretMount, MountPath: "/var/lib/config-data/overwrites"},
+		designate.VolumeMapping{Name: designate.GetCommonDefaultOverwritesName(instance), Type: designate.SecretMount, MountPath: "/var/lib/config-data/common-overwrites"},
+		designate.VolumeMapping{Name: instance.Name + "-config-overwrites", Type: designate.MergeMount, MountPath: "/var/lib/config-data/config-overwrites"},
+	}
+
+	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
+
+	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
+		Name:      instance.Name + "-config-data-merged",
+		MountPath: "/var/lib/kolla/config_files/config.json",
+		SubPath:   serviceName + "-config.json",
+		ReadOnly:  true,
+	})
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -145,7 +162,7 @@ func Deployment(
 		OSPSecret:            instance.Spec.Secret,
 		TransportURLSecret:   instance.Spec.TransportURLSecret,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		VolumeMounts:         designate.GetInitVolumeMounts(),
+		VolumeMounts:         initVolumeMounts,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 
