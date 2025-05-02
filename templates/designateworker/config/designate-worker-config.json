@@ -1,5 +1,5 @@
 {
-  "command": "/usr/bin/designate-producer --config-file /etc/designate/designate.conf --config-dir /etc/designate/designate.conf.d",
+  "command": "/usr/bin/designate-worker --config-file /etc/designate/designate.conf --config-dir /etc/designate/designate.conf.d",
   "config_files": [
     {
 		"source": "/var/lib/config-data/merged/designate.conf",
