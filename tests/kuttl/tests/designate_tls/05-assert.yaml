@@ -244,3 +244,14 @@ commands:
           echo "Configuration of backend_url failed"
           exit 1
       fi
+      if ! oc exec -n $NAMESPACE -t designate-unbound-0 -- cat /etc/unbound/conf.d/01-stubzones.conf | grep 'name:.foobar.com' ;
+      then
+          echo "Expected stubzone missing"
+          exit 1
+      fi
+      if ! oc exec -n $NAMESPACE -t designate-unbound-0 -- cat /etc/unbound/conf.d/01-stubzones.conf | grep 'name:.myexample.com' ;
+      then
+          echo "Expected stubzone missing"
+          exit 1
+      fi
+      exit 0
