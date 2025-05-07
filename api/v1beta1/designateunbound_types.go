@@ -57,11 +57,22 @@ type DesignateUnboundSpecBase struct {
 	// an override for each replica.
 	// +kubebuilder:validation:Optional
 	Override UnboundOverrideSpec `json:"override,omitempty"`
+
+	// Allows configuring stub zone entries in the managed Unbound servers for the managed nameservers.
+	// +kubebuilder:validation:Optional
+	// +listType=atomic
+	StubZones []StubZone `json:"stubZones,omitempty"`
 }
 
 type UnboundOverrideSpec struct {
 	// +listType=atomic
 	Services []service.OverrideSpec `json:"services,omitempty"`
+}
+
+type StubZone struct {
+	Name string               `json:"name"`
+	// +kubebuilder:validation:Optional
+	Options map[string]string `json:"options,omitempty"`
 }
 
 // DesignateUnboundStatus defines the observed state of DesignateUnbound

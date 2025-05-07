@@ -138,13 +138,15 @@ var _ = Describe("Designate controller", func() {
 	var designateRedisName types.NamespacedName
 	var bind9ReplicaCount int
 	var mdnsReplicaCount int
+	var unboundReplicaCount int
 	var designateTopologies []types.NamespacedName
 
 	BeforeEach(func() {
 		name = fmt.Sprintf("designate-%s", uuid.New().String())
 		bind9ReplicaCount = rand.Intn(5) + 1
 		mdnsReplicaCount = rand.Intn(5) + 1
-		spec = GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount)
+		unboundReplicaCount = rand.Intn(5) + 1
+		spec = GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount, unboundReplicaCount)
 
 		designateName = types.NamespacedName{
 			Namespace: namespace,
@@ -809,7 +811,7 @@ var _ = Describe("Designate controller", func() {
 				topologySpec, _ := GetSampleTopologySpec(designateName.Name)
 				infra.CreateTopology(t, topologySpec)
 			}
-			spec := GetDefaultDesignateSpec(1, 1)
+			spec := GetDefaultDesignateSpec(1, 1, 1)
 
 			topologyRef = &topologyv1.TopoRef{
 				Name:      designateTopologies[0].Name,
@@ -1024,7 +1026,7 @@ var _ = Describe("Designate webhook validation", func() {
 				Namespace: namespace,
 				Name:      name,
 			}
-			spec := GetDefaultDesignateSpec(1, 1)
+			spec := GetDefaultDesignateSpec(1, 1, 1)
 			// Reference topology
 			if component != "top-level" {
 				spec[component] = map[string]interface{}{

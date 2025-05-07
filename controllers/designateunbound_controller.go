@@ -62,6 +62,12 @@ type UnboundReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
+type StubZoneTmplRec struct {
+	Name    string
+	Options map[string]string
+	Servers []string
+}
+
 func min(i int, j int) int {
 	if i < j {
 		return i
@@ -270,11 +276,6 @@ func (r *UnboundReconciler) reconcileUpgrade(instance *designatev1.DesignateUnbo
 
 func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
 	util.LogForObject(helper, "Reconciling Service", instance)
-
-	if controllerutil.AddFinalizer(instance, helper.GetFinalizer()) {
-		// Return to persist the finalizer immediately
-		return ctrl.Result{}, nil
-	}
 
 	serviceLabels := map[string]string{
 		common.AppSelector:       instance.ObjectMeta.Name,
@@ -515,6 +516,20 @@ func (r *UnboundReconciler) onIPChange() (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
+func stubZoneDefaults(values map[string]string) map[string]string {
+
+	if values == nil {
+		values = make(map[string]string)
+	}
+	if _, ok := values["stub-prime"]; !ok {
+		values["stub-prime"] = "true"
+	}
+	if _, ok := values["stub-first"]; !ok {
+		values["stub-first"] = "true"
+	}
+	return values
+}
+
 func (r *UnboundReconciler) generateServiceConfigMaps(
 	ctx context.Context,
 	instance *designatev1.DesignateUnbound,
@@ -529,6 +544,32 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	}
 
 	templateParameters := make(map[string]interface{})
+
+	stubZoneData := make([]StubZoneTmplRec, len(instance.Spec.StubZones))
+	if len(instance.Spec.StubZones) > 0 {
+		bindIPMap := &corev1.ConfigMap{}
+		err := h.GetClient().Get(ctx, types.NamespacedName{Name: designate.BindPredIPConfigMap, Namespace: instance.GetNamespace()}, bindIPMap)
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				r.Log.Info("nameserver IPs not available, unable to complete unbound configuration at this time")
+			}
+			return err
+		}
+		bindIPs := make([]string, len(bindIPMap.Data))
+		keyTmpl := "bind_address_%d"
+		for i := 0; i < len(bindIPMap.Data); i++ {
+			bindIPs[i] = bindIPMap.Data[fmt.Sprintf(keyTmpl, i)]
+		}
+
+		for i := 0; i < len(instance.Spec.StubZones); i++ {
+			stubZoneData[i] = StubZoneTmplRec{
+				Name:    instance.Spec.StubZones[i].Name,
+				Options: stubZoneDefaults(instance.Spec.StubZones[i].Options),
+				Servers: bindIPs,
+			}
+		}
+	}
+	templateParameters["StubZones"] = stubZoneData
 
 	cms := []util.Template{
 		// ScriptsConfigMap

@@ -244,3 +244,4 @@ commands:
           echo "Configuration of backend_url failed"
           exit 1
       fi
+      exit 0
