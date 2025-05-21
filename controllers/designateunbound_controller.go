@@ -62,13 +62,6 @@ type UnboundReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
-func min(i int, j int) int {
-	if i < j {
-		return i
-	}
-	return j
-}
-
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/finalizers,verbs=update;patch
