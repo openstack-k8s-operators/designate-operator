@@ -60,6 +60,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// getOrDefault - helper for setting 'default' value if empty value in CR.
+func getOrDefault(source string, def string) string {
+	if len(source) == 0 {
+		return def
+	}
+	return source
+}
+
 // GetClient -
 func (r *DesignateReconciler) GetClient() client.Client {
 	return r.Client
@@ -1527,6 +1535,14 @@ func (r *DesignateReconciler) transportURLCreateOrUpdate(
 	return transportURL, op, err
 }
 
+// copyDesignateTemplateItems - copy elements from the central Spec to the sub-spec template.
+func copyDesignateTemplateItems(src *designatev1beta1.DesignateSpecBase, dest *designatev1beta1.DesignateTemplate) {
+	dest.ServiceUser = getOrDefault(src.ServiceUser, "designate")
+	dest.DatabaseAccount = getOrDefault(src.DatabaseAccount, "designate")
+	dest.Secret = src.Secret
+	dest.PasswordSelectors.Service = getOrDefault(src.PasswordSelectors.Service, "DesignatePassword")
+}
+
 func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, instance *designatev1beta1.Designate) (*designatev1beta1.DesignateAPI, controllerutil.OperationResult, error) {
 	deployment := &designatev1beta1.DesignateAPI{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1549,10 +1565,8 @@ func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, i
 		deployment.Spec = instance.Spec.DesignateAPI
 		// Add in transfers from umbrella Designate (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
+		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &deployment.Spec.DesignateTemplate)
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
-		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
@@ -1593,10 +1607,8 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		deployment.Spec = instance.Spec.DesignateCentral
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
+		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &deployment.Spec.DesignateTemplate)
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
-		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.RedisHostIPs = instance.Status.RedisHostIPs
@@ -1637,10 +1649,8 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 		deployment.Spec = instance.Spec.DesignateWorker
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
+		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &deployment.Spec.DesignateTemplate)
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
-		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
@@ -1681,25 +1691,22 @@ func (r *DesignateReconciler) mdnsStatefulSetCreateOrUpdate(ctx context.Context,
 		instance.Spec.DesignateMdns.Replicas = &minReplicas
 	}
 
+	if len(instance.Spec.DesignateMdns.ControlNetworkName) == 0 {
+		instance.Spec.DesignateMdns.ControlNetworkName = getOrDefault(instance.Spec.DesignateNetworkAttachment, "designate")
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
 		statefulSet.Spec = instance.Spec.DesignateMdns
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		statefulSet.Spec.ServiceUser = instance.Spec.ServiceUser
+		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &statefulSet.Spec.DesignateTemplate)
 		statefulSet.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		statefulSet.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
-		statefulSet.Spec.Secret = instance.Spec.Secret
 		statefulSet.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
 		statefulSet.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
 		statefulSet.Spec.NodeSelector = instance.Spec.DesignateMdns.NodeSelector
 		statefulSet.Spec.TopologyRef = instance.Spec.DesignateMdns.TopologyRef
-
-		networkAttachment := "designate"
-		if instance.Spec.DesignateNetworkAttachment != "" {
-			networkAttachment = instance.Spec.DesignateNetworkAttachment
-		}
-		statefulSet.Spec.ControlNetworkName = networkAttachment
+		statefulSet.Spec.ControlNetworkName = instance.Spec.DesignateMdns.ControlNetworkName
 
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
@@ -1734,10 +1741,8 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 		deployment.Spec = instance.Spec.DesignateProducer
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
-		deployment.Spec.ServiceUser = instance.Spec.ServiceUser
+		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &deployment.Spec.DesignateTemplate)
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
-		deployment.Spec.DatabaseAccount = instance.Spec.DatabaseAccount
-		deployment.Spec.Secret = instance.Spec.Secret
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.RedisHostIPs = instance.Status.RedisHostIPs
@@ -1774,6 +1779,10 @@ func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.
 		instance.Spec.DesignateBackendbind9.TopologyRef = instance.Spec.TopologyRef
 	}
 
+	if len(instance.Spec.DesignateBackendbind9.ControlNetworkName) == 0 {
+		instance.Spec.DesignateBackendbind9.ControlNetworkName = getOrDefault(instance.Spec.DesignateNetworkAttachment, "designate")
+	}
+
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
 		statefulSet.Spec = instance.Spec.DesignateBackendbind9
 		// Add in transfers from umbrella Designate CR (this instance) spec
@@ -1784,6 +1793,7 @@ func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
 		statefulSet.Spec.NodeSelector = instance.Spec.DesignateBackendbind9.NodeSelector
 		statefulSet.Spec.TopologyRef = instance.Spec.DesignateBackendbind9.TopologyRef
+		statefulSet.Spec.ControlNetworkName = instance.Spec.DesignateBackendbind9.ControlNetworkName
 
 		networkAttachment := "designate"
 		if instance.Spec.DesignateNetworkAttachment != "" {

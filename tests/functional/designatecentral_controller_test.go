@@ -76,6 +76,13 @@ var _ = Describe("DesignateCentral controller", func() {
 			}, timeout, interval).Should(ContainElement("openstack.org/designatecentral"))
 		})
 
+		It("should have a expected default values", func() {
+			designateCentral := GetDesignateCentral((designateCentralName))
+			Expect(designateCentral.Spec.ServiceUser).Should(Equal("designate"))
+			Expect(designateCentral.Spec.DatabaseAccount).Should(Equal("designate"))
+			Expect(designateCentral.Spec.PasswordSelectors.Service).Should(Equal("DesignatePassword"))
+		})
+
 		It("should not create a secret", func() {
 			secret := types.NamespacedName{
 				Namespace: designateCentralName.Namespace,
