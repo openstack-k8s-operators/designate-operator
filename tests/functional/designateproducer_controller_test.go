@@ -76,6 +76,13 @@ var _ = Describe("DesignateProducer controller", func() {
 			}, timeout, interval).Should(ContainElement("openstack.org/designateproducer"))
 		})
 
+		It("should have a expected default values", func() {
+			designateProducer := GetDesignateProducer((designateProducerName))
+			Expect(designateProducer.Spec.ServiceUser).Should(Equal("designate"))
+			Expect(designateProducer.Spec.DatabaseAccount).Should(Equal("designate"))
+			Expect(designateProducer.Spec.PasswordSelectors.Service).Should(Equal("DesignatePassword"))
+		})
+
 		It("should not create a secret", func() {
 			secret := types.NamespacedName{
 				Namespace: designateProducerName.Namespace,

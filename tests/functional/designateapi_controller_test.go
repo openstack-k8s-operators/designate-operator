@@ -79,6 +79,13 @@ var _ = Describe("DesignateAPI controller", func() {
 			}
 		})
 
+		It("should have a expected default values", func() {
+			designateAPI := GetDesignateAPI((designateAPIName))
+			Expect(designateAPI.Spec.ServiceUser).Should(Equal("designate"))
+			Expect(designateAPI.Spec.DatabaseAccount).Should(Equal("designate"))
+			Expect(designateAPI.Spec.PasswordSelectors.Service).Should(Equal("DesignatePassword"))
+		})
+
 		It("should have a finalizer", func() {
 			// the reconciler loop adds the finalizer so we have to wait for
 			// it to run
