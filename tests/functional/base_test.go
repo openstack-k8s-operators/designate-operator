@@ -140,7 +140,7 @@ func SimulateKeystoneReady(
 	}, timeout, interval).Should(Succeed())
 }
 
-func GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount int) map[string]interface{} {
+func GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount int, unboundReplicaCount int) map[string]interface{} {
 	spec := map[string]interface{}{
 		"databaseInstance":           "test-designate-db-instance",
 		"secret":                     SecretName,
@@ -155,6 +155,11 @@ func GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount int) map[string
 	spec["designateMdns"] = designatev1.DesignateMdnsSpec{
 		DesignateMdnsSpecBase: designatev1.DesignateMdnsSpecBase{
 			Replicas: ptr.To(int32(mdnsReplicaCount)),
+		},
+	}
+	spec["designateUnbound"] = designatev1.DesignateUnboundSpec{
+		DesignateUnboundSpecBase: designatev1.DesignateUnboundSpecBase{
+			Replicas: ptr.To(int32(unboundReplicaCount)),
 		},
 	}
 	return spec
@@ -424,6 +429,51 @@ func GetDesignateProducer(name types.NamespacedName) *designatev1.DesignateProdu
 func DesignateProducerConditionGetter(name types.NamespacedName) condition.Conditions {
 	instance := GetDesignateProducer(name)
 	return instance.Status.Conditions
+}
+
+// DesignateUnbound
+func GetDefaultUnboundSpec() map[string]interface{} {
+	return map[string]interface{}{
+		"databaseHostame":            "hostname-for-designate-unbound",
+		"secret":                     SecretName,
+		"designateNetworkAttachment": "designate-attachment",
+		"serviceAccount":             "designate",
+		"containerImage":             "repo/designate-unbound-image",
+	}
+}
+
+func CreateDesignateUnbound(name types.NamespacedName, spec map[string]interface{}) client.Object {
+	raw := map[string]interface{}{
+		"apiVersion": "designate.openstack.org/v1beta1",
+		"kind":       "DesignateUnbound",
+		"metadata": map[string]interface{}{
+			"name":      name.Name,
+			"namespace": name.Namespace,
+		},
+		"spec": spec,
+	}
+	return th.CreateUnstructured(raw)
+}
+
+func GetDesignateUnbound(name types.NamespacedName) *designatev1.DesignateUnbound {
+	instance := &designatev1.DesignateUnbound{}
+	Eventually(func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, name, instance)).Should(Succeed())
+	}, timeout, interval).Should(Succeed())
+	return instance
+}
+
+func CreateBindIPMap(namespace string, configData map[string]interface{}) client.Object {
+	raw := map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"metadata": map[string]interface{}{
+			"name":      designate.BindPredIPConfigMap,
+			"namespace": namespace,
+		},
+		"data": configData,
+	}
+	return th.CreateUnstructured(raw)
 }
 
 // Network attachment
