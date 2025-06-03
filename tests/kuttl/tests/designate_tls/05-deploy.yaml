@@ -64,6 +64,12 @@ spec:
       - designate
     tls:
       caBundleSecretName: combined-ca-bundle
+  designateUnbound:
+    stubZones:
+      - name: foobar.com
+        options: {}
+      - name: myexample.com
+        options: {}
   designateAPI:
     databaseAccount: designate
     serviceUser: designate

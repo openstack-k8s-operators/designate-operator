@@ -50,7 +50,7 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					DefaultMode: &configMode,
-					SecretName:  "designate-unbound-config-data",
+					SecretName:  fmt.Sprintf("%s-config-data", instance.Name),
 				},
 			},
 		},
