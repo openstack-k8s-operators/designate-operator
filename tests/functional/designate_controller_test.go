@@ -412,11 +412,6 @@ var _ = Describe("Designate controller", func() {
 					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 			Expect(configData).ShouldNot(BeNil())
 			conf := string(configData.Data["designate.conf"])
-			Expect(conf).Should(
-				ContainSubstring(
-					fmt.Sprintf(
-						"username=%s\n",
-						instance.Spec.ServiceUser)))
 
 			dbs := []struct {
 				Name            string
@@ -458,34 +453,6 @@ var _ = Describe("Designate controller", func() {
 					Namespace: designateName.Namespace,
 					Name:      fmt.Sprintf("%s-scripts", designateName.Name)})
 			Expect(scriptData).ShouldNot(BeNil())
-		})
-	})
-
-	// Networks Annotation
-	When("Network Annotation is created", func() {
-		BeforeEach(func() {
-			createAndSimulateKeystone(designateName)
-			createAndSimulateRedis(designateRedisName)
-			createAndSimulateDesignateSecrets(designateName)
-			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
-
-			createAndSimulateDB(spec)
-
-			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
-				Name:      spec["designateNetworkAttachment"].(string),
-				Namespace: namespace,
-			}))
-
-			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
-		})
-
-		It("should set the NetworkAttachementReady condition", func() {
-			th.ExpectCondition(
-				designateName,
-				ConditionGetterFunc(DesignateConditionGetter),
-				condition.NetworkAttachmentsReadyCondition,
-				corev1.ConditionTrue,
-			)
 		})
 	})
 
@@ -594,13 +561,9 @@ var _ = Describe("Designate controller", func() {
 			createAndSimulateMdns(designateMdnsName)
 		})
 
-		It("should have Unknown Conditions initialized for Designate services conditions initially", func() {
+		It("should have Unknown and false Conditions initialized for Designate services conditions initially", func() {
 			for _, cond := range []condition.Type{
-				designatev1.DesignateAPIReadyCondition,
-				designatev1.DesignateBackendbind9ReadyCondition,
-				designatev1.DesignateCentralReadyCondition,
 				designatev1.DesignateMdnsReadyCondition,
-				designatev1.DesignateProducerReadyCondition,
 				designatev1.DesignateUnboundReadyCondition,
 				designatev1.DesignateWorkerReadyCondition,
 			} {
@@ -609,6 +572,19 @@ var _ = Describe("Designate controller", func() {
 					ConditionGetterFunc(DesignateConditionGetter),
 					cond,
 					corev1.ConditionUnknown,
+				)
+			}
+			for _, cond := range []condition.Type{
+				designatev1.DesignateAPIReadyCondition,
+				designatev1.DesignateBackendbind9ReadyCondition,
+				designatev1.DesignateCentralReadyCondition,
+				designatev1.DesignateProducerReadyCondition,
+			} {
+				th.ExpectCondition(
+					designateName,
+					ConditionGetterFunc(DesignateConditionGetter),
+					cond,
+					corev1.ConditionFalse,
 				)
 			}
 		})

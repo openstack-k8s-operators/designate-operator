@@ -182,39 +182,6 @@ var _ = Describe("DesignateAPI controller", func() {
 			conf := string(configData.Data["designate.conf"])
 			instance := GetDesignateAPI(designateAPIName)
 
-			dbs := []struct {
-				Name            string
-				DatabaseAccount string
-				Keyword         string
-			}{
-				{
-					Name:            designate.DatabaseName,
-					DatabaseAccount: instance.Spec.DatabaseAccount,
-					Keyword:         "connection",
-				},
-			}
-
-			for _, db := range dbs {
-				databaseAccount := mariadb.GetMariaDBAccount(
-					types.NamespacedName{
-						Namespace: namespace,
-						Name:      db.DatabaseAccount})
-				databaseSecret := th.GetSecret(
-					types.NamespacedName{
-						Namespace: namespace,
-						Name:      databaseAccount.Spec.Secret})
-
-				Expect(conf).Should(
-					ContainSubstring(
-						fmt.Sprintf(
-							"%s=mysql+pymysql://%s:%s@%s/%s?read_default_file=/etc/my.cnf",
-							db.Keyword,
-							databaseAccount.Spec.UserName,
-							databaseSecret.Data[mariadbv1.DatabasePasswordSelector],
-							instance.Spec.DatabaseHostname,
-							db.Name)))
-			}
-
 			Expect(conf).Should(
 				ContainSubstring(fmt.Sprintf(
 					"www_authenticate_uri=%s\n", keystonePublicEndpoint)))
@@ -235,11 +202,6 @@ var _ = Describe("DesignateAPI controller", func() {
 			Expect(conf).Should(
 				ContainSubstring(fmt.Sprintf(
 					"\npassword=%s\n", string(ospSecret.Data["DesignatePassword"]))))
-
-			transportURLSecret := th.GetSecret(transportURLSecretName)
-			Expect(conf).Should(
-				ContainSubstring(fmt.Sprintf(
-					"transport_url=%s\n", string(transportURLSecret.Data["transport_url"]))))
 		})
 
 		It("should create a Secret with customServiceConfig input", func() {

@@ -17,89 +17,106 @@ package designate
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type VolumeMapping struct {
+	Name      string
+	Type      string
+	MountPath string
+	Source    string
+}
 
 const (
-	scriptVolume       = "scripts"
-	configVolume       = "config-data"
-	mergedConfigVolume = "config-data-merged"
-	logVolume          = "logs"
+	ScriptMount = "script-mount"
+	SecretMount = "secret-mount"
+	ConfigMount = "config-mount"
+	MergeMount  = "merge-mount"
 )
 
-// GetVolumes - returns the volumes used for the service deployment and for
-// any jobs needs access for the full service configuration
-func GetVolumes(baseConfigMapName string) []corev1.Volume {
-	var scriptMode int32 = 0755
-	var configMode int32 = 0640
-
-	return []corev1.Volume{
-		{
-			Name: scriptVolume,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &scriptMode,
-					SecretName:  baseConfigMapName + "-scripts",
-				},
-			},
-		},
-		{
-			Name: configVolume,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &configMode,
-					SecretName:  baseConfigMapName + "-config-data",
-				},
-			},
-		},
-		{
-			Name: mergedConfigVolume,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{Medium: ""},
-			},
-		},
+func GetStandardVolumeMapping(instance client.Object) []VolumeMapping {
+	return []VolumeMapping{
+		{Name: ScriptsVolumeName(GetOwningDesignateName(instance)), Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		{Name: ConfigVolumeName(GetOwningDesignateName(instance)), Type: SecretMount, MountPath: "/var/lib/config-data/default"},
+		{Name: DefaultsVolumeName(GetOwningDesignateName(instance)), Type: SecretMount, MountPath: "/var/lib/config-data/common-overwrites"},
+		{Name: ConfigVolumeName(instance.GetName()), Type: SecretMount, MountPath: "/var/lib/config-data/service"},
+		{Name: MergedVolumeName(instance.GetName()), Type: MergeMount, MountPath: "/var/lib/config-data/merged"},
+		{Name: DefaultsVolumeName(instance.GetName()), Type: SecretMount, MountPath: "/var/lib/config-data/overwrites"},
+		{Name: MergedDefaultsVolumeName(instance.GetName()), Type: MergeMount, MountPath: "/var/lib/config-data/config-overwrites"},
 	}
 }
 
-// GetInitVolumeMounts - Designate Control Plane init task VolumeMounts
-func GetInitVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      scriptVolume,
-			MountPath: "/usr/local/bin/container-scripts",
-			ReadOnly:  true,
-		},
-		{
-			Name:      configVolume,
-			MountPath: "/var/lib/config-data/default",
-			ReadOnly:  true,
-		},
-		{
-			Name:      mergedConfigVolume,
-			MountPath: "/var/lib/config-data/merged",
-			ReadOnly:  false,
-		},
+// ProcessVolumes takes a slice of VolumeMapping and creates corresponding slices of Volumes and Mounts. This
+// helps keep naming and matching of volumes and mounts in sync and consistent.
+func ProcessVolumes(volumeDefs []VolumeMapping) ([]corev1.Volume, []corev1.VolumeMount) {
+	volumes := make([]corev1.Volume, len(volumeDefs))
+	mounts := make([]corev1.VolumeMount, len(volumeDefs))
+	modeMap := map[string]int32{
+		ScriptMount: 0755,
+		SecretMount: 0640,
+		ConfigMount: 0640,
+		MergeMount:  0,
 	}
-}
-
-// GetVolumeMounts - VolumeMounts to get access to the merged
-// configuration
-func GetVolumeMounts(serviceName string) []corev1.VolumeMount {
-	return []corev1.VolumeMount{
-		{
-			Name:      scriptVolume,
-			MountPath: "/usr/local/bin/container-scripts",
-			ReadOnly:  true,
-		},
-		{
-			Name:      mergedConfigVolume,
-			MountPath: "/var/lib/config-data/merged",
-			ReadOnly:  false,
-		},
-		{
-			Name:      mergedConfigVolume,
-			MountPath: "/var/lib/kolla/config_files/config.json",
-			SubPath:   serviceName + "-config.json",
-			ReadOnly:  true,
-		},
+	for i := 0; i < len(volumeDefs); i++ {
+		v := &volumeDefs[i]
+		accessMode := modeMap[v.Type]
+		var newVolume corev1.Volume
+		var newMount corev1.VolumeMount
+		if v.Type == SecretMount || v.Type == ScriptMount {
+			source := v.Name
+			if len(v.Source) > 0 {
+				source = v.Source
+			}
+			newVolume = corev1.Volume{
+				Name: v.Name,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						DefaultMode: &accessMode,
+						SecretName:  source,
+					},
+				},
+			}
+			newMount = corev1.VolumeMount{
+				Name:      v.Name,
+				MountPath: v.MountPath,
+				ReadOnly:  true,
+			}
+		} else if v.Type == ConfigMount {
+			source := v.Name
+			if len(v.Source) > 0 {
+				source = v.Source
+			}
+			newVolume = corev1.Volume{
+				Name: v.Name,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: source,
+						},
+						DefaultMode: &accessMode,
+					},
+				},
+			}
+			newMount = corev1.VolumeMount{
+				Name:      v.Name,
+				MountPath: v.MountPath,
+				ReadOnly:  true,
+			}
+		} else {
+			newVolume = corev1.Volume{
+				Name: v.Name,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{Medium: ""},
+				},
+			}
+			newMount = corev1.VolumeMount{
+				Name:      v.Name,
+				MountPath: v.MountPath,
+				ReadOnly:  false,
+			}
+		}
+		volumes[i] = newVolume
+		mounts[i] = newMount
 	}
+	return volumes, mounts
 }
