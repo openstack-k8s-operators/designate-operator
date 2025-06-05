@@ -1,5 +1,5 @@
 {
-    "command": "/usr/sbin/httpd -DFOREGROUND",
+    "command": "/usr/bin/uwsgi --ini /etc/designate/designate-api-uwsgi.ini",
     "config_files": [
         {
             "source": "/var/lib/config-data/merged/designate.conf",
@@ -30,6 +30,12 @@
             "dest": "/etc/httpd/conf.d/ssl.conf",
             "owner": "root",
             "perm": "0644"
+        },
+        {
+            "source": "/var/lib/config-data/merged/designate-api-uwsgi.ini",
+            "dest": "/etc/designate/designate-api-uwsgi.ini",
+            "owner": "designate",
+            "perm": "0600"
         },
         {
             "source": "/var/lib/config-data/tls/certs/*",
