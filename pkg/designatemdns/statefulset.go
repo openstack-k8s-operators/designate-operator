@@ -26,7 +26,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // StatefulSet func
@@ -63,25 +62,27 @@ func StatefulSet(
 		ReadOnly:  true,
 	})
 
+	// Ideally we would use the connection probe but the mdns service does
+	// not listen on a cluster allocated IP
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
 		TimeoutSeconds:      15,
 		PeriodSeconds:       13,
 		InitialDelaySeconds: 15,
 	}
-	readinessProbe := &corev1.Probe{
+	startupProbe := &corev1.Probe{
 		// TODO might need tuning
 		TimeoutSeconds:      15,
 		PeriodSeconds:       13,
 		InitialDelaySeconds: 10,
 	}
 
-	livenessProbe.TCPSocket = &corev1.TCPSocketAction{
-		Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(5354)},
+	livenessProbe.Exec = &corev1.ExecAction{
+		Command: []string{
+			"/usr/bin/pgrep", "-r", "DRST", "-f", "designate.mdns",
+		},
 	}
-	readinessProbe.TCPSocket = &corev1.TCPSocketAction{
-		Port: intstr.IntOrString{Type: intstr.Int, IntVal: int32(5354)},
-	}
+	startupProbe.Exec = livenessProbe.Exec
 
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
@@ -119,11 +120,11 @@ func StatefulSet(
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &rootUser,
 							},
-							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:   volumeMounts,
-							Resources:      instance.Spec.Resources,
-							ReadinessProbe: readinessProbe,
-							LivenessProbe:  livenessProbe,
+							Env:           env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:  volumeMounts,
+							Resources:     instance.Spec.Resources,
+							StartupProbe:  startupProbe,
+							LivenessProbe: livenessProbe,
 						},
 					},
 				},
