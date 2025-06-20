@@ -20,6 +20,7 @@ const (
 	ServiceType = "dns"
 	// ServiceName -
 	ServiceName = "designate"
+
 	// DatabaseName -
 	DatabaseName = "designate"
 
@@ -65,4 +66,13 @@ const (
 
 	// PredictableIPCommand -
 	PredictableIPCommand = "/usr/local/bin/container-scripts/setipalias.sh"
+
+	// ScriptsTemplate sprintf template for common scripts secret
+	ScriptsF = "%s-scripts"
+
+	// ConfigDataTemplate sprintf template for common config data secret
+	ConfigDataTemplate = "%s-config-data"
+
+	// DefaultOverwriteTemplate sprintf template for common default overwrite secret
+	DefaultOverwriteTemplate = "%s-defaults"
 )
