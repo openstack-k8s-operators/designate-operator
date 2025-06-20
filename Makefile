@@ -123,7 +123,7 @@ golangci-lint:
 
 .PHONY: test
 test: manifests generate fmt vet envtest ginkgo ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) -v debug --bin-dir $(LOCALBIN) use $(ENVTEST_K8S_VERSION) -p path)" OPERATOR_TEMPLATES="$(shell pwd)/templates" $(GINKGO) --trace --cover --coverpkg=../../pkg/,../../controllers,../../api/v1beta1 --coverprofile cover.out --covermode=atomic --randomize-all ${PROC_CMD} $(GINKGO_ARGS) ./tests/...
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) -v debug --bin-dir $(LOCALBIN) use $(ENVTEST_K8S_VERSION) -p path)" OPERATOR_TEMPLATES="$(shell pwd)/templates" $(GINKGO) -v --trace --cover --coverpkg=../../pkg/,../../controllers,../../api/v1beta1 --coverprofile cover.out --covermode=atomic --randomize-all ${PROC_CMD} $(GINKGO_ARGS) ./tests/...
 
 ##@ Build
 

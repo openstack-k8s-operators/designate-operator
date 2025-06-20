@@ -24,8 +24,14 @@ func PoolUpdateJob(
 	annotations map[string]string,
 ) *batchv1.Job {
 	runAsUser := int64(0)
-	volumeMounts := GetVolumeMounts(instance.Name)
-	volumes := GetVolumes(instance.Name)
+
+	volumeDefs := []VolumeMapping{
+		{Name: ScriptsVolumeName(ServiceName), Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		{Name: ConfigVolumeName(ServiceName), Type: SecretMount, MountPath: "/var/lib/config-data/default"},
+		{Name: "pools-yaml-merged", Type: MergeMount, MountPath: "/var/lib/config-data/merged"},
+	}
+
+	volumes, volumeMounts := ProcessVolumes(volumeDefs)
 
 	volumes = append(volumes, corev1.Volume{
 		Name: "pools-yaml-config",
@@ -48,7 +54,7 @@ func PoolUpdateJob(
 		Name: DesignateConfigVolume,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: "designate-central-config-data",
+				SecretName: ConfigVolumeName("designate-central"),
 				Items: []corev1.KeyToPath{
 					{
 						Key:  "designate.conf",
@@ -87,6 +93,12 @@ func PoolUpdateJob(
 	)
 
 	jobName := fmt.Sprintf("%s-pool-update-%d", ServiceName, time.Now().Unix())
+	cmdLine := fmt.Sprintf("/usr/bin/designate-manage --config-file %s --config-file %s pool update --file  /tmp/designate-pools/%s",
+		"/var/lib/config-data/default/designate.conf",
+		"/etc/designate/designate.conf",
+		DesignatePoolsYamlPath,
+	)
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -114,10 +126,7 @@ func PoolUpdateJob(
 							Command: []string{
 								"/bin/bash",
 								"-c",
-								fmt.Sprintf("%s --file /tmp/designate-pools/%s",
-									PoolUpdateCommand,
-									DesignatePoolsYamlPath,
-								),
+								cmdLine,
 							},
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &runAsUser,

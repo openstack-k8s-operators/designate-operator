@@ -40,9 +40,20 @@ func Deployment(
 	topology *topologyv1.Topology,
 ) *appsv1.Deployment {
 	rootAsUser := int64(0)
+	serviceName := fmt.Sprintf("%s-producer", designate.ServiceName)
 
-	volumes := designate.GetVolumes("designate-producer")
-	volumeMounts := designate.GetVolumeMounts("designate-producer")
+	// Includes a r/w /var/run/designate for the concurrency lock path
+	volumeDefs := append(designate.GetStandardVolumeMapping(instance),
+		designate.VolumeMapping{Name: instance.Name + "-run", Type: designate.MergeMount, MountPath: "/var/run/designate"})
+
+	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
+
+	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
+		Name:      designate.MergedVolumeName(instance.Name),
+		MountPath: "/var/lib/kolla/config_files/config.json",
+		SubPath:   serviceName + "-config.json",
+		ReadOnly:  true,
+	})
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -66,8 +77,6 @@ func Deployment(
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
-
-	serviceName := fmt.Sprintf("%s-producer", designate.ServiceName)
 
 	// Add the CA bundle
 	if instance.Spec.TLS.CaBundleSecretName != "" {
@@ -138,7 +147,7 @@ func Deployment(
 		OSPSecret:            instance.Spec.Secret,
 		TransportURLSecret:   instance.Spec.TransportURLSecret,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		VolumeMounts:         designate.GetInitVolumeMounts(),
+		VolumeMounts:         initVolumeMounts,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 
