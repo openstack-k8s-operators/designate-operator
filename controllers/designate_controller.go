@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
-	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	rabbitmqv1 "github.com/openstack-k8s-operators/infra-operator/apis/rabbitmq/v1beta1"
@@ -66,6 +65,43 @@ func getOrDefault(source string, def string) string {
 		return def
 	}
 	return source
+}
+
+// helper function for retrieving a secret.
+func getSecret(
+	ctx context.Context,
+	h *helper.Helper,
+	namespace string,
+	conditions *condition.Conditions,
+	secretName string,
+	envVars *map[string]env.Setter,
+	prefix string,
+) (ctrl.Result, error) {
+	secret, hash, err := oko_secret.GetSecret(ctx, h, secretName, namespace)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			h.GetLogger().Info(fmt.Sprintf("Secret %s not found", secretName))
+			conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+		}
+		conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, err
+	}
+
+	// Add a prefix to the var name to avoid accidental collision with other non-secret
+	// vars. The secret names themselves will be unique.
+	(*envVars)[prefix+secret.Name] = env.SetValue(hash)
+
+	return ctrl.Result{}, nil
 }
 
 // GetClient -
@@ -217,7 +253,6 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateBackendbind9ReadyCondition, condition.InitReason, designatev1beta1.DesignateBackendbind9ReadyInitMessage),
-		condition.UnknownCondition(condition.NetworkAttachmentsReadyCondition, condition.InitReason, condition.NetworkAttachmentsReadyInitMessage),
 		// service account, role, rolebinding conditions
 		condition.UnknownCondition(condition.ServiceAccountReadyCondition, condition.InitReason, condition.ServiceAccountReadyInitMessage),
 		condition.UnknownCondition(condition.RoleReadyCondition, condition.InitReason, condition.RoleReadyInitMessage),
@@ -404,10 +439,13 @@ func (r *DesignateReconciler) reconcileInit(
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if hashChanged {
-		// Hash changed and instance status should be updated (which will be done by main defer func),
-		// so we need to return and reconcile again
-		Log.Info("input hashes have changed, restarting reconcile")
-		return ctrl.Result{}, nil
+		Log.Info("input hashes have changed")
+		instance.Status.Conditions.MarkFalse(
+			condition.ServiceConfigReadyCondition,
+			condition.InitReason,
+			condition.SeverityInfo,
+			condition.ServiceConfigReadyInitMessage)
+		return ctrl.Result{}, err
 	}
 	// Create ConfigMaps and Secrets - end
 
@@ -632,43 +670,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		common.AppSelector: designate.ServiceName,
 	}
 
-	// Note: Dkehn - this will remain in the code base until determination of DNS server connections are determined.
-	// networks to attach to
-	nadList := []networkv1.NetworkAttachmentDefinition{}
-	for _, netAtt := range instance.Spec.DesignateAPI.NetworkAttachments {
-		nad, err := nad.GetNADWithName(ctx, helper, netAtt, instance.Namespace)
-		if err != nil {
-			if k8s_errors.IsNotFound(err) {
-				Log.Info(fmt.Sprintf("network-attachment-definition %s not found", netAtt))
-				instance.Status.Conditions.Set(condition.FalseCondition(
-					condition.NetworkAttachmentsReadyCondition,
-					condition.RequestedReason,
-					condition.SeverityInfo,
-					condition.NetworkAttachmentsReadyWaitingMessage,
-					netAtt))
-				return ctrl.Result{RequeueAfter: time.Second * 10}, nil
-			}
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.NetworkAttachmentsReadyCondition,
-				condition.ErrorReason,
-				condition.SeverityWarning,
-				condition.NetworkAttachmentsReadyErrorMessage,
-				err.Error()))
-			return ctrl.Result{}, err
-		}
-
-		if nad != nil {
-			nadList = append(nadList, *nad)
-		}
-	}
-
-	serviceAnnotations, err := nad.EnsureNetworksAnnotation(nadList)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed create network annotation from %s: %w",
-			instance.Spec.DesignateAPI.NetworkAttachments, err)
-	}
-
-	instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
+	serviceAnnotations := make(map[string]string)
 
 	// Handle service init
 	ctrlResult, err := r.reconcileInit(ctx, instance, helper, serviceLabels, serviceAnnotations)
@@ -677,7 +679,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	} else if (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, nil
 	}
-	instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
 
 	// Handle service update
 	ctrlResult, err = r.reconcileUpdate(ctx, instance)
@@ -890,6 +891,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			if err := r.Client.Status().Update(ctx, instance); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to update status hash: %w", err)
 			}
+
 			jobDef := designate.PoolUpdateJob(instance, serviceLabels, serviceAnnotations)
 
 			Log.Info("Initializing pool update job")
@@ -1292,7 +1294,6 @@ func (r *DesignateReconciler) reconcileUpgrade(ctx context.Context, instance *de
 }
 
 // generateServiceConfigMaps - create secrets which hold scripts and service configuration
-// TODO add DefaultConfigOverwrite
 func (r *DesignateReconciler) generateServiceConfigMaps(
 	ctx context.Context,
 	h *helper.Helper,
@@ -1379,10 +1380,6 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 		"my.cnf":                           designateDb.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
 	}
 
-	for key, data := range instance.Spec.DefaultConfigOverwrite {
-		customData[key] = data
-	}
-
 	databaseAccount := designateDb.GetAccount()
 	dbSecret := designateDb.GetSecret()
 
@@ -1397,7 +1394,6 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 			designate.DatabaseName,
 		),
 	}
-	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
 
 	transportURLSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Status.TransportURLSecret, instance.Namespace)
 	if err != nil {
@@ -1441,25 +1437,69 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	}
 	templateParameters["AdminPassword"] = string(adminPasswordSecret.Data["DesignatePassword"])
 
+	redisIPs, err := getRedisServiceIPs(ctx, instance, h)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return err
+	}
+
+	if len(redisIPs) == 0 {
+		err = fmt.Errorf("unable to configure designate deployment without Redis")
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return err
+	}
+
+	sort.Strings(redisIPs)
+
+	// TODO(beagles): This should be set to sentinel services! There seems to be a problem with sentinels at them moment.
+	// We should also check for IPv6 validity.
+	backendURL := fmt.Sprintf("redis://%s:6379/", redisIPs[0])
+	if tlsCfg != nil {
+		backendURL = fmt.Sprintf("%s?ssl=true", backendURL)
+	}
+	templateParameters["CoordinationBackendURL"] = backendURL
+
 	cms := []util.Template{
 		// ScriptsConfigMap
 		{
-			Name:               fmt.Sprintf("%s-scripts", instance.Name),
-			Namespace:          instance.Namespace,
-			Type:               util.TemplateTypeScripts,
-			InstanceType:       instance.Kind,
-			AdditionalTemplate: map[string]string{"common.sh": "/common/common.sh"},
-			Labels:             cmLabels,
+			Name:         designate.ScriptsVolumeName(instance.Name),
+			Namespace:    instance.Namespace,
+			Type:         util.TemplateTypeScripts,
+			InstanceType: instance.Kind,
+			AdditionalTemplate: map[string]string{
+				"common.sh": "/common/common.sh",
+				"init.sh":   "/common/init.sh",
+			},
+			Labels: cmLabels,
 		},
-		// ConfigMap
+		// This will be the common config for all OpenStack based services. This will be merged with
+		// service specific configurations.
 		{
-			Name:          fmt.Sprintf("%s-config-data", instance.Name),
+			Name:          designate.ConfigVolumeName(instance.Name),
 			Namespace:     instance.Namespace,
 			Type:          util.TemplateTypeConfig,
 			InstanceType:  instance.Kind,
 			CustomData:    customData,
 			ConfigOptions: templateParameters,
 			Labels:        cmLabels,
+		},
+		{
+			Name:         designate.DefaultsVolumeName(instance.Name),
+			Namespace:    instance.Namespace,
+			Type:         util.TemplateTypeNone,
+			InstanceType: instance.Kind,
+			CustomData:   instance.Spec.DefaultConfigOverwrite,
+			Labels:       cmLabels,
 		},
 	}
 
@@ -1491,7 +1531,7 @@ func (r *DesignateReconciler) createHashOfInputHashes(
 
 	envHash, err := util.ObjectHash(mergedMapVars)
 	if err != nil {
-		Log.Info("XXX - Error creating hash")
+		Log.Info("Error creating hash")
 		return "", changed, err
 	}
 	combinedHashes = append(combinedHashes, envHash)
@@ -1616,6 +1656,7 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
+		// TODO(beagles): redundant but we cannot remove them from the API for the time being so let's keep this here.
 		deployment.Spec.RedisHostIPs = instance.Status.RedisHostIPs
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
 		deployment.Spec.NodeSelector = instance.Spec.DesignateCentral.NodeSelector
@@ -1794,7 +1835,6 @@ func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.
 		// TODO: Add logic to determine when to set/overwrite, etc
 		statefulSet.Spec.ServiceUser = instance.Spec.ServiceUser
 		statefulSet.Spec.Secret = instance.Spec.Secret
-		statefulSet.Spec.PasswordSelectors = instance.Spec.PasswordSelectors
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
 		statefulSet.Spec.NodeSelector = instance.Spec.DesignateBackendbind9.NodeSelector
 		statefulSet.Spec.TopologyRef = instance.Spec.DesignateBackendbind9.TopologyRef
@@ -1804,7 +1844,7 @@ func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.
 		if instance.Spec.DesignateNetworkAttachment != "" {
 			networkAttachment = instance.Spec.DesignateNetworkAttachment
 		}
-		statefulSet.Spec.ControlNetworkName = networkAttachment
+		statefulSet.Spec.ControlNetworkName = getOrDefault(instance.Spec.DesignateBackendbind9.ControlNetworkName, networkAttachment)
 
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {

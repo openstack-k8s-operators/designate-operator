@@ -13,7 +13,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-// FIXME(dkehn): Adjust this file.
 
 package controllers
 
@@ -39,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
-	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	designatecentral "github.com/openstack-k8s-operators/designate-operator/pkg/designatecentral"
@@ -50,7 +48,6 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/labels"
-	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
@@ -172,7 +169,6 @@ func (r *DesignateCentralReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		condition.UnknownCondition(condition.InputReadyCondition, condition.InitReason, condition.InputReadyInitMessage),
 		condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 		condition.UnknownCondition(condition.DeploymentReadyCondition, condition.InitReason, condition.DeploymentReadyInitMessage),
-		condition.UnknownCondition(condition.NetworkAttachmentsReadyCondition, condition.InitReason, condition.NetworkAttachmentsReadyInitMessage),
 		condition.UnknownCondition(condition.TLSInputReadyCondition, condition.InitReason, condition.InputReadyInitMessage),
 	)
 
@@ -186,9 +182,6 @@ func (r *DesignateCentralReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	if instance.Status.Hash == nil {
 		instance.Status.Hash = map[string]string{}
-	}
-	if instance.Status.NetworkAttachments == nil {
-		instance.Status.NetworkAttachments = map[string][]string{}
 	}
 
 	// Init Topology condition if there's a reference
@@ -262,6 +255,19 @@ func (r *DesignateCentralReconciler) SetupWithManager(ctx context.Context, mgr c
 			Log.Error(err, "Unable to retrieve Central CRs %v")
 			return nil
 		}
+
+		label := o.GetLabels()
+		if l, ok := label[labels.GetOwnerNameLabelSelector(labels.GetGroupLabel(designate.ServiceName))]; ok {
+			for _, cr := range apis.Items {
+				if l == designate.GetOwningDesignateName(&cr) {
+					name := client.ObjectKey{
+						Namespace: namespace,
+						Name:      cr.Name,
+					}
+					result = append(result, reconcile.Request{NamespacedName: name})
+				}
+			}
+		}
 		for _, cr := range apis.Items {
 			for _, v := range cr.Spec.CustomServiceConfigSecrets {
 				if v == secretName {
@@ -269,7 +275,7 @@ func (r *DesignateCentralReconciler) SetupWithManager(ctx context.Context, mgr c
 						Namespace: namespace,
 						Name:      cr.Name,
 					}
-					Log.Info(fmt.Sprintf("Secret %s is used by Designate CR %s", secretName, cr.Name))
+					Log.Info(fmt.Sprintf("Secret %s is used by DesignateCentral CR %s", secretName, cr.Name))
 					result = append(result, reconcile.Request{NamespacedName: name})
 				}
 			}
@@ -281,41 +287,41 @@ func (r *DesignateCentralReconciler) SetupWithManager(ctx context.Context, mgr c
 	}
 
 	// watch for configmap where the CM owner label AND the CR.Spec.ManagingCrName label matches
-	configMapFn := func(_ context.Context, o client.Object) []reconcile.Request {
-		result := []reconcile.Request{}
+	// configMapFn := func(_ context.Context, o client.Object) []reconcile.Request {
+	// 	result := []reconcile.Request{}
 
-		// get all Central CRs
-		apis := &designatev1beta1.DesignateCentralList{}
-		listOpts := []client.ListOption{
-			client.InNamespace(o.GetNamespace()),
-		}
-		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
-			Log.Error(err, "Unable to retrieve Central CRs %v")
-			return nil
-		}
+	// 	// get all Central CRs
+	// 	apis := &designatev1beta1.DesignateCentralList{}
+	// 	listOpts := []client.ListOption{
+	// 		client.InNamespace(o.GetNamespace()),
+	// 	}
+	// 	if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
+	// 		Log.Error(err, "Unable to retrieve Central CRs %v")
+	// 		return nil
+	// 	}
 
-		label := o.GetLabels()
-		// TODO: Just trying to verify that the CM is owned by this CR's managing CR
-		if l, ok := label[labels.GetOwnerNameLabelSelector(labels.GetGroupLabel(designate.ServiceName))]; ok {
-			for _, cr := range apis.Items {
-				// return reconcil event for the CR where the CM owner label AND
-				// the parentDesignateName matches
-				if l == designate.GetOwningDesignateName(&cr) {
-					// return namespace and Name of CR
-					name := client.ObjectKey{
-						Namespace: o.GetNamespace(),
-						Name:      cr.Name,
-					}
-					Log.Info(fmt.Sprintf("ConfigMap object %s and CR %s marked with label: %s", o.GetName(), cr.Name, l))
-					result = append(result, reconcile.Request{NamespacedName: name})
-				}
-			}
-		}
-		if len(result) > 0 {
-			return result
-		}
-		return nil
-	}
+	// 	label := o.GetLabels()
+	// 	// TODO: Just trying to verify that the CM is owned by this CR's managing CR
+	// 	if l, ok := label[labels.GetOwnerNameLabelSelector(labels.GetGroupLabel(designate.ServiceName))]; ok {
+	// 		for _, cr := range apis.Items {
+	// 			// return reconcil event for the CR where the CM owner label AND
+	// 			// the parentDesignateName matches
+	// 			if l == designate.GetOwningDesignateName(&cr) {
+	// 				// return namespace and Name of CR
+	// 				name := client.ObjectKey{
+	// 					Namespace: o.GetNamespace(),
+	// 					Name:      cr.Name,
+	// 				}
+	// 				Log.Info(fmt.Sprintf("ConfigMap object %s and CR %s marked with label: %s", o.GetName(), cr.Name, l))
+	// 				result = append(result, reconcile.Request{NamespacedName: name})
+	// 			}
+	// 		}
+	// 	}
+	// 	if len(result) > 0 {
+	// 		return result
+	// 	}
+	// 	return nil
+	// }
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&designatev1beta1.DesignateCentral{}).
@@ -330,8 +336,6 @@ func (r *DesignateCentralReconciler) SetupWithManager(ctx context.Context, mgr c
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		// watch the config CMs we don't own
-		Watches(&corev1.ConfigMap{},
-			handler.EnqueueRequestsFromMapFunc(configMapFn)).
 		Watches(&topologyv1.Topology{},
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
@@ -400,18 +404,6 @@ func (r *DesignateCentralReconciler) reconcileDelete(ctx context.Context, instan
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateCentralReconciler) reconcileInit(
-	ctx context.Context,
-	instance *designatev1beta1.DesignateCentral,
-) (ctrl.Result, error) {
-	Log := r.GetLogger(ctx)
-
-	Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
-
-	Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
-	return ctrl.Result{}, nil
-}
-
 func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instance *designatev1beta1.DesignateCentral, helper *helper.Helper) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
@@ -423,7 +415,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	//
 	// check for required OpenStack secret holding passwords for service/admin user and add hash to the vars map
 	//
-	ctrlResult, err := r.getSecret(ctx, helper, instance, instance.Spec.Secret, &configMapVars, "secret-")
+	ctrlResult, err := getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, instance.Spec.Secret, &configMapVars, "secret-")
 	if err != nil {
 		return ctrlResult, err
 	}
@@ -432,35 +424,45 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	//
 	// check for required TransportURL secret holding transport URL string
 	//
-	ctrlResult, err = r.getSecret(ctx, helper, instance, instance.Spec.TransportURLSecret, &configMapVars, "secret-")
+	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, instance.Spec.TransportURLSecret, &configMapVars, "secret-")
 	if err != nil {
 		return ctrlResult, err
 	}
 	// run check TransportURL secret - end
 
 	//
-	// check for required service secrets
+	// TODO(beagles 03/2025): this block of code repeats throughout designate. It appears that the idea here was to allow custom
+	// config snippets to be stored in secrets and used later on. This was not used anywhere however. Maybe this
+	// was intended to be part of supporting alternate backends? I will comment out for now and add a warning if the
+	// parameter is used.
 	//
-	for _, secretName := range instance.Spec.CustomServiceConfigSecrets {
-		ctrlResult, err = r.getSecret(ctx, helper, instance, secretName, &configMapVars, "secret-")
-		if err != nil {
-			return ctrlResult, err
-		}
-	}
+	// for _, secretName := range instance.Spec.CustomServiceConfigSecrets {
+	//	ctrlResult, err = r.getSecret(ctx, helper, instance, secretName, &configMapVars, "secret-")
+	//	if err != nil {
+	//		return ctrlResult, err
+	//	}
+	//}
 	// run check service secrets - end
+	if len(instance.Spec.CustomServiceConfigSecrets) > 0 {
+		Log.Info("warning: CustomServiceConfigSecrets is not supported.")
+	}
 
 	//
 	// check for required Designate config maps that should have been created by parent Designate CR
 	//
-
-	parentDesignateName := designate.GetOwningDesignateName(instance)
-	Log.Info(fmt.Sprintf("Reconciling Service '%s' init: parent name: %s", instance.Name, parentDesignateName))
-
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-scripts", parentDesignateName), &configMapVars, "")
+	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, designate.ScriptsVolumeName(designate.GetOwningDesignateName(instance)), &configMapVars, "")
 	if err != nil {
 		return ctrlResult, err
 	}
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-config-data", parentDesignateName), &configMapVars, "")
+
+	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, designate.ConfigVolumeName(designate.GetOwningDesignateName(instance)), &configMapVars, "")
+	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
+	// when secret is not found
+	if err != nil {
+		return ctrlResult, err
+	}
+
+	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, designate.DefaultsVolumeName(designate.GetOwningDesignateName(instance)), &configMapVars, "")
 	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
 	// when secret is not found
 	if err != nil {
@@ -547,6 +549,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	} else if hashChanged {
 		// Hash changed and instance status should be updated (which will be done by main defer func),
 		// so we need to return and reconcile again
+		Log.Info("Detected configuration hash change, re-reconciling")
 		return ctrl.Result{}, nil
 	}
 
@@ -558,64 +561,6 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	//
 	// TODO check when/if Init, Update, or Upgrade should/could be skipped
 	//
-	// networks to attach to
-	nadList := []networkv1.NetworkAttachmentDefinition{}
-	for _, netAtt := range instance.Spec.NetworkAttachments {
-		nad, err := nad.GetNADWithName(ctx, helper, netAtt, instance.Namespace)
-		if err != nil {
-			if k8s_errors.IsNotFound(err) {
-				Log.Info(fmt.Sprintf("network-attachment-definition %s not found", netAtt))
-				instance.Status.Conditions.Set(condition.FalseCondition(
-					condition.NetworkAttachmentsReadyCondition,
-					condition.RequestedReason,
-					condition.SeverityInfo,
-					condition.NetworkAttachmentsReadyWaitingMessage,
-					netAtt))
-				return ctrl.Result{RequeueAfter: time.Second * 10}, nil
-			}
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.NetworkAttachmentsReadyCondition,
-				condition.ErrorReason,
-				condition.SeverityWarning,
-				condition.NetworkAttachmentsReadyErrorMessage,
-				err.Error()))
-			return ctrl.Result{}, err
-		}
-
-		if nad != nil {
-			nadList = append(nadList, *nad)
-		}
-	}
-
-	serviceAnnotations, err := nad.EnsureNetworksAnnotation(nadList)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed create network annotation from %s: %w",
-			instance.Spec.NetworkAttachments, err)
-	}
-
-	// Handle service init
-	ctrlResult, err = r.reconcileInit(ctx, instance)
-	if err != nil {
-		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
-		return ctrlResult, nil
-	}
-
-	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(ctx, instance)
-	if err != nil {
-		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
-		return ctrlResult, nil
-	}
-
-	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
-	if err != nil {
-		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
-		return ctrlResult, nil
-	}
 
 	//
 	// Handle Topology
@@ -638,10 +583,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 		return ctrl.Result{}, fmt.Errorf("waiting for Topology requirements: %w", err)
 	}
 
-	//
-	// normal reconcile tasks
-	//
-
+	serviceAnnotations := map[string]string{}
 	// Define a new Deployment object
 	deplDef := designatecentral.Deployment(instance, inputHash, serviceLabels, serviceAnnotations, topology)
 	depl := deployment.NewDeployment(
@@ -671,45 +613,6 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	if deploy.Generation == deploy.Status.ObservedGeneration {
 		instance.Status.ReadyCount = deploy.Status.ReadyReplicas
 
-		// verify if network attachment matches expectations
-		networkReady := false
-		networkAttachmentStatus := map[string][]string{}
-		if *(instance.Spec.Replicas) > 0 {
-			networkReady, networkAttachmentStatus, err = nad.VerifyNetworkStatusFromAnnotation(
-				ctx,
-				helper,
-				instance.Spec.NetworkAttachments,
-				serviceLabels,
-				instance.Status.ReadyCount,
-			)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-		} else {
-			networkReady = true
-		}
-
-		instance.Status.NetworkAttachments = networkAttachmentStatus
-		if networkReady {
-			instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
-		} else {
-			err := fmt.Errorf("not all pods have interfaces with ips as configured in NetworkAttachments: %s", instance.Spec.NetworkAttachments)
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.NetworkAttachmentsReadyCondition,
-				condition.ErrorReason,
-				condition.SeverityWarning,
-				condition.NetworkAttachmentsReadyErrorMessage,
-				err.Error()))
-
-			return ctrl.Result{}, err
-		}
-
-		// Mark the Deployment as Ready only if the number of Replicas is equals
-		// to the Deployed instances (ReadyCount), and the the Status.Replicas
-		// match Status.ReadyReplicas. If a deployment update is in progress,
-		// Replicas > ReadyReplicas.
-		// In addition, make sure the controller sees the last Generation
-		// by comparing it with the ObservedGeneration.
 		if deployment.IsReady(deploy) {
 			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
 		} else {
@@ -732,68 +635,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateCentralReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateCentral) (ctrl.Result, error) {
-	Log := r.GetLogger(ctx)
-
-	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
-
-	// TODO: should have minor update tasks if required
-	// - delete dbsync hash from status to rerun it?
-
-	Log.Info(fmt.Sprintf("Reconciled Service '%s' update successfully", instance.Name))
-	return ctrl.Result{}, nil
-}
-
-func (r *DesignateCentralReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateCentral) (ctrl.Result, error) {
-	Log := r.GetLogger(ctx)
-
-	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
-
-	// TODO: should have major version upgrade tasks
-	// -delete dbsync hash from status to rerun it?
-
-	Log.Info(fmt.Sprintf("Reconciled Service '%s' upgrade successfully", instance.Name))
-	return ctrl.Result{}, nil
-}
-
-// getSecret - get the specified secret, and add its hash to envVars
-func (r *DesignateCentralReconciler) getSecret(
-	ctx context.Context,
-	h *helper.Helper,
-	instance *designatev1beta1.DesignateCentral,
-	secretName string,
-	envVars *map[string]env.Setter,
-	prefix string,
-) (ctrl.Result, error) {
-	secret, hash, err := secret.GetSecret(ctx, h, secretName, instance.Namespace)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			h.GetLogger().Info(fmt.Sprintf("Secret %s not found", secretName))
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
-				condition.InputReadyWaitingMessage))
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-		}
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-
-	// Add a prefix to the var name to avoid accidental collision with other non-secret
-	// vars. The secret names themselves will be unique.
-	(*envVars)[prefix+secret.Name] = env.SetValue(hash)
-
-	return ctrl.Result{}, nil
-}
-
 // generateServiceConfigMaps - create custom configmap to hold service-specific config
-// TODO add DefaultConfigOverwrite
 func (r *DesignateCentralReconciler) generateServiceConfigMaps(
 	ctx context.Context,
 	h *helper.Helper,
@@ -817,94 +659,32 @@ func (r *DesignateCentralReconciler) generateServiceConfigMaps(
 	}
 
 	// customData hold any customization for the service.
-	// custom.conf is going to be merged into /etc/designate/conder.conf
+	// custom.conf is going to be merged into /etc/designate/designate.conf.d/custom.conf
 	// TODO: make sure custom.conf can not be overwritten
 	customData := map[string]string{
 		common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig,
 		"my.cnf":                           db.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
 	}
 
-	for key, data := range instance.Spec.DefaultConfigOverwrite {
-		customData[key] = data
-	}
-
-	customData[common.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
-
-	databaseAccount, dbSecret, err := mariadbv1.GetAccountAndSecret(
-		ctx, h, instance.Spec.DatabaseAccount, instance.Namespace)
-
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			mariadbv1.MariaDBAccountReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			mariadbv1.MariaDBAccountNotReadyMessage,
-			err.Error()))
-
-		return err
-	}
-
-	instance.Status.Conditions.MarkTrue(
-		mariadbv1.MariaDBAccountReadyCondition,
-		mariadbv1.MariaDBAccountReadyMessage)
-
-	templateParameters := map[string]interface{}{
-		"DatabaseConnection": fmt.Sprintf("mysql+pymysql://%s:%s@%s/%s?read_default_file=/etc/my.cnf",
-			databaseAccount.Spec.UserName,
-			string(dbSecret.Data[mariadbv1.DatabasePasswordSelector]),
-			instance.Spec.DatabaseHostname,
-			designate.DatabaseName,
-		),
-	}
-	if len(instance.Spec.RedisHostIPs) > 0 {
-		backendURL := fmt.Sprintf("redis://%s:6379/", instance.Spec.RedisHostIPs[0])
-		if tlsCfg != nil {
-			backendURL = fmt.Sprintf("%s?ssl=true", backendURL)
-		}
-		templateParameters["CoordinationBackendURL"] = backendURL
-	}
-
-	transportURLSecret, _, err := secret.GetSecret(ctx, h, instance.Spec.TransportURLSecret, instance.Namespace)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			r.GetLogger(ctx).Info(fmt.Sprintf("TransportURL secret %s not found", instance.Spec.TransportURLSecret))
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
-				condition.InputReadyWaitingMessage))
-			return nil
-		}
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return err
-	}
-	templateParameters["TransportURL"] = string(transportURLSecret.Data["transport_url"])
-	templateParameters["ServiceUser"] = instance.Spec.ServiceUser
-
+	templateParameters := map[string]interface{}{}
 	cms := []util.Template{
-		// ScriptsConfigMap
-		{
-			Name:               fmt.Sprintf("%s-scripts", instance.Name),
-			Namespace:          instance.Namespace,
-			Type:               util.TemplateTypeScripts,
-			InstanceType:       instance.Kind,
-			AdditionalTemplate: map[string]string{"common.sh": "/common/common.sh"},
-			Labels:             cmLabels,
-		},
 		// Custom ConfigMap
 		{
-			Name:          fmt.Sprintf("%s-config-data", instance.Name),
+			Name:          designate.ConfigVolumeName(instance.Name),
 			Namespace:     instance.Namespace,
 			Type:          util.TemplateTypeConfig,
 			InstanceType:  instance.Kind,
 			CustomData:    customData,
 			ConfigOptions: templateParameters,
 			Labels:        cmLabels,
+		},
+		{
+			Name:         designate.DefaultsVolumeName(instance.Name),
+			Namespace:    instance.Namespace,
+			Type:         util.TemplateTypeNone,
+			InstanceType: instance.Kind,
+			CustomData:   instance.Spec.DefaultConfigOverwrite,
+			Labels:       cmLabels,
 		},
 	}
 

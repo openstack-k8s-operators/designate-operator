@@ -122,6 +122,7 @@ var _ = Describe("DesignateProducer controller", func() {
 			createAndSimulateRedis(designateRedisName)
 			DeferCleanup(k8sClient.Delete, ctx, CreateDesignateSecret(namespace))
 			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(transportURLSecretName))
+			createOwnerSecrets(namespace)
 
 			spec["customServiceConfig"] = "[DEFAULT]\ndebug=True\n"
 			DeferCleanup(th.DeleteInstance, CreateDesignateProducer(designateProducerName, spec))
