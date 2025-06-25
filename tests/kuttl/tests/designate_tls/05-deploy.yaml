@@ -12,6 +12,13 @@ spec:
   customServiceConfig: |
     [DEFAULT]
     debug = true
+  defaultConfigOverwrite:
+    foo.json: |
+      {
+        "foo": "bar"
+      }
+    check.txt: |
+      Here is some text for this file.
   designateProducer:
     databaseAccount: designate
     serviceUser: designate
@@ -21,6 +28,13 @@ spec:
       debug = true
     tls:
       caBundleSecretName: combined-ca-bundle
+    defaultConfigOverwrite:
+      foo.json: |
+        {
+          "foo": "notbar"
+        }
+      anothercheck.txt: |
+        See you later.
   designateMdns:
     databaseAccount: designate
     serviceUser: designate

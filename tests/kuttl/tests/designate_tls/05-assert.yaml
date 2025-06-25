@@ -286,3 +286,17 @@ commands:
           exit 1
       fi
       exit 0
+  - script: |
+      if ! oc get -n $NAMESPACE secret -o json designate-defaults | jq '.data["foo.json"] | @base64d' | sed -e 's/\\n/\n/g' | grep foo.*bar;
+      then
+          echo "Common defaults foo.json failed"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      if ! oc get -n $NAMESPACE secret -o json designate-producer-defaults | jq '.data["foo.json"] | @base64d' | sed -e 's/\\n/\n/g' | grep foo.*this;
+      then
+          echo "Producer defaults foo.json failed"
+          exit 1
+      fi
+      exit 0
