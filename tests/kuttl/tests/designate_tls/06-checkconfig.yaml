@@ -1,0 +1,187 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      if ! oc get -n $NAMESPACE secret -o json designate-config-data | jq '.data["designate.conf"] | @base64d' | sed -e 's/\\n/\n/g' | grep ^backend_url.*redis.*ssl.true;
+      then
+          echo "Configuration of backend_url failed"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      if ! oc get -n $NAMESPACE secret -o json designate-defaults | jq '.data["foo.json"] | @base64d' | sed -e 's/\\n/\n/g' | grep foo.*bar;
+      then
+          echo "Common defaults foo.json failed"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      secret_value=`oc get -n $NAMESPACE secret -o json designate-producer-defaults | jq '.data["foo.json"] | @base64d' | sed -e 's/\\n/\n/g'`
+      echo "$secret_value"
+      if ! echo "$secret_value" | grep foo.*this;
+      then
+          echo "Producer defaults foo.json failed"
+          echo "actual result: $secret_value"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      secret_value=`oc get -n $NAMESPACE secret -o json designate-api-defaults | jq '.data["foo.json"] | @base64d' | sed -e 's/\\n/\n/g'`
+      echo "$secret_value"
+      if ! echo "$secret_value" | grep foo.*apioverwrite;
+      then
+          echo "API defaults foo.json failed"
+          echo "actual result: $secret_value"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      secret_value=`oc get -n $NAMESPACE secret -o json designate-central-defaults | jq '.data["foo.json"] | @base64d' | sed -e 's/\\n/\n/g'`
+      echo "$secret_value"
+      if ! echo "$secret_value" | grep foo.*centraloverwrite;
+      then
+          echo "Central defaults foo.json failed"
+          echo "actual result: $secret_value"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      secret_value=`oc get -n $NAMESPACE secret -o json designate-worker-defaults | jq '.data["foo.json"] | @base64d' | sed -e 's/\\n/\n/g'`
+      echo "$secret_value"
+      if ! echo "$secret_value" | grep foo.*workeroverwrite;
+      then
+          echo "Worker defaults foo.json failed"
+          echo "actual result: $secret_value"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      servicefilecheck=`oc exec -n $NAMESPACE deploy/designate-central -- /bin/bash -c "if test -f /etc/designate/servicefile.txt; then cat /etc/designate/servicefile.txt; else echo 'no'; fi"`
+      if test "$servicefilecheck" == "no";
+      then
+          echo "servicefile.txt does not exist"
+          exit 1
+      elif ! test "$servicefilecheck" == "designate central";
+      then
+          echo "servicefile.txt content is wrong"
+          echo "actual result: $servicefilecheck"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      servicefilecheck=`oc exec -n $NAMESPACE deploy/designate-producer -- /bin/bash -c "if test -f /etc/designate/servicefile.txt; then cat /etc/designate/servicefile.txt; else echo 'no'; fi"`
+      if test "$servicefilecheck" == "no";
+      then
+          echo "servicefile.txt does not exist"
+          exit 1
+      elif ! test "$servicefilecheck" == "designate producer";
+      then
+          echo "servicefile.txt content is wrong"
+          echo "actual result: $servicefilecheck"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      servicefilecheck=`oc exec deploy/designate-worker -- /bin/bash -c "if test -f /etc/designate/servicefile.txt; then cat /etc/designate/servicefile.txt; else echo 'no'; fi"`
+      if test "$servicefilecheck" == "no";
+      then
+          echo "servicefile.txt does not exist"
+          exit 1
+      elif ! test "$servicefilecheck" == "designate worker";
+      then
+          echo "servicefile.txt content is wrong"
+          echo "actual result: $servicefilecheck"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      servicefilecheck=`oc exec -n $NAMESPACE deploy/designate-api -- /bin/bash -c "if test -f /etc/designate/servicefile.txt; then cat /etc/designate/servicefile.txt; else echo 'no'; fi"`
+      if test "$servicefilecheck" == "no";
+      then
+          echo "servicefile.txt does not exist"
+          exit 1
+      elif ! test "$servicefilecheck" == "designate api";
+      then
+          echo "servicefile.txt content is wrong"
+          echo "actual result: $servicefilecheck"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      servicefilecheck=`oc exec -n $NAMESPACE deploy/designate-mdns -- /bin/bash -c "if test -f /etc/designate/servicefile.txt; then cat /etc/designate/servicefile.txt; else echo 'no'; fi"`
+      if test "$servicefilecheck" == "no";
+      then
+          echo "servicefile.txt does not exist"
+          exit 1
+      elif ! test "$servicefilecheck" == "designate mDNS";
+      then
+          echo "servicefile.txt content is wrong"
+          echo "actual result: $servicefilecheck"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      commonoverridecheck=`oc exec -n $NAMESPACE deploy/designate-central -- /bin/bash -c "if test -f /etc/designate/anothercheck.txt; then cat /etc/designate/anothercheck.txt; else echo 'no'; fi"`
+      if test "$commonoverridecheck" == "no";
+      then
+          echo "anothercheck.txt does not exist"
+          exit 1
+      elif ! test "$commonoverridecheck" == "See you later.";
+      then
+          echo "anothercheck.txt content is wrong"
+          echo "actual result: $commonoverridecheck"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      commonoverridecheck=`oc exec -n $NAMESPACE deploy/designate-producer -- /bin/bash -c "if test -f /etc/designate/anothercheck.txt; then cat /etc/designate/anothercheck.txt; else echo 'no'; fi"`
+      if test "$commonoverridecheck" == "no";
+      then
+          echo "anothercheck.txt does not exist"
+          exit 1
+      elif ! test "$commonoverridecheck" == "See you later.";
+      then
+          echo "anothercheck.txt content is wrong"
+          echo "actual result: $commonoverridecheck"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      commonoverridecheck=`oc exec -n $NAMESPACE deploy/designate-worker -- /bin/bash -c "if test -f /etc/designate/anothercheck.txt; then cat /etc/designate/anothercheck.txt; else echo 'no'; fi"`
+      if test "$commonoverridecheck" == "no";
+      then
+          echo "anothercheck.txt does not exist"
+          exit 1
+      elif ! test "$commonoverridecheck" == "See you later.";
+      then
+          echo "anothercheck.txt content is wrong"
+          echo "actual result: $commonoverridecheck"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      commonoverridecheck=`oc exec -n $NAMESPACE deploy/designate-mdns -- /bin/bash -c "if test -f /etc/designate/anothercheck.txt; then cat /etc/designate/anothercheck.txt; else echo 'no'; fi"`
+      if test "$commonoverridecheck" == "no";
+      then
+          echo "anothercheck.txt does not exist"
+          exit 1
+      elif ! test "$commonoverridecheck" == "See you later.";
+      then
+          echo "anothercheck.txt content is wrong"
+          echo "actual result: $commonoverridecheck"
+          exit 1
+      fi
+      exit 0
+  - script: |
+      commonoverridecheck=`oc exec -n $NAMESPACE deploy/designate-api -- /bin/bash -c "if test -f /etc/designate/anothercheck.txt; then cat /etc/designate/anothercheck.txt; else echo 'no'; fi"`
+      if test "$commonoverridecheck" == "no";
+      then
+          echo "anothercheck.txt does not exist"
+          exit 1
+      elif ! test "$commonoverridecheck" == "See you later.";
+      then
+          echo "anothercheck.txt content is wrong"
+          echo "actual result: $commonoverridecheck"
+          exit 1
+      fi
+      exit 0

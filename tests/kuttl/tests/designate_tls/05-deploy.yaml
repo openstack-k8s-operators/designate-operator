@@ -12,6 +12,13 @@ spec:
   customServiceConfig: |
     [DEFAULT]
     debug = true
+  defaultConfigOverwrite:
+    foo.json: |
+      {
+        "foo": "bar"
+      }
+    check.txt: |
+      Here is some text for this file.
   designateProducer:
     databaseAccount: designate
     serviceUser: designate
@@ -21,6 +28,15 @@ spec:
       debug = true
     tls:
       caBundleSecretName: combined-ca-bundle
+    defaultConfigOverwrite:
+      foo.json: |
+        {
+          "foo": "this"
+        }
+      anothercheck.txt: |
+        See you later.
+      servicefile.txt: |
+        designate producer
   designateMdns:
     databaseAccount: designate
     serviceUser: designate
@@ -28,6 +44,13 @@ spec:
     customServiceConfig: |
       [DEFAULT]
       debug = true
+    defaultConfigOverwrite:
+      foo.json: |
+        {
+          "foo": "mdnsoverwrite"
+        }
+      servicefile.txt: |
+        designate mDNS
     networkAttachments:
       - designate
     tls:
@@ -39,6 +62,13 @@ spec:
     customServiceConfig: |
       [DEFAULT]
       debug = true
+    defaultConfigOverwrite:
+      foo.json: |
+        {
+          "foo": "centraloverwrite"
+        }
+      servicefile.txt: |
+        designate central
     tls:
       caBundleSecretName: combined-ca-bundle
   designateBackendbind9:
@@ -60,6 +90,13 @@ spec:
     customServiceConfig: |
       [DEFAULT]
       debug = true
+    defaultConfigOverwrite:
+      foo.json: |
+        {
+          "foo": "workeroverwrite"
+        }
+      servicefile.txt: |
+        designate worker
     networkAttachments:
       - designate
     tls:
@@ -77,6 +114,13 @@ spec:
     customServiceConfig: |
       [DEFAULT]
       debug = true
+    defaultConfigOverwrite:
+      foo.json: |
+        {
+          "foo": "apioverwrite"
+        }
+      servicefile.txt: |
+        designate api
     tls:
       api:
         internal:

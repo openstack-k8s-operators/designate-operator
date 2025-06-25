@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: designate-redis-redis-0
+status:
+  phase: Running
