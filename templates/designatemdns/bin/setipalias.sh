@@ -18,5 +18,9 @@ set -ex
 # expect that the common.sh is in the same dir as the calling script
 #
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+SVC_CFG_MERGED=/var/lib/config-data/merged/designate.conf
 
-/usr/local/bin/container-scripts/setipalias.py
+IPADDR=$(/usr/local/bin/container-scripts/setipalias.py)
+if [ $? -eq 0 ] && [ -n "$IPADDR" ]; then
+    crudini --set $SVC_CFG_MERGED 'service:mdns' 'listen' "${IPADDR}:5354"
+fi
