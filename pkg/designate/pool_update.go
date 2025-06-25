@@ -3,15 +3,15 @@ package designate
 import (
 	"fmt"
 
+	"time"
+
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"time"
 )
 
 const (
-	PoolUpdateCommand      = "/usr/bin/designate-manage pool update"
 	DesignateConfigVolume  = "designate-config"
 	DesignateConfigMount   = "/etc/designate"
 	DesignateConfigKeyPath = "designate.conf"
@@ -24,8 +24,14 @@ func PoolUpdateJob(
 	annotations map[string]string,
 ) *batchv1.Job {
 	runAsUser := int64(0)
-	volumeMounts := GetVolumeMounts(instance.Name)
-	volumes := GetVolumes(instance.Name)
+
+	volumeDefs := []VolumeMapping{
+		{Name: ScriptsVolumeName(ServiceName), Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		{Name: ConfigVolumeName(ServiceName), Type: SecretMount, MountPath: "/var/lib/config-data/default"},
+		{Name: "pools-yaml-merged", Type: MergeMount, MountPath: "/var/lib/config-data/merged"},
+	}
+
+	volumes, volumeMounts := ProcessVolumes(volumeDefs)
 
 	volumes = append(volumes, corev1.Volume{
 		Name: "pools-yaml-config",
@@ -48,22 +54,13 @@ func PoolUpdateJob(
 		Name: DesignateConfigVolume,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: "designate-central-config-data",
+				SecretName: ConfigVolumeName("designate-central"),
 				Items: []corev1.KeyToPath{
 					{
 						Key:  "designate.conf",
 						Path: DesignateConfigKeyPath,
 					},
 				},
-			},
-		},
-	})
-
-	volumes = append(volumes, corev1.Volume{
-		Name: "rabbitmq-certs",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: "cert-rabbitmq-svc",
 			},
 		},
 	})
@@ -79,14 +76,31 @@ func PoolUpdateJob(
 			MountPath: DesignateConfigMount,
 			ReadOnly:  true,
 		},
-		corev1.VolumeMount{
+	)
+
+	if instance.Spec.DesignateCentral.TLS.CaBundleSecretName != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: "rabbitmq-certs",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "cert-rabbitmq-svc",
+				},
+			},
+		})
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "rabbitmq-certs",
 			MountPath: "/etc/pki/rabbitmq",
 			ReadOnly:  true,
-		},
-	)
+		})
+	}
 
 	jobName := fmt.Sprintf("%s-pool-update-%d", ServiceName, time.Now().Unix())
+	cmdLine := fmt.Sprintf("/usr/bin/designate-manage --config-file %s --config-file %s pool update --file  /tmp/designate-pools/%s",
+		"/var/lib/config-data/default/designate.conf",
+		"/etc/designate/designate.conf",
+		DesignatePoolsYamlPath,
+	)
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -114,10 +128,7 @@ func PoolUpdateJob(
 							Command: []string{
 								"/bin/bash",
 								"-c",
-								fmt.Sprintf("%s --file /tmp/designate-pools/%s",
-									PoolUpdateCommand,
-									DesignatePoolsYamlPath,
-								),
+								cmdLine,
 							},
 							SecurityContext: &corev1.SecurityContext{
 								RunAsUser: &runAsUser,

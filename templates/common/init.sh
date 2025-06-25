@@ -1,4 +1,4 @@
-#!/bin//bash
+#!/bin/bash
 #
 # Copyright 2024 Red Hat Inc.
 #
@@ -17,10 +17,6 @@ set -ex
 
 # This script generates the designate.conf file and
 # copies the result to the ephemeral /var/lib/config-data/merged volume.
-#
-# Secrets are obtained from ENV variables.
-VERBOSE="True"
-
 SVC_CFG=/etc/designate/designate.conf
 SVC_CFG_MERGED=/var/lib/config-data/merged/designate.conf
 
@@ -28,14 +24,35 @@ SVC_CFG_MERGED=/var/lib/config-data/merged/designate.conf
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 . ${SCRIPTPATH}/common.sh --source-only
 
-# Copy default service config from container image as base
 cp -a ${SVC_CFG} ${SVC_CFG_MERGED}
 
-# Merge all templates from config CM
+
+# Merge all templates from core config secret
 for dir in /var/lib/config-data/default; do
     merge_config_dir ${dir}
 done
 
-# NOTE:dkehn - REMOVED because Kolla_set & start copy eveyrthing.
-# I'm doing this to get the designate.conf w/all the tags with values.
-cp -a ${SVC_CFG_MERGED} ${SVC_CFG}
+#  Merge all templates from service specific config secret
+if test -d /var/lib/config-data/service; then
+    for dir in /var/lib/config-data/service; do
+        merge_config_dir ${dir}
+    done
+fi
+
+# Handle any default overrides that might be mounted.
+# First check that destinations exists!
+OVERWRITE_DEST=/var/lib/config-data/config-overwrites
+if test -d ${OVERWRITE_DEST}; then
+    if test -d /var/lib/config-data/common-overwrites; then
+        cp -a /var/lib/config-data/common-overwrites ${OVERWRITE_DEST}
+    fi
+    if test -d /var/lib/config-data/overwrites; then
+        cp -a /var/lib/config-data/overwrites ${OVERWRITE_DEST}
+    fi
+fi
+
+# Provide an empty custom.conf if none was created.
+# Keeps kolla happy
+if ! test -e /var/lib/config-data/merged/custom.conf; then
+    echo "# Custom conf - see CustomServiceConfig" > /var/lib/config-data/merged/custom.conf
+fi

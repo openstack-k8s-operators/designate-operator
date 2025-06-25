@@ -47,7 +47,20 @@ func Deployment(
 	topology *topologyv1.Topology,
 ) (*appsv1.Deployment, error) {
 	runAsUser := int64(0)
-	initVolumeMounts := designate.GetInitVolumeMounts()
+	serviceName := fmt.Sprintf("%s-api", designate.ServiceName)
+
+	// Includes a r/w /var/run/designate for the concurrency lock path
+	volumeDefs := append(designate.GetStandardVolumeMapping(instance),
+		designate.VolumeMapping{Name: instance.Name + "-run", Type: designate.MergeMount, MountPath: "/var/run/designate"})
+
+	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
+
+	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
+		Name:      designate.MergedVolumeName(instance.Name),
+		MountPath: "/var/lib/kolla/config_files/config.json",
+		SubPath:   serviceName + "-config.json",
+		ReadOnly:  true,
+	})
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -76,9 +89,6 @@ func Deployment(
 	}
 
 	// create Volume and VolumeMounts
-	volumes := getVolumes(instance.Name)
-	volumeMounts := getVolumeMounts("designate-api")
-
 	// add CA cert if defined
 	if instance.Spec.TLS.CaBundleSecretName != "" {
 		volumes = append(volumes, instance.Spec.TLS.CreateVolume())
@@ -107,8 +117,6 @@ func Deployment(
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
-
-	serviceName := fmt.Sprintf("%s-api", designate.ServiceName)
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

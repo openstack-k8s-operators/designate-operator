@@ -204,37 +204,37 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Watch for changes to any CustomServiceConfigSecrets. Global secrets
 	// (e.g. TransportURLSecret) are handled by the top designate controller.
-	svcSecretFn := func(_ context.Context, o client.Object) []reconcile.Request {
-		var namespace string = o.GetNamespace()
-		var secretName string = o.GetName()
-		result := []reconcile.Request{}
+	// svcSecretFn := func(_ context.Context, o client.Object) []reconcile.Request {
+	// 	var namespace string = o.GetNamespace()
+	// 	var secretName string = o.GetName()
+	// 	result := []reconcile.Request{}
 
-		// get all Backendbind9 CRs
-		apis := &designatev1beta1.DesignateBackendbind9List{}
-		listOpts := []client.ListOption{
-			client.InNamespace(namespace),
-		}
-		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
-			r.Log.Error(err, "Unable to retrieve Backendbind9 CRs %v")
-			return nil
-		}
-		for _, cr := range apis.Items {
-			for _, v := range cr.Spec.CustomServiceConfigSecrets {
-				if v == secretName {
-					name := client.ObjectKey{
-						Namespace: namespace,
-						Name:      cr.Name,
-					}
-					r.Log.Info(fmt.Sprintf("Secret %s is used by Designate CR %s", secretName, cr.Name))
-					result = append(result, reconcile.Request{NamespacedName: name})
-				}
-			}
-		}
-		if len(result) > 0 {
-			return result
-		}
-		return nil
-	}
+	// 	// get all Backendbind9 CRs
+	// 	apis := &designatev1beta1.DesignateBackendbind9List{}
+	// 	listOpts := []client.ListOption{
+	// 		client.InNamespace(namespace),
+	// 	}
+	// 	if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
+	// 		r.Log.Error(err, "Unable to retrieve Backendbind9 CRs %v")
+	// 		return nil
+	// 	}
+	// 	for _, cr := range apis.Items {
+	// 		for _, v := range cr.Spec.CustomServiceConfigSecrets {
+	// 			if v == secretName {
+	// 				name := client.ObjectKey{
+	// 					Namespace: namespace,
+	// 					Name:      cr.Name,
+	// 				}
+	// 				r.Log.Info(fmt.Sprintf("Secret %s is used by Designate CR %s", secretName, cr.Name))
+	// 				result = append(result, reconcile.Request{NamespacedName: name})
+	// 			}
+	// 		}
+	// 	}
+	// 	if len(result) > 0 {
+	// 		return result
+	// 	}
+	// 	return nil
+	// }
 
 	// watch for configmap where the CM owner label AND the CR.Spec.ManagingCrName label matches
 	configMapFn := func(_ context.Context, o client.Object) []reconcile.Request {
@@ -289,9 +289,6 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 		For(&designatev1beta1.DesignateBackendbind9{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
-		// watch the secrets we don't own
-		Watches(&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(svcSecretFn)).
 		// watch the config CMs we don't own
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(configMapFn)).
@@ -374,51 +371,25 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	configMapVars := make(map[string]env.Setter)
 
 	//
-	// check for required OpenStack secret holding passwords for service/admin user and add hash to the vars map
+	// TODO(beagles 03/2025): this block of code repeats throughout designate. It appears that the idea here was to allow custom
+	// config snippets to be stored in secrets and used later on. This was not used anywhere however. Maybe this
+	// was intended to be part of supporting alternate backends? I will comment out for now and add a warning if the
+	// parameter is used.
 	//
-	ctrlResult, err := r.getSecret(ctx, helper, instance, instance.Spec.Secret, &configMapVars, "secret-")
-	if err != nil {
-		return ctrlResult, err
-	}
-	// run check OpenStack secret - end
-
-	//
-	// check for required TransportURL secret holding transport URL string
-	//
-	ctrlResult, err = r.getSecret(ctx, helper, instance, instance.Spec.TransportURLSecret, &configMapVars, "secret-")
-	if err != nil {
-		return ctrlResult, err
-	}
-	// run check TransportURL secret - end
-
-	//
-	// check for required service secrets
-	//
-	for _, secretName := range instance.Spec.CustomServiceConfigSecrets {
-		ctrlResult, err = r.getSecret(ctx, helper, instance, secretName, &configMapVars, "secret-")
-		if err != nil {
-			return ctrlResult, err
-		}
-	}
+	// for _, secretName := range instance.Spec.CustomServiceConfigSecrets {
+	//	ctrlResult, err = r.getSecret(ctx, helper, instance, secretName, &configMapVars, "secret-")
+	//	if err != nil {
+	//		return ctrlResult, err
+	//	}
+	//}
 	// run check service secrets - end
+	if len(instance.Spec.CustomServiceConfigSecrets) > 0 {
+		r.Log.Info("warning: CustomServiceConfigSecrets is not supported.")
+	}
 
 	//
 	// check for required Designate config maps that should have been created by parent Designate CR
 	//
-
-	parentDesignateName := designate.GetOwningDesignateName(instance)
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' init: parent name: %s", instance.Name, parentDesignateName))
-
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-scripts", parentDesignateName), &configMapVars, "")
-	if err != nil {
-		return ctrlResult, err
-	}
-	ctrlResult, err = r.getSecret(ctx, helper, instance, fmt.Sprintf("%s-config-data", parentDesignateName), &configMapVars, "")
-	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
-	// when secret is not found
-	if err != nil {
-		return ctrlResult, err
-	}
 
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
@@ -468,7 +439,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	//
 	// create custom Configmap for this designate volume service
 	//
-	err = r.generateServiceConfigMaps(ctx, helper, instance, &configMapVars, serviceLabels)
+	err := r.generateServiceConfigMaps(ctx, helper, instance, &configMapVars, serviceLabels)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -555,7 +526,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	}
 
 	// Handle service init
-	ctrlResult, err = r.reconcileInit(instance)
+	ctrlResult, err := r.reconcileInit(instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -714,44 +685,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileUpgrade(instance *designatev1
 	return ctrl.Result{}, nil
 }
 
-// getSecret - get the specified secret, and add its hash to envVars
-func (r *DesignateBackendbind9Reconciler) getSecret(
-	ctx context.Context,
-	h *helper.Helper,
-	instance *designatev1beta1.DesignateBackendbind9,
-	secretName string,
-	envVars *map[string]env.Setter,
-	prefix string,
-) (ctrl.Result, error) {
-	secret, hash, err := secret.GetSecret(ctx, h, secretName, instance.Namespace)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			r.Log.Info(fmt.Sprintf("Secret %s not found", secretName))
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
-				condition.InputReadyWaitingMessage))
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-		}
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-
-	// Add a prefix to the var name to avoid accidental collision with other non-secret
-	// vars. The secret names themselves will be unique.
-	(*envVars)[prefix+secret.Name] = env.SetValue(hash)
-
-	return ctrl.Result{}, nil
-}
-
 // generateServiceConfigMaps - create custom configmap to hold service-specific config
-// TODO add DefaultConfigOverwrite
 func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 	ctx context.Context,
 	h *helper.Helper,
@@ -767,13 +701,9 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), serviceLabels)
 
 	// customData hold any customization for the service.
-	// custom.conf is going to be merged into /etc/designate/conder.conf
+	// custom.conf is going to be merged into /etc/designate/designate.conf.d/custom.conf
 	// TODO: make sure custom.conf can not be overwritten
 	customData := map[string]string{common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig}
-
-	for key, data := range instance.Spec.DefaultConfigOverwrite {
-		customData[key] = data
-	}
 
 	customData[common.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
 
@@ -814,7 +744,7 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 		}
 	}
 	if nadInfo == nil {
-		return fmt.Errorf("Unable to locate network attachment %s", instance.Spec.ControlNetworkName)
+		return fmt.Errorf("unable to locate network attachment %s", instance.Spec.ControlNetworkName)
 	}
 
 	cidr := nadInfo.IPAM.CIDR.String()
@@ -870,6 +800,15 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 			Namespace:     instance.Namespace,
 			Type:          "config-named",
 			InstanceType:  instance.Kind,
+			ConfigOptions: templateParameters,
+			Labels:        cmLabels,
+		},
+		{
+			Name:          fmt.Sprintf("%s-default-overwrite", instance.Name),
+			Namespace:     instance.Namespace,
+			Type:          util.TemplateTypeNone,
+			InstanceType:  instance.Kind,
+			CustomData:    instance.Spec.DefaultConfigOverwrite,
 			ConfigOptions: templateParameters,
 			Labels:        cmLabels,
 		},

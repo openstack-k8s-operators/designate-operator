@@ -46,8 +46,17 @@ func Deployment(
 	rootUser := int64(0)
 	serviceName := fmt.Sprintf("%s-worker", designate.ServiceName)
 
-	volumes := GetVolumes(designate.GetOwningDesignateName(instance))
-	volumeMounts := GetVolumeMounts(serviceName)
+	volumeDefs := append(designate.GetStandardVolumeMapping(instance),
+		designate.VolumeMapping{Name: designate.DesignateBindKeySecret, Type: designate.SecretMount, MountPath: "/etc/designate/rndc-keys"})
+
+	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
+
+	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
+		Name:      designate.MergedVolumeName(instance.Name),
+		MountPath: "/var/lib/kolla/config_files/config.json",
+		SubPath:   serviceName + "-config.json",
+		ReadOnly:  true,
+	})
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -145,7 +154,7 @@ func Deployment(
 		OSPSecret:            instance.Spec.Secret,
 		TransportURLSecret:   instance.Spec.TransportURLSecret,
 		UserPasswordSelector: instance.Spec.PasswordSelectors.Service,
-		VolumeMounts:         designate.GetInitVolumeMounts(),
+		VolumeMounts:         initVolumeMounts,
 	}
 	deployment.Spec.Template.Spec.InitContainers = designate.InitContainer(initContainerDetails)
 
