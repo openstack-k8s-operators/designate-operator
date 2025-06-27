@@ -26,8 +26,8 @@ func PoolUpdateJob(
 	runAsUser := int64(0)
 
 	volumeDefs := []VolumeMapping{
-		{Name: ScriptsVolumeName(ServiceName), Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
-		{Name: ConfigVolumeName(ServiceName), Type: SecretMount, MountPath: "/var/lib/config-data/default"},
+		{Name: ScriptsVolumeName(instance.Name), Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		{Name: ConfigVolumeName(instance.Name), Type: SecretMount, MountPath: "/var/lib/config-data/default"},
 		{Name: "pools-yaml-merged", Type: MergeMount, MountPath: "/var/lib/config-data/merged"},
 	}
 
@@ -78,7 +78,7 @@ func PoolUpdateJob(
 		},
 	)
 
-	if instance.Spec.DesignateCentral.TLS.CaBundleSecretName != "" {
+	if instance.Spec.DesignateAPI.TLS.CaBundleSecretName != "" {
 		volumes = append(volumes, corev1.Volume{
 			Name: "rabbitmq-certs",
 			VolumeSource: corev1.VolumeSource{
