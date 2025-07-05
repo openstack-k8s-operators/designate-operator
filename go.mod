@@ -3,7 +3,7 @@ module github.com/openstack-k8s-operators/designate-operator
 go 1.21
 
 require (
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/go-playground/validator/v10 v10.25.0
 	github.com/google/uuid v1.6.0
 	github.com/gophercloud/gophercloud v1.14.1
@@ -11,11 +11,11 @@ require (
 	github.com/onsi/ginkgo/v2 v2.20.1
 	github.com/onsi/gomega v1.34.1
 	github.com/openstack-k8s-operators/designate-operator/api v0.1.1-0.20240807132522-6c2eca7c6bbb
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20250530085921-2b2be72badf4
-	github.com/openstack-k8s-operators/keystone-operator/api v0.6.1-0.20250604143452-2260c431b9f1
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20250508141203-be026d3164f7
-	github.com/openstack-k8s-operators/lib-common/modules/test v0.6.1-0.20250508141203-be026d3164f7
-	github.com/openstack-k8s-operators/mariadb-operator/api v0.6.1-0.20250524131103-7ebaceec882b
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20250630125044-4cb24968c1a6
+	github.com/openstack-k8s-operators/keystone-operator/api v0.6.1-0.20250703205702-4b8fc09eb8ae
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20250605082218-a58074898dd7
+	github.com/openstack-k8s-operators/lib-common/modules/test v0.6.1-0.20250605082218-a58074898dd7
+	github.com/openstack-k8s-operators/mariadb-operator/api v0.6.1-0.20250626110655-78effb029b49
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.29.15
 	k8s.io/apimachinery v0.29.15
@@ -56,7 +56,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/openshift/api v3.9.0+incompatible // indirect
 	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.6.1-0.20250508141203-be026d3164f7 // indirect
-	github.com/openstack-k8s-operators/lib-common/modules/storage v0.6.1-0.20250508141203-be026d3164f7 // indirect
+	github.com/openstack-k8s-operators/lib-common/modules/storage v0.6.1-0.20250605082218-a58074898dd7 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.19.0 // indirect
 	github.com/prometheus/client_model v0.6.0 // indirect
