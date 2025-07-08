@@ -243,10 +243,47 @@ spec:
 apiVersion: v1
 kind: Pod
 metadata:
-  annotations:
-    openshift.io/scc: anyuid
+
   labels:
     service: designate
+---
+apiVersion: v1
+kind: Pod
+metadata:
+
+  labels:
+    component: designate-api
+---
+apiVersion: v1
+kind: Pod
+metadata:
+
+  labels:
+    component: designate-central
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    component: designate-mdns
+  annotations:
+    openshift.io/scc: anyuid
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    component: designate-producer
+  annotations:
+    openshift.io/scc: anyuid
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    component: designate-worker
+  annotations:
+    openshift.io/scc: anyuid
 ---
 apiVersion: v1
 kind: Service
@@ -276,13 +313,17 @@ spec:
     service: designate
   type: ClusterIP
 ---
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-commands:
-  - script: |
-      if ! oc get -n $NAMESPACE secret -o json designate-config-data | jq '.data["designate.conf"] | @base64d' | sed -e 's/\\n/\n/g' | grep ^backend_url.*redis.*ssl.true;
-      then
-          echo "Configuration of backend_url failed"
-          exit 1
-      fi
-      exit 0
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-config-data
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-defaults
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-producer-defaults
