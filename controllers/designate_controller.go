@@ -887,15 +887,8 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		if oldHash != poolsYamlHash {
 			Log.Info(fmt.Sprintf("Old poolsYamlHash %s is different than new poolsYamlHash %s.\nLaunching pool update job", oldHash, poolsYamlHash))
 
-			instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolsYamlHash
-			if err := r.Client.Status().Update(ctx, instance); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to update status hash: %w", err)
-			}
-
 			jobDef := designate.PoolUpdateJob(instance, serviceLabels, serviceAnnotations)
-
 			Log.Info("Initializing pool update job")
-
 			poolUpdatejob := job.NewJob(
 				jobDef,
 				designatev1beta1.PoolUpdateHash,
@@ -909,6 +902,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 				return ctrl.Result{}, err
 			}
 			Log.Info("Pool update job completed successfully")
+			instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolsYamlHash
 		}
 	}
 
