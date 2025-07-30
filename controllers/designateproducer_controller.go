@@ -352,7 +352,7 @@ func (r *DesignateProducerReconciler) SetupWithManager(ctx context.Context, mgr 
 func (r *DesignateProducerReconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
 
-	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateProducer")
+	Log := r.GetLogger(ctx)
 
 	allWatchFields := []string{
 		passwordSecretField,
@@ -368,12 +368,12 @@ func (r *DesignateProducerReconciler) findObjectsForSrc(ctx context.Context, src
 		}
 		err := r.Client.List(context.TODO(), crList, listOps)
 		if err != nil {
-			l.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
+			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
 			return requests
 		}
 
 		for _, item := range crList.Items {
-			l.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
+			Log.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
 
 			requests = append(requests,
 				reconcile.Request{

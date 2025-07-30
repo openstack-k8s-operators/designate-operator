@@ -75,13 +75,12 @@ func (r *DesignateMdnsReconciler) GetScheme() *runtime.Scheme {
 type DesignateMdnsReconciler struct {
 	client.Client
 	Kclient kubernetes.Interface
-	Log     logr.Logger
 	Scheme  *runtime.Scheme
 }
 
-// GetLogger
-func (r *DesignateMdnsReconciler) GetLogger() logr.Logger {
-	return r.Log
+// GetLogger returns a logger object with a prefix of "controller.name" and additional controller context fields
+func (r *DesignateMdnsReconciler) GetLogger(ctx context.Context) logr.Logger {
+	return log.FromContext(ctx).WithName("Controllers").WithName("DesignateMdns")
 }
 
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designatemdnses,verbs=get;list;watch;create;update;patch;delete
@@ -105,7 +104,7 @@ func (r *DesignateMdnsReconciler) GetLogger() logr.Logger {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.2/pkg/reconcile
 func (r *DesignateMdnsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
-	_ = r.Log.WithValues("designatemdns", req.NamespacedName)
+	Log := r.GetLogger(ctx)
 	// Fetch the DesignateMdns instance
 	instance := &designatev1beta1.DesignateMdns{}
 	err := r.Client.Get(ctx, req.NamespacedName, instance)
@@ -125,7 +124,7 @@ func (r *DesignateMdnsReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		r.Client,
 		r.Kclient,
 		r.Scheme,
-		r.Log,
+		Log,
 	)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -147,7 +146,7 @@ func (r *DesignateMdnsReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	defer func() {
 		// Don't update the status, if Reconciler Panics
 		if rc := recover(); rc != nil {
-			r.Log.Info(fmt.Sprintf("Panic during reconcile %v\n", rc))
+			Log.Info(fmt.Sprintf("Panic during reconcile %v\n", rc))
 			panic(rc)
 		}
 		condition.RestoreLastTransitionTimes(
@@ -206,7 +205,8 @@ func (r *DesignateMdnsReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *DesignateMdnsReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DesignateMdnsReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	Log := r.GetLogger(ctx)
 	// Watch for changes to any CustomServiceConfigSecrets. Global secrets
 	// (e.g. TransportURLSecret) are handled by the top designate controller.
 	// index passwordSecretField
@@ -256,7 +256,7 @@ func (r *DesignateMdnsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			client.InNamespace(namespace),
 		}
 		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
-			r.Log.Error(err, "Unable to retrieve Mdns CRs %v")
+			Log.Error(err, "Unable to retrieve Mdns CRs %v")
 			return nil
 		}
 
@@ -280,7 +280,7 @@ func (r *DesignateMdnsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						Namespace: namespace,
 						Name:      cr.Name,
 					}
-					r.Log.Info(fmt.Sprintf("Secret %s is used by DesignateMdns CR %s", secretName, cr.Name))
+					Log.Info(fmt.Sprintf("Secret %s is used by DesignateMdns CR %s", secretName, cr.Name))
 					result = append(result, reconcile.Request{NamespacedName: name})
 				}
 			}
@@ -301,7 +301,7 @@ func (r *DesignateMdnsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			client.InNamespace(o.GetNamespace()),
 		}
 		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
-			r.Log.Error(err, "Unable to retrieve Mdns CRs %v")
+			Log.Error(err, "Unable to retrieve Mdns CRs %v")
 			return nil
 		}
 
@@ -317,7 +317,7 @@ func (r *DesignateMdnsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 						Namespace: o.GetNamespace(),
 						Name:      cr.Name,
 					}
-					r.Log.Info(fmt.Sprintf("ConfigMap object %s and CR %s marked with label: %s", o.GetName(), cr.Name, l))
+					Log.Info(fmt.Sprintf("ConfigMap object %s and CR %s marked with label: %s", o.GetName(), cr.Name, l))
 					result = append(result, reconcile.Request{NamespacedName: name})
 				}
 			}
@@ -352,7 +352,7 @@ func (r *DesignateMdnsReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *DesignateMdnsReconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
 
-	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateMdns")
+	Log := r.GetLogger(ctx)
 
 	allWatchFields := []string{
 		passwordSecretField,
@@ -368,12 +368,12 @@ func (r *DesignateMdnsReconciler) findObjectsForSrc(ctx context.Context, src cli
 		}
 		err := r.Client.List(context.TODO(), crList, listOps)
 		if err != nil {
-			l.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
+			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
 			return requests
 		}
 
 		for _, item := range crList.Items {
-			l.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
+			Log.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
 
 			requests = append(requests,
 				reconcile.Request{
@@ -390,7 +390,8 @@ func (r *DesignateMdnsReconciler) findObjectsForSrc(ctx context.Context, src cli
 }
 
 func (r *DesignateMdnsReconciler) reconcileDelete(ctx context.Context, instance *designatev1beta1.DesignateMdns, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
+	Log := r.GetLogger(ctx)
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
 
 	// Remove finalizer on the Topology CR
 	if ctrlResult, err := topologyv1.EnsureDeletedTopologyRef(
@@ -404,22 +405,25 @@ func (r *DesignateMdnsReconciler) reconcileDelete(ctx context.Context, instance 
 	// We did all the cleanup on the objects we created so we can remove the
 	// finalizer from ourselves to allow the deletion
 	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' delete successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' delete successfully", instance.Name))
 
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateMdnsReconciler) reconcileInit(
+	ctx context.Context,
 	instance *designatev1beta1.DesignateMdns,
 ) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
+	Log := r.GetLogger(ctx)
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance *designatev1beta1.DesignateMdns, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info("Reconciling Service")
+	Log := r.GetLogger(ctx)
+	Log.Info("Reconciling Service")
 
 	// ConfigMap
 	configMapVars := make(map[string]env.Setter)
@@ -456,7 +460,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	//}
 	// run check service secrets - end
 	if len(instance.Spec.CustomServiceConfigSecrets) > 0 {
-		r.Log.Info("CustomServiceConfigSecrets is not supported.")
+		Log.Info("CustomServiceConfigSecrets is not supported.")
 	}
 
 	//
@@ -579,7 +583,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
-	inputHash, hashChanged, err := r.createHashOfInputHashes(instance, configMapVars)
+	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -591,7 +595,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	} else if hashChanged {
 		// Hash changed and instance status should be updated (which will be done by main defer func),
 		// so we need to return and reconcile again
-		r.Log.Info("Detected configuration hash change, re-reconciling")
+		Log.Info("Detected configuration hash change, re-reconciling")
 		return ctrl.Result{}, nil
 	}
 
@@ -609,7 +613,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 		nad, err := nad.GetNADWithName(ctx, helper, netAtt, instance.Namespace)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
-				r.Log.Info(fmt.Sprintf("network-attachment-definition %s not found", netAtt))
+				Log.Info(fmt.Sprintf("network-attachment-definition %s not found", netAtt))
 				instance.Status.Conditions.Set(condition.FalseCondition(
 					condition.NetworkAttachmentsReadyCondition,
 					condition.RequestedReason,
@@ -639,7 +643,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	}
 
 	// Handle service init
-	ctrlResult, err = r.reconcileInit(instance)
+	ctrlResult, err = r.reconcileInit(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -647,7 +651,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(instance)
+	ctrlResult, err = r.reconcileUpdate(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -655,7 +659,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	}
 
 	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(instance)
+	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -766,29 +770,31 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 		instance.Status.Conditions.MarkTrue(
 			condition.ReadyCondition, condition.ReadyMessage)
 	} else {
-		r.Log.Info("Not all conditions are ready for Mdns controller")
+		Log.Info("Not all conditions are ready for Mdns controller")
 	}
-	r.Log.Info("Reconciled Service successfully")
+	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateMdnsReconciler) reconcileUpdate(instance *designatev1beta1.DesignateMdns) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
+func (r *DesignateMdnsReconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateMdns) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
 
 	// TODO: should have minor update tasks if required
 	// - delete dbsync hash from status to rerun it?
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' update successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' update successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateMdnsReconciler) reconcileUpgrade(instance *designatev1beta1.DesignateMdns) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
+func (r *DesignateMdnsReconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateMdns) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
 
 	// TODO: should have major version upgrade tasks
 	// -delete dbsync hash from status to rerun it?
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' upgrade successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' upgrade successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
@@ -865,9 +871,11 @@ func (r *DesignateMdnsReconciler) generateServiceConfigMaps(
 //
 // returns the hash, whether the hash changed (as a bool) and any error
 func (r *DesignateMdnsReconciler) createHashOfInputHashes(
+	ctx context.Context,
 	instance *designatev1beta1.DesignateMdns,
 	envVars map[string]env.Setter,
 ) (string, bool, error) {
+	Log := r.GetLogger(ctx)
 	var hashMap map[string]string
 	changed := false
 
@@ -878,7 +886,7 @@ func (r *DesignateMdnsReconciler) createHashOfInputHashes(
 	}
 	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, hash); changed {
 		instance.Status.Hash = hashMap
-		r.Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
+		Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
 	}
 	return hash, changed, nil
 }

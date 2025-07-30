@@ -399,7 +399,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 func (r *DesignateAPIReconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
 
-	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateAPI")
+	Log := r.GetLogger(ctx)
 
 	allWatchFields := []string{
 		passwordSecretField,
@@ -417,12 +417,12 @@ func (r *DesignateAPIReconciler) findObjectsForSrc(ctx context.Context, src clie
 		}
 		err := r.Client.List(context.TODO(), crList, listOps)
 		if err != nil {
-			l.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
+			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
 			return requests
 		}
 
 		for _, item := range crList.Items {
-			l.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
+			Log.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
 
 			requests = append(requests,
 				reconcile.Request{
@@ -441,7 +441,7 @@ func (r *DesignateAPIReconciler) findObjectsForSrc(ctx context.Context, src clie
 func (r *DesignateAPIReconciler) findObjectForSrc(ctx context.Context, src client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
 
-	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateAPI")
+	Log := r.GetLogger(ctx)
 
 	crList := &designatev1beta1.DesignateAPIList{}
 	listOps := &client.ListOptions{
@@ -449,12 +449,12 @@ func (r *DesignateAPIReconciler) findObjectForSrc(ctx context.Context, src clien
 	}
 	err := r.Client.List(ctx, crList, listOps)
 	if err != nil {
-		l.Error(err, fmt.Sprintf("listing %s for namespace: %s", crList.GroupVersionKind().Kind, src.GetNamespace()))
+		Log.Error(err, fmt.Sprintf("listing %s for namespace: %s", crList.GroupVersionKind().Kind, src.GetNamespace()))
 		return requests
 	}
 
 	for _, item := range crList.Items {
-		l.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
+		Log.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
 
 		requests = append(requests,
 			reconcile.Request{
