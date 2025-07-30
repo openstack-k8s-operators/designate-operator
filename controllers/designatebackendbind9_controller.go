@@ -64,9 +64,9 @@ func (r *DesignateBackendbind9Reconciler) GetKClient() kubernetes.Interface {
 	return r.Kclient
 }
 
-// GetLogger -
-func (r *DesignateBackendbind9Reconciler) GetLogger() logr.Logger {
-	return r.Log
+// GetLogger returns a logger object with a prefix of "controller.name" and additional controller context fields
+func (r *DesignateBackendbind9Reconciler) GetLogger(ctx context.Context) logr.Logger {
+	return log.FromContext(ctx).WithName("Controllers").WithName("DesignateBackendbind9")
 }
 
 // GetScheme -
@@ -78,7 +78,6 @@ func (r *DesignateBackendbind9Reconciler) GetScheme() *runtime.Scheme {
 type DesignateBackendbind9Reconciler struct {
 	client.Client
 	Kclient kubernetes.Interface
-	Log     logr.Logger
 	Scheme  *runtime.Scheme
 }
 
@@ -100,7 +99,7 @@ type DesignateBackendbind9Reconciler struct {
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
-	_ = r.Log.WithValues("designatebackendbind9", req.NamespacedName)
+	Log := r.GetLogger(ctx)
 
 	// Fetch the DesignateBackendbind9 instance
 	instance := &designatev1beta1.DesignateBackendbind9{}
@@ -121,7 +120,7 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 		r.Client,
 		r.Kclient,
 		r.Scheme,
-		r.Log,
+		Log,
 	)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -143,7 +142,7 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 	defer func() {
 		// Don't update the status, if Reconciler Panics
 		if rc := recover(); rc != nil {
-			r.Log.Info(fmt.Sprintf("Panic during reconcile %v\n", rc))
+			Log.Info(fmt.Sprintf("Panic during reconcile %v\n", rc))
 			panic(rc)
 		}
 		condition.RestoreLastTransitionTimes(
@@ -201,7 +200,8 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DesignateBackendbind9Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	Log := r.GetLogger(ctx)
 	// Watch for changes to any CustomServiceConfigSecrets. Global secrets
 	// (e.g. TransportURLSecret) are handled by the top designate controller.
 	// svcSecretFn := func(_ context.Context, o client.Object) []reconcile.Request {
@@ -215,7 +215,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 	// 		client.InNamespace(namespace),
 	// 	}
 	// 	if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
-	// 		r.Log.Error(err, "Unable to retrieve Backendbind9 CRs %v")
+	// 		Log.Error(err, "Unable to retrieve Backendbind9 CRs %v")
 	// 		return nil
 	// 	}
 	// 	for _, cr := range apis.Items {
@@ -225,7 +225,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 	// 					Namespace: namespace,
 	// 					Name:      cr.Name,
 	// 				}
-	// 				r.Log.Info(fmt.Sprintf("Secret %s is used by Designate CR %s", secretName, cr.Name))
+	// 				Log.Info(fmt.Sprintf("Secret %s is used by Designate CR %s", secretName, cr.Name))
 	// 				result = append(result, reconcile.Request{NamespacedName: name})
 	// 			}
 	// 		}
@@ -246,7 +246,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 			client.InNamespace(o.GetNamespace()),
 		}
 		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
-			r.Log.Error(err, "Unable to retrieve Backendbind9 CRs %v")
+			Log.Error(err, "Unable to retrieve Backendbind9 CRs %v")
 			return nil
 		}
 
@@ -262,7 +262,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 						Namespace: o.GetNamespace(),
 						Name:      cr.Name,
 					}
-					r.Log.Info(fmt.Sprintf("ConfigMap object %s and CR %s marked with label: %s", o.GetName(), cr.Name, l))
+					Log.Info(fmt.Sprintf("ConfigMap object %s and CR %s marked with label: %s", o.GetName(), cr.Name, l))
 					result = append(result, reconcile.Request{NamespacedName: name})
 				}
 			}
@@ -301,7 +301,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(mgr ctrl.Manager) err
 func (r *DesignateBackendbind9Reconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
 
-	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateBackendbind9")
+	Log := r.GetLogger(ctx)
 
 	allWatchFields := []string{
 		topologyField,
@@ -315,12 +315,12 @@ func (r *DesignateBackendbind9Reconciler) findObjectsForSrc(ctx context.Context,
 		}
 		err := r.Client.List(context.TODO(), crList, listOps)
 		if err != nil {
-			l.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
+			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
 			return requests
 		}
 
 		for _, item := range crList.Items {
-			l.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
+			Log.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
 
 			requests = append(requests,
 				reconcile.Request{
@@ -336,7 +336,8 @@ func (r *DesignateBackendbind9Reconciler) findObjectsForSrc(ctx context.Context,
 }
 
 func (r *DesignateBackendbind9Reconciler) reconcileDelete(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
+	Log := r.GetLogger(ctx)
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' delete", instance.Name))
 
 	// Remove finalizer on the Topology CR
 	if ctrlResult, err := topologyv1.EnsureDeletedTopologyRef(
@@ -350,22 +351,25 @@ func (r *DesignateBackendbind9Reconciler) reconcileDelete(ctx context.Context, i
 	// We did all the cleanup on the objects we created so we can remove the
 	// finalizer from ourselves to allow the deletion
 	controllerutil.RemoveFinalizer(instance, helper.GetFinalizer())
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' delete successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' delete successfully", instance.Name))
 
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateBackendbind9Reconciler) reconcileInit(
+	ctx context.Context,
 	instance *designatev1beta1.DesignateBackendbind9,
 ) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
+	Log := r.GetLogger(ctx)
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' init", instance.Name))
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' init successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
 func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9, helper *helper.Helper) (ctrl.Result, error) {
-	r.Log.Info("Reconciling Service")
+	Log := r.GetLogger(ctx)
+	Log.Info("Reconciling Service")
 
 	// ConfigMap
 	configMapVars := make(map[string]env.Setter)
@@ -384,7 +388,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	//}
 	// run check service secrets - end
 	if len(instance.Spec.CustomServiceConfigSecrets) > 0 {
-		r.Log.Info("warning: CustomServiceConfigSecrets is not supported.")
+		Log.Info("warning: CustomServiceConfigSecrets is not supported.")
 	}
 
 	//
@@ -455,7 +459,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
-	inputHash, hashChanged, err := r.createHashOfInputHashes(instance, configMapVars)
+	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.ServiceConfigReadyCondition,
@@ -496,7 +500,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		nad, err := nad.GetNADWithName(ctx, helper, netAtt, instance.Namespace)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
-				r.Log.Info(fmt.Sprintf("network-attachment-definition %s not found", netAtt))
+				Log.Info(fmt.Sprintf("network-attachment-definition %s not found", netAtt))
 				instance.Status.Conditions.Set(condition.FalseCondition(
 					condition.NetworkAttachmentsReadyCondition,
 					condition.RequestedReason,
@@ -526,7 +530,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	}
 
 	// Handle service init
-	ctrlResult, err := r.reconcileInit(instance)
+	ctrlResult, err := r.reconcileInit(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -534,7 +538,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	}
 
 	// Handle service update
-	ctrlResult, err = r.reconcileUpdate(instance)
+	ctrlResult, err = r.reconcileUpdate(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -542,7 +546,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	}
 
 	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(instance)
+	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
 	if err != nil {
 		return ctrlResult, err
 	} else if (ctrlResult != ctrl.Result{}) {
@@ -661,27 +665,29 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		instance.Status.Conditions.MarkTrue(
 			condition.ReadyCondition, condition.ReadyMessage)
 	}
-	r.Log.Info("Reconciled Service successfully")
+	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateBackendbind9Reconciler) reconcileUpdate(instance *designatev1beta1.DesignateBackendbind9) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
+func (r *DesignateBackendbind9Reconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
 
 	// TODO: should have minor update tasks if required
 	// - delete dbsync hash from status to rerun it?
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' update successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' update successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
-func (r *DesignateBackendbind9Reconciler) reconcileUpgrade(instance *designatev1beta1.DesignateBackendbind9) (ctrl.Result, error) {
-	r.Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
+func (r *DesignateBackendbind9Reconciler) reconcileUpgrade(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+	Log.Info(fmt.Sprintf("Reconciling Service '%s' upgrade", instance.Name))
 
 	// TODO: should have major version upgrade tasks
 	// -delete dbsync hash from status to rerun it?
 
-	r.Log.Info(fmt.Sprintf("Reconciled Service '%s' upgrade successfully", instance.Name))
+	Log.Info(fmt.Sprintf("Reconciled Service '%s' upgrade successfully", instance.Name))
 	return ctrl.Result{}, nil
 }
 
@@ -693,6 +699,7 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 	envVars *map[string]env.Setter,
 	serviceLabels map[string]string,
 ) error {
+	Log := r.GetLogger(ctx)
 	//
 	// create custom Configmap for designate-backendbind9-specific config input
 	// - %-config-data configmap holding custom config for the service's designate.conf
@@ -712,7 +719,7 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 		nad, err := nad.GetNADWithName(ctx, h, netAtt, instance.Namespace)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
-				r.Log.Info(fmt.Sprintf("network-attachment-definition %s not found, cannot configure pod", netAtt))
+				Log.Info(fmt.Sprintf("network-attachment-definition %s not found, cannot configure pod", netAtt))
 				instance.Status.Conditions.Set(condition.FalseCondition(
 					condition.NetworkAttachmentsReadyCondition,
 					condition.RequestedReason,
@@ -822,9 +829,11 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 //
 // returns the hash, whether the hash changed (as a bool) and any error
 func (r *DesignateBackendbind9Reconciler) createHashOfInputHashes(
+	ctx context.Context,
 	instance *designatev1beta1.DesignateBackendbind9,
 	envVars map[string]env.Setter,
 ) (string, bool, error) {
+	Log := r.GetLogger(ctx)
 	var hashMap map[string]string
 	changed := false
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
@@ -834,7 +843,7 @@ func (r *DesignateBackendbind9Reconciler) createHashOfInputHashes(
 	}
 	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, hash); changed {
 		instance.Status.Hash = hashMap
-		r.Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
+		Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
 	}
 	return hash, changed, nil
 }
@@ -846,10 +855,11 @@ func (r *DesignateBackendbind9Reconciler) hasMapChanged(
 	mapName string,
 	hashKey string,
 ) (bool, error) {
+	Log := r.GetLogger(ctx)
 	configMap := &corev1.ConfigMap{}
 	err := h.GetClient().Get(ctx, types.NamespacedName{Name: mapName, Namespace: instance.GetNamespace()}, configMap)
 	if err != nil {
-		r.GetLogger().Error(err, fmt.Sprintf("Unable to check config map %s for changes", mapName))
+		Log.Error(err, fmt.Sprintf("Unable to check config map %s for changes", mapName))
 		return false, err
 	}
 	hashValue, err := configmap.Hash(configMap)
@@ -867,10 +877,11 @@ func (r *DesignateBackendbind9Reconciler) hasSecretChanged(
 	secretName string,
 	hashKey string,
 ) (bool, error) {
+	Log := r.GetLogger(ctx)
 	found := &corev1.Secret{}
 	err := h.GetClient().Get(ctx, types.NamespacedName{Name: secretName, Namespace: instance.GetNamespace()}, found)
 	if err != nil {
-		r.GetLogger().Error(err, fmt.Sprintf("Unable to check secret %s for changes", secretName))
+		Log.Error(err, fmt.Sprintf("Unable to check secret %s for changes", secretName))
 		return false, err
 	}
 	hashValue, err := secret.Hash(found)

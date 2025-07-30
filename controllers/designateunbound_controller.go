@@ -58,8 +58,12 @@ import (
 type UnboundReconciler struct {
 	client.Client
 	Kclient kubernetes.Interface
-	Log     logr.Logger
 	Scheme  *runtime.Scheme
+}
+
+// GetLogger returns a logger object with a prefix of "controller.name" and additional controller context fields
+func (r *UnboundReconciler) GetLogger(ctx context.Context) logr.Logger {
+	return log.FromContext(ctx).WithName("Controllers").WithName("DesignateUnbound")
 }
 
 type StubZoneTmplRec struct {
@@ -83,7 +87,7 @@ func min(i int, j int) int {
 
 // Reconcile implementation for designate's Unbound resolver
 func (r *UnboundReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
-	_ = r.Log.WithValues("unbound", req.NamespacedName)
+	Log := r.GetLogger(ctx)
 
 	instance := &designatev1.DesignateUnbound{}
 	err := r.Client.Get(ctx, req.NamespacedName, instance)
@@ -103,7 +107,7 @@ func (r *UnboundReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 		r.Client,
 		r.Kclient,
 		r.Scheme,
-		r.Log,
+		Log,
 	)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -125,7 +129,7 @@ func (r *UnboundReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	defer func() {
 		// Don't update the status, if Reconciler Panics
 		if rc := recover(); rc != nil {
-			r.Log.Info(fmt.Sprintf("Panic during reconcile %v\n", rc))
+			Log.Info(fmt.Sprintf("Panic during reconcile %v\n", rc))
 			panic(rc)
 		}
 		condition.RestoreLastTransitionTimes(
@@ -210,7 +214,7 @@ func (r *UnboundReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *UnboundReconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
 	requests := []reconcile.Request{}
 
-	l := log.FromContext(ctx).WithName("Controllers").WithName("DesignateMdns")
+	Log := r.GetLogger(ctx)
 
 	allWatchFields := []string{
 		topologyField,
@@ -224,12 +228,12 @@ func (r *UnboundReconciler) findObjectsForSrc(ctx context.Context, src client.Ob
 		}
 		err := r.Client.List(context.TODO(), crList, listOps)
 		if err != nil {
-			l.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
+			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
 			return requests
 		}
 
 		for _, item := range crList.Items {
-			l.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
+			Log.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
 
 			requests = append(requests,
 				reconcile.Request{
@@ -275,6 +279,7 @@ func (r *UnboundReconciler) reconcileUpgrade(instance *designatev1.DesignateUnbo
 }
 
 func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
 	util.LogForObject(helper, "Reconciling Service", instance)
 
 	serviceLabels := map[string]string{
@@ -331,7 +336,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
-	inputHash, hashChanged, err := r.createHashOfInputHashes(instance, configMapVars)
+	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
 	if err != nil {
 		return ctrl.Result{}, err
 	} else if hashChanged {
@@ -347,7 +352,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		nad, err := nad.GetNADWithName(ctx, helper, networkAttachment, instance.Namespace)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
-				r.Log.Info(fmt.Sprintf("network-attachment-definition %s not found", networkAttachment))
+				Log.Info(fmt.Sprintf("network-attachment-definition %s not found", networkAttachment))
 				instance.Status.Conditions.Set(condition.FalseCondition(
 					condition.NetworkAttachmentsReadyCondition,
 					condition.RequestedReason,
@@ -420,7 +425,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		time.Duration(5)*time.Second,
 	)
 
-	r.Log.Info("deploying the unbound pod")
+	Log.Info("deploying the unbound pod")
 
 	ctrlResult, err = statefulSet.CreateOrPatch(ctx, helper)
 	if err != nil {
@@ -444,7 +449,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	if deploy.Generation == deploy.Status.ObservedGeneration {
 		instance.Status.ReadyCount = deploy.Status.ReadyReplicas
 
-		r.Log.Info("verifying network attachments")
+		Log.Info("verifying network attachments")
 		// verify if network attachment matches expectations
 		networkReady := false
 		networkAttachmentStatus := map[string][]string{}
@@ -501,7 +506,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		instance.Status.Conditions.MarkTrue(
 			condition.ReadyCondition, condition.ReadyMessage)
 	}
-	r.Log.Info("Reconciled Service successfully")
+	Log.Info("Reconciled Service successfully")
 	return r.onIPChange()
 }
 
@@ -536,7 +541,8 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	h *helper.Helper,
 	envVars *map[string]env.Setter,
 ) error {
-	r.Log.Info("Generating service config map")
+	Log := r.GetLogger(ctx)
+	Log.Info("Generating service config map")
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designateunbound.Component), map[string]string{})
 	customData := map[string]string{common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig}
 	for key, data := range instance.Spec.DefaultConfigOverwrite {
@@ -551,7 +557,7 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 		err := h.GetClient().Get(ctx, types.NamespacedName{Name: designate.BindPredIPConfigMap, Namespace: instance.GetNamespace()}, bindIPMap)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
-				r.Log.Info("nameserver IPs not available, unable to complete unbound configuration at this time")
+				Log.Info("nameserver IPs not available, unable to complete unbound configuration at this time")
 			}
 			return err
 		}
@@ -586,18 +592,20 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	err := secret.EnsureSecrets(ctx, h, instance, cms, envVars)
 
 	if err != nil {
-		r.Log.Error(err, "uanble to process config map")
+		Log.Error(err, "uanble to process config map")
 		return err
 	}
-	r.Log.Info("Service config map generated")
+	Log.Info("Service config map generated")
 	return nil
 }
 
 func (r *UnboundReconciler) createHashOfInputHashes(
+	ctx context.Context,
 	instance *designatev1.DesignateUnbound,
 	envVars map[string]env.Setter,
 ) (string, bool, error) {
-	r.Log.Info("Creating hash of inputs")
+	Log := r.GetLogger(ctx)
+	Log.Info("Creating hash of inputs")
 	var hashMap map[string]string
 	changed := false
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
@@ -607,8 +615,8 @@ func (r *UnboundReconciler) createHashOfInputHashes(
 	}
 	if hashMap, changed = util.SetHash(instance.Status.Hash, common.InputHashName, hash); changed {
 		instance.Status.Hash = hashMap
-		r.Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
+		Log.Info(fmt.Sprintf("Input maps hash %s - %s", common.InputHashName, hash))
 	}
-	r.Log.Info("Input hash created/updated")
+	Log.Info("Input hash created/updated")
 	return hash, changed, nil
 }

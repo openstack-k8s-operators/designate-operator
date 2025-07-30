@@ -192,7 +192,7 @@ func main() {
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Kclient: kclient,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(context.Background(), mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateMdns")
 		os.Exit(1)
 	}
@@ -202,8 +202,7 @@ func main() {
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("DesignateBackendbind9"),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(context.Background(), mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateBackendbind9")
 		os.Exit(1)
 	}
@@ -213,7 +212,6 @@ func main() {
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
 		Kclient: kclient,
-		Log:     ctrl.Log.WithName("controllers").WithName("DesignateUnbound"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DesignateUnbound")
 		os.Exit(1)
