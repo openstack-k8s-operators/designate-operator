@@ -993,6 +993,92 @@ var _ = Describe("Designate controller", func() {
 			}, timeout, interval).Should(Succeed())
 		})
 	})
+
+	// Quorum Queues Tests
+	When("Designate is created with quorum queues enabled from start", func() {
+		BeforeEach(func() {
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURL(transportURLName))
+			DeferCleanup(k8sClient.Delete, ctx, infra.CreateTransportURLSecret(designateName.Namespace, transportURLSecretName.Name, true))
+			infra.SimulateTransportURLReady(transportURLName)
+			createAndSimulateDB(spec)
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+		})
+
+		It("should configure quorum queues settings in designate.conf", func() {
+			configData := th.GetSecret(
+				types.NamespacedName{
+					Namespace: designateName.Namespace,
+					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
+			Expect(configData).ShouldNot(BeNil())
+			conf := string(configData.Data["designate.conf"])
+
+			Expect(conf).Should(ContainSubstring("rabbit_quorum_queue=true"))
+			Expect(conf).Should(ContainSubstring("rabbit_transient_quorum_queue=true"))
+			Expect(conf).Should(ContainSubstring("amqp_durable_queues=true"))
+		})
+	})
+
+	When("Designate starts with quorum queues disabled then enables them", func() {
+		BeforeEach(func() {
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURL(transportURLName))
+			DeferCleanup(k8sClient.Delete, ctx, infra.CreateTransportURLSecret(designateName.Namespace, transportURLSecretName.Name, false))
+			infra.SimulateTransportURLReady(transportURLName)
+			createAndSimulateDB(spec)
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+		})
+
+		It("should update config when quorum queues are enabled", func() {
+			// Initially, quorum queues should be disabled
+			configData := th.GetSecret(
+				types.NamespacedName{
+					Namespace: designateName.Namespace,
+					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
+			Expect(configData).ShouldNot(BeNil())
+			conf := string(configData.Data["designate.conf"])
+
+			Expect(conf).ShouldNot(ContainSubstring("rabbit_quorum_queue=true"))
+			Expect(conf).ShouldNot(ContainSubstring("rabbit_transient_quorum_queue=true"))
+			Expect(conf).ShouldNot(ContainSubstring("amqp_durable_queues=true"))
+
+			// Update the secret to enable quorum queues
+			Eventually(func(g Gomega) {
+				secret := &corev1.Secret{}
+				g.Expect(k8sClient.Get(ctx, transportURLSecretName, secret)).Should(Succeed())
+				secret.Data["quorumqueues"] = []byte("true")
+				g.Expect(k8sClient.Update(ctx, secret)).Should(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			// Verify the configuration is updated with quorum queue settings
+			Eventually(func(g Gomega) {
+				configData := th.GetSecret(
+					types.NamespacedName{
+						Namespace: designateName.Namespace,
+						Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
+				g.Expect(configData).ShouldNot(BeNil())
+				conf := string(configData.Data["designate.conf"])
+
+				g.Expect(conf).Should(ContainSubstring("rabbit_quorum_queue=true"))
+				g.Expect(conf).Should(ContainSubstring("rabbit_transient_quorum_queue=true"))
+				g.Expect(conf).Should(ContainSubstring("amqp_durable_queues=true"))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
 })
 
 var _ = Describe("Designate webhook validation", func() {
