@@ -78,6 +78,22 @@ func CreateTransportURLSecret(name types.NamespacedName) *corev1.Secret {
 	return secret
 }
 
+func CreateTransportURLSecretWithQuorumQueues(name types.NamespacedName, quorumQueues bool) *corev1.Secret {
+	quorumQueuesStr := "false"
+	if quorumQueues {
+		quorumQueuesStr = "true"
+	}
+	secret := th.CreateSecret(
+		name,
+		map[string][]byte{
+			"transport_url": []byte(fmt.Sprintf("rabbit://%s/", name)),
+			"quorumqueues":  []byte(quorumQueuesStr),
+		},
+	)
+	logger.Info("Created TransportURLSecret with quorum queues", "secret", secret, "quorumQueues", quorumQueues)
+	return secret
+}
+
 func createOwnerSecrets(namespace string) {
 	name := types.NamespacedName{
 		Name:      "designate-scripts",
