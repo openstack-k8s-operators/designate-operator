@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	// MinPasswordSize is the minimum size for generated passwords
 	MinPasswordSize = 25
 )
 
@@ -44,7 +45,7 @@ func genword(length int) (string, error) {
 	return string(password), nil
 }
 
-// Create the rndc key secret
+// CreateRndcKeySecret creates the rndc key secret
 func CreateRndcKeySecret() (string, error) {
 	// Generate random strings
 	key, err := genword(MinPasswordSize)

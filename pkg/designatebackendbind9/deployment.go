@@ -37,11 +37,11 @@ import (
 // certs etc here.
 
 const (
-	// PVCSuffix
+	// PVCSuffix is the suffix used for PVC names
 	PVCSuffix = "-designate-bind"
 )
 
-// Deployment func
+// StatefulSet creates a StatefulSet for the designate backend bind9 service
 func StatefulSet(
 	instance *designatev1beta1.DesignateBackendbind9,
 	configHash string,

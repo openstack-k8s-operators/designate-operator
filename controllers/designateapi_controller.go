@@ -125,7 +125,7 @@ func (r *DesignateAPIReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Fetch the DesignateAPI instance
 	instance := &designatev1beta1.DesignateAPI{}
-	err := r.Client.Get(ctx, req.NamespacedName, instance)
+	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -293,8 +293,8 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 	}
 
 	svcSecretFn := func(ctx context.Context, o client.Object) []reconcile.Request {
-		var namespace string = o.GetNamespace()
-		var secretName string = o.GetName()
+		var namespace = o.GetNamespace()
+		var secretName = o.GetName()
 		result := []reconcile.Request{}
 
 		// get all API CRs
@@ -302,7 +302,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 		listOpts := []client.ListOption{
 			client.InNamespace(namespace),
 		}
-		if err := r.Client.List(ctx, apis, listOpts...); err != nil {
+		if err := r.List(ctx, apis, listOpts...); err != nil {
 			Log.Error(err, "Unable to retrieve API CRs")
 			return nil
 		}
@@ -350,7 +350,7 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 		listOpts := []client.ListOption{
 			client.InNamespace(o.GetNamespace()),
 		}
-		if err := r.Client.List(ctx, designateAPIs, listOpts...); err != nil {
+		if err := r.List(ctx, designateAPIs, listOpts...); err != nil {
 			Log.Error(err, "Unable to retrieve DesignateAPI CRs %v")
 			return nil
 		}
@@ -415,7 +415,7 @@ func (r *DesignateAPIReconciler) findObjectsForSrc(ctx context.Context, src clie
 			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
 			Namespace:     src.GetNamespace(),
 		}
-		err := r.Client.List(context.TODO(), crList, listOps)
+		err := r.List(context.TODO(), crList, listOps)
 		if err != nil {
 			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
 			return requests
@@ -447,7 +447,7 @@ func (r *DesignateAPIReconciler) findObjectForSrc(ctx context.Context, src clien
 	listOps := &client.ListOptions{
 		Namespace: src.GetNamespace(),
 	}
-	err := r.Client.List(ctx, crList, listOps)
+	err := r.List(ctx, crList, listOps)
 	if err != nil {
 		Log.Error(err, fmt.Sprintf("listing %s for namespace: %s", crList.GroupVersionKind().Kind, src.GetNamespace()))
 		return requests
@@ -760,7 +760,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 					condition.TLSInputReadyCondition,
 					condition.RequestedReason,
 					condition.SeverityInfo,
-					fmt.Sprintf(condition.TLSInputReadyWaitingMessage, instance.Spec.TLS.CaBundleSecretName)))
+					condition.TLSInputReadyWaitingMessage, instance.Spec.TLS.CaBundleSecretName))
 				return ctrl.Result{}, nil
 			}
 			instance.Status.Conditions.Set(condition.FalseCondition(
@@ -784,7 +784,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 					condition.TLSInputReadyCondition,
 					condition.RequestedReason,
 					condition.SeverityInfo,
-					fmt.Sprintf(condition.TLSInputReadyWaitingMessage, err.Error())))
+					condition.TLSInputReadyWaitingMessage, err.Error()))
 				return ctrl.Result{}, nil
 			}
 			instance.Status.Conditions.Set(condition.FalseCondition(
@@ -1037,7 +1037,7 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 		if networkReady {
 			instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
 		} else {
-			err := fmt.Errorf("not all pods have interfaces with ips as configured in NetworkAttachments: %s", instance.Spec.NetworkAttachments)
+			err := fmt.Errorf("%w: %s", designate.ErrNetworkAttachmentConfig, instance.Spec.NetworkAttachments)
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.NetworkAttachmentsReadyCondition,
 				condition.ErrorReason,
