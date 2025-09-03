@@ -65,6 +65,7 @@ spec:
     tls:
       caBundleSecretName: combined-ca-bundle
   designateUnbound:
+    replicas: 1
     stubZones:
       - name: foobar.com
         options: {}

@@ -527,10 +527,10 @@ func stubZoneDefaults(values map[string]string) map[string]string {
 		values = make(map[string]string)
 	}
 	if _, ok := values["stub-prime"]; !ok {
-		values["stub-prime"] = "true"
+		values["stub-prime"] = "yes"
 	}
 	if _, ok := values["stub-first"]; !ok {
-		values["stub-first"] = "true"
+		values["stub-first"] = "yes"
 	}
 	return values
 }
