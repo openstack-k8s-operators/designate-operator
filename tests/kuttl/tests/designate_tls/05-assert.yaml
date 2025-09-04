@@ -249,6 +249,16 @@ metadata:
     service: designate
 ---
 apiVersion: v1
+kind: Pod
+metadata:
+  name: designate-unbound-0
+  labels:
+    component: designate-unbound
+status:
+  phase: Running
+
+---
+apiVersion: v1
 kind: Service
 metadata:
   labels:
