@@ -1409,6 +1409,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 		return err
 	}
 	templateParameters["TransportURL"] = string(transportURLSecret.Data["transport_url"])
+	templateParameters["QuorumQueues"] = string(transportURLSecret.Data["quorumqueues"]) == "true"
 
 	adminPasswordSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Spec.Secret, instance.Namespace)
 	if err != nil {
