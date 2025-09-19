@@ -80,11 +80,13 @@ func getSecret(
 	secret, hash, err := oko_secret.GetSecret(ctx, h, secretName, namespace)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
+			// Since service secrets should have been manually created by the user and referenced in the spec,
+			// we treat this as a warning because it means that the service will not be able to start.
 			h.GetLogger().Info(fmt.Sprintf("Secret %s not found", secretName))
 			conditions.Set(condition.FalseCondition(
 				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
+				condition.ErrorReason,
+				condition.SeverityWarning,
 				condition.InputReadyWaitingMessage))
 			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
 		}
@@ -1392,11 +1394,14 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	transportURLSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Status.TransportURLSecret, instance.Namespace)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
+			// Since the TransportURL secret should have been automatically created by the operator,
+			// but if reconciliation reaches this point and the secret is somehow missing, we treat
+			// this as a warning because ithat the service will not be able to start.
 			Log.Info(fmt.Sprintf("TransportURL secret %s not found", instance.Status.TransportURLSecret))
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
+				condition.ErrorReason,
+				condition.SeverityWarning,
 				condition.InputReadyWaitingMessage))
 			return nil
 		}
@@ -1414,11 +1419,13 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	adminPasswordSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Spec.Secret, instance.Namespace)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
+			// Since the service secret should have been manually created by the user and referenced in the spec,
+			// we treat this as a warning because it means that the service will not be able to start.
 			Log.Info(fmt.Sprintf("AdminPassword secret %s not found", instance.Spec.Secret))
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
+				condition.ErrorReason,
+				condition.SeverityWarning,
 				condition.InputReadyWaitingMessage))
 			return nil
 		}
