@@ -108,7 +108,7 @@ func (r *DesignateWorkerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// Fetch the DesignateWorker instance
 	instance := &designatev1beta1.DesignateWorker{}
-	err := r.Client.Get(ctx, req.NamespacedName, instance)
+	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -248,8 +248,8 @@ func (r *DesignateWorkerReconciler) SetupWithManager(ctx context.Context, mgr ct
 	}
 
 	svcSecretFn := func(_ context.Context, o client.Object) []reconcile.Request {
-		var namespace string = o.GetNamespace()
-		var secretName string = o.GetName()
+		var namespace = o.GetNamespace()
+		var secretName = o.GetName()
 		result := []reconcile.Request{}
 
 		// get all Worker CRs
@@ -257,7 +257,7 @@ func (r *DesignateWorkerReconciler) SetupWithManager(ctx context.Context, mgr ct
 		listOpts := []client.ListOption{
 			client.InNamespace(namespace),
 		}
-		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
+		if err := r.List(context.Background(), apis, listOpts...); err != nil {
 			Log.Error(err, "Unable to retrieve Worker CRs %v")
 			return nil
 		}
@@ -301,7 +301,7 @@ func (r *DesignateWorkerReconciler) SetupWithManager(ctx context.Context, mgr ct
 		listOpts := []client.ListOption{
 			client.InNamespace(o.GetNamespace()),
 		}
-		if err := r.Client.List(context.Background(), apis, listOpts...); err != nil {
+		if err := r.List(context.Background(), apis, listOpts...); err != nil {
 			Log.Error(err, "Unable to retrieve Worker CRs %v")
 			return nil
 		}
@@ -367,7 +367,7 @@ func (r *DesignateWorkerReconciler) findObjectsForSrc(ctx context.Context, src c
 			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
 			Namespace:     src.GetNamespace(),
 		}
-		err := r.Client.List(context.TODO(), crList, listOps)
+		err := r.List(context.TODO(), crList, listOps)
 		if err != nil {
 			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
 			return requests
@@ -509,7 +509,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 					condition.TLSInputReadyCondition,
 					condition.RequestedReason,
 					condition.SeverityInfo,
-					fmt.Sprintf(condition.TLSInputReadyWaitingMessage, instance.Spec.TLS.CaBundleSecretName)))
+					condition.TLSInputReadyWaitingMessage, instance.Spec.TLS.CaBundleSecretName))
 				return ctrl.Result{}, nil
 			}
 			instance.Status.Conditions.Set(condition.FalseCondition(
@@ -533,7 +533,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	//
 
 	serviceLabels := map[string]string{
-		common.AppSelector:       instance.ObjectMeta.Name,
+		common.AppSelector:       instance.Name,
 		common.ComponentSelector: designateworker.Component,
 	}
 
@@ -714,7 +714,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 		if networkReady {
 			instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
 		} else {
-			err := fmt.Errorf("not all pods have interfaces with ips as configured in NetworkAttachments: %s", instance.Spec.NetworkAttachments)
+			err := fmt.Errorf("%w: %s", designate.ErrNetworkAttachmentConfig, instance.Spec.NetworkAttachments)
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.NetworkAttachmentsReadyCondition,
 				condition.ErrorReason,
@@ -788,7 +788,7 @@ func (r *DesignateWorkerReconciler) generateServiceConfigMaps(
 	// - %-config-data configmap holding custom config for the service's designate.conf
 	//
 
-	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.Name), map[string]string{})
 
 	db, err := mariadbv1.GetDatabaseByNameAndAccount(ctx, h, designate.DatabaseName, instance.Spec.DatabaseAccount, instance.Namespace)
 	if err != nil {

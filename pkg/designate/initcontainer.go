@@ -31,6 +31,7 @@ type APIDetails struct {
 	Privileged           bool
 }
 
+// InitContainerDetails contains configuration for init containers
 type InitContainerDetails struct {
 	ContainerImage string
 	VolumeMounts   []corev1.VolumeMount
@@ -42,6 +43,7 @@ const (
 	InitContainerCommand = "/usr/local/bin/container-scripts/init.sh"
 )
 
+// SimpleInitContainer creates a simple init container with the provided details
 func SimpleInitContainer(init InitContainerDetails) corev1.Container {
 	runAsUser := int64(0)
 

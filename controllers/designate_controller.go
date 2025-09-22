@@ -181,7 +181,7 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Fetch the Designate instance
 	instance := &designatev1beta1.Designate{}
-	err := r.Client.Get(ctx, req.NamespacedName, instance)
+	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -282,7 +282,7 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 // fields to index to reconcile when change
 const (
 	passwordSecretField     = ".spec.secret"
-	caBundleSecretNameField = ".spec.tls.caBundleSecretName"
+	caBundleSecretNameField = ".spec.tls.caBundleSecretName" // #nosec G101
 	tlsAPIInternalField     = ".spec.tls.api.internal.secretName"
 	tlsAPIPublicField       = ".spec.tls.api.public.secretName"
 	topologyField           = ".spec.topologyRef.Name"
@@ -311,7 +311,7 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		listOpts := []client.ListOption{
 			client.InNamespace(o.GetNamespace()),
 		}
-		if err := r.Client.List(context.Background(), designates, listOpts...); err != nil {
+		if err := r.List(context.Background(), designates, listOpts...); err != nil {
 			Log.Error(err, "Unable to retrieve Designate CRs %v")
 			return nil
 		}
@@ -767,19 +767,19 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	// Fetch allocated ips from Mdns and Bind config maps and store them in allocatedIPs
-	mdnsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+	mdnsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.Name), map[string]string{})
 	mdnsConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.MdnsPredIPConfigMap, mdnsLabels)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	bindLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+	bindLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.Name), map[string]string{})
 	bindConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.BindPredIPConfigMap, bindLabels)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	nsRecordsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.ObjectMeta.Name), map[string]string{})
+	nsRecordsLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.Name), map[string]string{})
 	nsRecords, err := r.getNSRecords(ctx, helper, instance, nsRecordsLabels)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -1361,7 +1361,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 
 	// TLS handling
 	var tlsCfg *tls.Service
-	if instance.Spec.DesignateAPI.TLS.Ca.CaBundleSecretName != "" {
+	if instance.Spec.DesignateAPI.TLS.CaBundleSecretName != "" {
 		tlsCfg = &tls.Service{}
 	}
 
@@ -1444,7 +1444,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	}
 
 	if len(redisIPs) == 0 {
-		err = fmt.Errorf("unable to configure designate deployment without Redis")
+		err = designate.ErrRedisRequired
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.InputReadyCondition,
 			condition.ErrorReason,
@@ -1901,7 +1901,7 @@ func (r *DesignateReconciler) checkDesignateAPIGeneration(
 	listOpts := []client.ListOption{
 		client.InNamespace(instance.Namespace),
 	}
-	if err := r.Client.List(context.Background(), api, listOpts...); err != nil {
+	if err := r.List(context.Background(), api, listOpts...); err != nil {
 		Log.Error(err, "Unable to retrieve DesignateAPI %w")
 		return false, err
 	}
@@ -1922,7 +1922,7 @@ func (r *DesignateReconciler) checkDesignateCentralGeneration(
 	listOpts := []client.ListOption{
 		client.InNamespace(instance.Namespace),
 	}
-	if err := r.Client.List(context.Background(), central, listOpts...); err != nil {
+	if err := r.List(context.Background(), central, listOpts...); err != nil {
 		Log.Error(err, "Unable to retrieve DesignateCentral %w")
 		return false, err
 	}
@@ -1943,7 +1943,7 @@ func (r *DesignateReconciler) checkDesignateWorkerGeneration(
 	listOpts := []client.ListOption{
 		client.InNamespace(instance.Namespace),
 	}
-	if err := r.Client.List(context.Background(), worker, listOpts...); err != nil {
+	if err := r.List(context.Background(), worker, listOpts...); err != nil {
 		Log.Error(err, "Unable to retrieve DesignateWorker %w")
 		return false, err
 	}
@@ -1964,7 +1964,7 @@ func (r *DesignateReconciler) checkDesignateMdnsGeneration(
 	listOpts := []client.ListOption{
 		client.InNamespace(instance.Namespace),
 	}
-	if err := r.Client.List(context.Background(), mdns, listOpts...); err != nil {
+	if err := r.List(context.Background(), mdns, listOpts...); err != nil {
 		Log.Error(err, "Unable to retrieve DesignateWorker %w")
 		return false, err
 	}
@@ -1985,7 +1985,7 @@ func (r *DesignateReconciler) checkDesignateProducerGeneration(
 	listOpts := []client.ListOption{
 		client.InNamespace(instance.Namespace),
 	}
-	if err := r.Client.List(context.Background(), prd, listOpts...); err != nil {
+	if err := r.List(context.Background(), prd, listOpts...); err != nil {
 		Log.Error(err, "Unable to retrieve DesignateProducer %w")
 		return false, err
 	}
@@ -2006,7 +2006,7 @@ func (r *DesignateReconciler) checkDesignateBindGeneration(
 	listOpts := []client.ListOption{
 		client.InNamespace(instance.Namespace),
 	}
-	if err := r.Client.List(context.Background(), prd, listOpts...); err != nil {
+	if err := r.List(context.Background(), prd, listOpts...); err != nil {
 		Log.Error(err, "Unable to retrieve DesignateBind %w")
 		return false, err
 	}
@@ -2027,7 +2027,7 @@ func (r *DesignateReconciler) checkDesignateUnboundGeneration(
 	listOpts := []client.ListOption{
 		client.InNamespace(instance.Namespace),
 	}
-	if err := r.Client.List(context.Background(), prd, listOpts...); err != nil {
+	if err := r.List(context.Background(), prd, listOpts...); err != nil {
 		Log.Error(err, "Unable to retrieve DesignateUnbound %w")
 		return false, err
 	}

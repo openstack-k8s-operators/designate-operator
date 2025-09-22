@@ -66,17 +66,11 @@ func (r *UnboundReconciler) GetLogger(ctx context.Context) logr.Logger {
 	return log.FromContext(ctx).WithName("Controllers").WithName("DesignateUnbound")
 }
 
+// StubZoneTmplRec represents a stub zone template record configuration
 type StubZoneTmplRec struct {
 	Name    string
 	Options map[string]string
 	Servers []string
-}
-
-func min(i int, j int) int {
-	if i < j {
-		return i
-	}
-	return j
 }
 
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds,verbs=get;list;watch;create;update;patch;delete
@@ -90,7 +84,7 @@ func (r *UnboundReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	Log := r.GetLogger(ctx)
 
 	instance := &designatev1.DesignateUnbound{}
-	err := r.Client.Get(ctx, req.NamespacedName, instance)
+	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -226,7 +220,7 @@ func (r *UnboundReconciler) findObjectsForSrc(ctx context.Context, src client.Ob
 			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
 			Namespace:     src.GetNamespace(),
 		}
-		err := r.Client.List(context.TODO(), crList, listOps)
+		err := r.List(context.TODO(), crList, listOps)
 		if err != nil {
 			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
 			return requests
@@ -283,7 +277,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	util.LogForObject(helper, "Reconciling Service", instance)
 
 	serviceLabels := map[string]string{
-		common.AppSelector:       instance.ObjectMeta.Name,
+		common.AppSelector:       instance.Name,
 		common.ComponentSelector: designateunbound.Component,
 	}
 
@@ -472,7 +466,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		if networkReady {
 			instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
 		} else {
-			err := fmt.Errorf("not all pods have interfaces with ips as configured in NetworkAttachments: %s", instance.Spec.NetworkAttachments)
+			err := fmt.Errorf("%w: %s", designate.ErrNetworkAttachmentConfig, instance.Spec.NetworkAttachments)
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.NetworkAttachmentsReadyCondition,
 				condition.ErrorReason,

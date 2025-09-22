@@ -12,6 +12,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package designate contains designate service functionality and configuration.
 package designate
 
 import (
@@ -28,7 +29,7 @@ func GetPredictableIPAM(networkParameters *NetworkParameters) (*NADIpam, error) 
 	endRange := predParams.RangeStart
 	for i := 0; i < BindProvPredictablePoolSize; i++ {
 		if !predParams.CIDR.Contains(endRange) {
-			return nil, fmt.Errorf("predictable IPs: cannot allocate %d IP addresses in %s", BindProvPredictablePoolSize, predParams.CIDR)
+			return nil, fmt.Errorf("%w: %d IP addresses in %s", ErrPredictableIPAllocation, BindProvPredictablePoolSize, predParams.CIDR)
 		}
 		endRange = endRange.Next()
 	}
@@ -36,6 +37,7 @@ func GetPredictableIPAM(networkParameters *NetworkParameters) (*NADIpam, error) 
 	return predParams, nil
 }
 
+// GetNextIP returns the next available IP from the given IPAM parameters
 func GetNextIP(predParams *NADIpam, allocatedIPs map[string]bool) (string, error) {
 	for candidateAddress := predParams.RangeStart; candidateAddress != predParams.RangeEnd; candidateAddress = candidateAddress.Next() {
 		if !allocatedIPs[candidateAddress.String()] {
@@ -43,5 +45,5 @@ func GetNextIP(predParams *NADIpam, allocatedIPs map[string]bool) (string, error
 			return candidateAddress.String(), nil
 		}
 	}
-	return "", fmt.Errorf("predictable IPs: out of available addresses")
+	return "", ErrPredictableIPOutOfAddresses
 }

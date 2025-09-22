@@ -36,26 +36,37 @@ const (
 	// DesignateInternalPort -
 	DesignateInternalPort int32 = 9001
 
+	// DesignateBindKeySecret is the name of the secret containing bind keys
 	DesignateBindKeySecret = "designate-bind-secret"
 
+	// DesignateRndcKey is the key name for RNDC configuration
 	DesignateRndcKey = "rndc-key"
 
+	// MdnsPredIPConfigMap is the name of the ConfigMap containing MDNS predictable IP mappings
 	MdnsPredIPConfigMap = "designate-mdns-ip-map"
 
+	// NsRecordsConfigMap is the name of the ConfigMap containing name server record parameters
 	NsRecordsConfigMap = "designate-ns-records-params"
 
+	// NsRecordsCRContent is the content key for name server records custom resource
 	NsRecordsCRContent = "designate-ns-records"
 
+	// BindPredIPConfigMap is the name of the ConfigMap containing bind predictable IP mappings
 	BindPredIPConfigMap = "designate-bind-ip-map"
 
+	// RndcConfDir is the directory path for RNDC configuration files
 	RndcConfDir = "/etc/designate/rndc-keys"
 
+	// PoolsYamlConfigMap is the name of the ConfigMap containing pools YAML configuration
 	PoolsYamlConfigMap = "designate-pools-yaml-config-map"
 
+	// PoolsYamlPath is the template path for pools YAML configuration
 	PoolsYamlPath = "designatepoolmanager/config/pools.yaml.tmpl"
 
+	// PoolsYamlHash is the hash key for pools YAML configuration
 	PoolsYamlHash = "pools-yaml-hash"
 
+	// PoolsYamlContent is the content key for pools YAML configuration
 	PoolsYamlContent = "pools-yaml-content"
 
 	// BindPredictableIPHash key for status hash
@@ -67,7 +78,7 @@ const (
 	// PredictableIPCommand -
 	PredictableIPCommand = "/usr/local/bin/container-scripts/setipalias.sh"
 
-	// ScriptsTemplate sprintf template for common scripts secret
+	// ScriptsF is the sprintf template for common scripts secret
 	ScriptsF = "%s-scripts"
 
 	// ConfigDataTemplate sprintf template for common config data secret

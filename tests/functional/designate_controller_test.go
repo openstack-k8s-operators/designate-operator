@@ -143,9 +143,9 @@ var _ = Describe("Designate controller", func() {
 
 	BeforeEach(func() {
 		name = fmt.Sprintf("designate-%s", uuid.New().String())
-		bind9ReplicaCount = rand.Intn(5) + 1
-		mdnsReplicaCount = rand.Intn(5) + 1
-		unboundReplicaCount = rand.Intn(5) + 1
+		bind9ReplicaCount = rand.Intn(5) + 1   // #nosec G404
+		mdnsReplicaCount = rand.Intn(5) + 1    // #nosec G404
+		unboundReplicaCount = rand.Intn(5) + 1 // #nosec G404
 		spec = GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount, unboundReplicaCount)
 
 		designateName = types.NamespacedName{
@@ -598,7 +598,7 @@ var _ = Describe("Designate controller", func() {
 			bindConfigMap := th.GetConfigMap(types.NamespacedName{
 				Name:      designate.BindPredIPConfigMap,
 				Namespace: namespace})
-			Expect(len(bindConfigMap.Data)).To(Equal(bind9ReplicaCount))
+			Expect(bindConfigMap.Data).To(HaveLen(bind9ReplicaCount))
 
 			usedIPs := make(map[string]bool)
 			for key, ipAddress := range bindConfigMap.Data {
@@ -617,7 +617,7 @@ var _ = Describe("Designate controller", func() {
 			mdnsConfigMap := th.GetConfigMap(types.NamespacedName{
 				Name:      designate.MdnsPredIPConfigMap,
 				Namespace: namespace})
-			Expect(len(mdnsConfigMap.Data)).To(Equal(mdnsReplicaCount))
+			Expect(mdnsConfigMap.Data).To(HaveLen(mdnsReplicaCount))
 			for key, ipAddress := range mdnsConfigMap.Data {
 				// verify key with mdns_address_N format
 				Expect(key).To(MatchRegexp(`^mdns_address_\d+$`))

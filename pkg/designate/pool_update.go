@@ -12,12 +12,17 @@ import (
 )
 
 const (
-	DesignateConfigVolume  = "designate-config"
-	DesignateConfigMount   = "/etc/designate"
+	// DesignateConfigVolume is the volume name for designate configuration
+	DesignateConfigVolume = "designate-config"
+	// DesignateConfigMount is the mount path for designate configuration
+	DesignateConfigMount = "/etc/designate"
+	// DesignateConfigKeyPath is the path to the designate configuration file
 	DesignateConfigKeyPath = "designate.conf"
+	// DesignatePoolsYamlPath is the path to the designate pools YAML file
 	DesignatePoolsYamlPath = "pools.yaml"
 )
 
+// PoolUpdateJob creates a job for updating designate pools
 func PoolUpdateJob(
 	instance *designatev1beta1.Designate,
 	labels map[string]string,

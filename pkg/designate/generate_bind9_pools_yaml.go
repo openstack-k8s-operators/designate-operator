@@ -11,6 +11,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package designate
 
 import (
@@ -29,6 +30,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 )
 
+// Pool represents a designate pool configuration
 type Pool struct {
 	Name        string                          `yaml:"name"`
 	Description string                          `yaml:"description"`
@@ -45,11 +47,13 @@ type Pool struct {
 // 	Priority int    `yaml:"priority"`
 // }
 
+// Nameserver represents a nameserver configuration
 type Nameserver struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
 }
 
+// Target represents a designate target configuration
 type Target struct {
 	Type        string   `yaml:"type"`
 	Description string   `yaml:"description"`
@@ -57,11 +61,13 @@ type Target struct {
 	Options     Options  `yaml:"options"`
 }
 
+// Master represents a designate master configuration
 type Master struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
 }
 
+// Options represents designate target options
 type Options struct {
 	Host        string `yaml:"host"`
 	Port        int    `yaml:"port"`
@@ -70,12 +76,13 @@ type Options struct {
 	RNDCKeyFile string `yaml:"rndc_key_file"`
 }
 
+// CatalogZone represents a designate catalog zone configuration
 type CatalogZone struct {
 	FQDN    string `yaml:"fqdn"`
 	Refresh int    `yaml:"refresh"`
 }
 
-// We sort all pool resources to get the correct hash every time
+// GeneratePoolsYamlDataAndHash sorts all pool resources to get the correct hash every time
 func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord) (string, string, error) {
 	sort.Slice(nsRecords, func(i, j int) bool {
 		if nsRecords[i].Hostname != nsRecords[j].Hostname {
@@ -156,7 +163,7 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 		return "", "", err
 	}
 	poolsYamlPath := path.Join(opTemplates, PoolsYamlPath)
-	poolsYaml, err := os.ReadFile(poolsYamlPath)
+	poolsYaml, err := os.ReadFile(poolsYamlPath) // #nosec G304
 	if err != nil {
 		return "", "", err
 	}

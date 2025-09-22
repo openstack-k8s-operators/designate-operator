@@ -17,9 +17,23 @@ limitations under the License.
 package designate
 
 import (
+	"errors"
 	"fmt"
 
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+)
+
+// Common static errors for all designate functionality
+var (
+	// Controller errors
+	ErrRedisRequired               = errors.New("unable to configure designate deployment without Redis")
+	ErrNetworkAttachmentConfig     = errors.New("not all pods have interfaces with ips as configured in NetworkAttachments")
+	ErrNetworkAttachmentNotFound   = errors.New("unable to locate network attachment")
+	ErrControlNetworkNotConfigured = errors.New("designate control network attachment not configured, check NetworkAttachments and ControlNetworkName")
+	// Package errors
+	ErrPredictableIPAllocation     = errors.New("predictable IPs: cannot allocate IP addresses")
+	ErrPredictableIPOutOfAddresses = errors.New("predictable IPs: out of available addresses")
+	ErrCannotAllocateIPAddresses   = errors.New("cannot allocate IP addresses")
 )
 
 const (
