@@ -532,7 +532,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	}
 
 	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
-	for i := 0; i < serviceCount; i++ {
+	for i := range serviceCount {
 		svc, err := designate.CreateDNSService(
 			fmt.Sprintf("designate-mdns-%d", i),
 			instance.Namespace,
@@ -850,7 +850,7 @@ func (r *DesignateMdnsReconciler) generateServiceConfigMaps(
 			Type:          util.TemplateTypeConfig,
 			InstanceType:  instance.Kind,
 			CustomData:    customData,
-			ConfigOptions: make(map[string]interface{}),
+			ConfigOptions: make(map[string]any),
 			Labels:        cmLabels,
 		},
 		{

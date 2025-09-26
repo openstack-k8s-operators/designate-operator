@@ -814,7 +814,7 @@ func (r *DesignateWorkerReconciler) generateServiceConfigMaps(
 			Type:          util.TemplateTypeConfig,
 			InstanceType:  instance.Kind,
 			CustomData:    customData,
-			ConfigOptions: make(map[string]interface{}),
+			ConfigOptions: make(map[string]any),
 			Labels:        cmLabels,
 		},
 		{

@@ -105,7 +105,7 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 
 	targets := make([]Target, len(bindIPs))
 	nameservers := make([]Nameserver, len(bindIPs))
-	for i := 0; i < len(bindIPs); i++ {
+	for i := range bindIPs {
 		masters := make([]Master, len(masterHosts))
 		for j, masterHost := range masterHosts {
 			masters[j] = Master{

@@ -92,7 +92,7 @@ func simulateCentralReadyCount(designateName types.NamespacedName, readyCount in
 	}, th.Timeout, th.Interval).Should(Succeed())
 }
 
-func createAndSimulateDB(spec map[string]interface{}) {
+func createAndSimulateDB(spec map[string]any) {
 	DeferCleanup(
 		mariadb.DeleteDBService,
 		mariadb.CreateDBService(
@@ -124,7 +124,7 @@ func createAndSimulateMdns(mdnsName types.NamespacedName) {
 
 var _ = Describe("Designate controller", func() {
 	var name string
-	var spec map[string]interface{}
+	var spec map[string]any
 	var designateName types.NamespacedName
 	var designateAPIName types.NamespacedName
 	var designateCentralName types.NamespacedName
@@ -464,7 +464,7 @@ var _ = Describe("Designate controller", func() {
 	// API Deployment
 	When("Designate is created with nodeSelector", func() {
 		BeforeEach(func() {
-			spec["nodeSelector"] = map[string]interface{}{
+			spec["nodeSelector"] = map[string]any{
 				"foo": "bar",
 			}
 			createAndSimulateKeystone(designateName)
@@ -775,7 +775,7 @@ var _ = Describe("Designate controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// we used to have inconsistent ordering, so generate the pools.yaml 10 times and make sure it is has exactly the same content
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(poolsYamlHash).Should(Equal(newPoolsYamlHash))
@@ -802,7 +802,7 @@ var _ = Describe("Designate controller", func() {
 				Name:      designateTopologies[1].Name,
 				Namespace: designateTopologies[1].Namespace,
 			}
-			spec["topologyRef"] = map[string]interface{}{
+			spec["topologyRef"] = map[string]any{
 				"name": topologyRef.Name,
 			}
 			createAndSimulateKeystone(designateName)
@@ -1096,22 +1096,22 @@ var _ = Describe("Designate webhook validation", func() {
 			spec := GetDefaultDesignateSpec(1, 1, 1)
 			// Reference topology
 			if component != "top-level" {
-				spec[component] = map[string]interface{}{
-					"topologyRef": map[string]interface{}{
+				spec[component] = map[string]any{
+					"topologyRef": map[string]any{
 						"name":      "bar",
 						"namespace": "foo",
 					},
 				}
 			} else {
-				spec["topologyRef"] = map[string]interface{}{
+				spec["topologyRef"] = map[string]any{
 					"name":      "bar",
 					"namespace": "foo",
 				}
 			}
-			raw := map[string]interface{}{
+			raw := map[string]any{
 				"apiVersion": "designate.openstack.org/v1beta1",
 				"kind":       "Designate",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      designateName.Name,
 					"namespace": designateName.Namespace,
 				},

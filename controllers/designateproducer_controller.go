@@ -804,7 +804,7 @@ func (r *DesignateProducerReconciler) generateServiceConfigMaps(
 		"my.cnf":                           db.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
 	}
 
-	templateParameters := map[string]interface{}{}
+	templateParameters := map[string]any{}
 
 	cms := []util.Template{
 		// Custom ConfigMap

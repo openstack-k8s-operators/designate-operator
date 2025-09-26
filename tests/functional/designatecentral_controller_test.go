@@ -34,7 +34,7 @@ import (
 
 var _ = Describe("DesignateCentral controller", func() {
 	var name string
-	var spec map[string]interface{}
+	var spec map[string]any
 	var designateCentralName types.NamespacedName
 	var designateRedisName types.NamespacedName
 	var transportURLSecretName types.NamespacedName

@@ -795,10 +795,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 
 	// Handle Mdns predictable IPs configmap
 	// We cannot have 0 mDNS pods so even though the CRD validation allows 0, don't allow it.
-	mdnsReplicaCount := int(*instance.Spec.DesignateMdns.Replicas)
-	if mdnsReplicaCount < 1 {
-		mdnsReplicaCount = 1
-	}
+	mdnsReplicaCount := max(int(*instance.Spec.DesignateMdns.Replicas), 1)
 	var mdnsNames []string
 	for i := 0; i < mdnsReplicaCount; i++ {
 		mdnsNames = append(mdnsNames, fmt.Sprintf("mdns_address_%d", i))
@@ -826,7 +823,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	// value is a byob case. Something to think about.
 	bindReplicaCount := int(*instance.Spec.DesignateBackendbind9.Replicas)
 	var bindNames []string
-	for i := 0; i < bindReplicaCount; i++ {
+	for i := range bindReplicaCount {
 		bindNames = append(bindNames, fmt.Sprintf("bind_address_%d", i))
 	}
 
@@ -1334,7 +1331,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 		}
 		newKeysMap := make(map[string][]byte)
 
-		for i := 0; i < replicas; i++ {
+		for i := range replicas {
 			keyName := fmt.Sprintf("%s-%v", designate.DesignateRndcKey, i)
 
 			if key, exists := secret.Data[keyName]; exists {
@@ -1379,7 +1376,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 
 	// We only need a minimal 00-config.conf that is only used by db-sync job,
 	// hence only passing the database related parameters
-	templateParameters := map[string]interface{}{
+	templateParameters := map[string]any{
 		"MinimalConfig": true, // This tells the template to generate a minimal config
 		"DatabaseConnection": fmt.Sprintf("mysql+pymysql://%s:%s@%s/%s?read_default_file=/etc/my.cnf",
 			databaseAccount.Spec.UserName,
@@ -1515,7 +1512,7 @@ func (r *DesignateReconciler) createHashOfInputHashes(
 	instance *designatev1beta1.Designate,
 	hashType string,
 	envVars map[string]env.Setter,
-	additionalConfigmaps []interface{},
+	additionalConfigmaps []any,
 ) (string, bool, error) {
 	Log := r.GetLogger(ctx)
 

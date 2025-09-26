@@ -33,7 +33,7 @@ import (
 
 var _ = Describe("DesignateBackendbind9 controller", func() {
 	var name string
-	var spec map[string]interface{}
+	var spec map[string]any
 	var designateBackendbind9Name types.NamespacedName
 	var transportURLSecretName types.NamespacedName
 
