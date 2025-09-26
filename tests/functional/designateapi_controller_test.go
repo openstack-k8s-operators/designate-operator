@@ -36,7 +36,7 @@ import (
 
 var _ = Describe("DesignateAPI controller", func() {
 	var name string
-	var spec map[string]interface{}
+	var spec map[string]any
 	var designateAPIName types.NamespacedName
 	var transportURLSecretName types.NamespacedName
 

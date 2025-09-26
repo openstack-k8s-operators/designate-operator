@@ -76,7 +76,7 @@ func GetNetworkParametersFromNAD(
 	// RangeEnd.
 	networkParameters.ProviderAllocationStart = nadConfig.IPAM.RangeEnd.Next()
 	end := networkParameters.ProviderAllocationStart
-	for i := 0; i < BindProvPredictablePoolSize; i++ {
+	for range BindProvPredictablePoolSize {
 		if !networkParameters.CIDR.Contains(end) {
 			return nil, fmt.Errorf("%w: %d IP addresses in %s", ErrCannotAllocateIPAddresses, BindProvPredictablePoolSize, networkParameters.CIDR)
 		}

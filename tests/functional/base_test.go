@@ -71,7 +71,7 @@ func CreateTransportURLSecret(name types.NamespacedName) *corev1.Secret {
 	secret := th.CreateSecret(
 		name,
 		map[string][]byte{
-			"transport_url": []byte(fmt.Sprintf("rabbit://%s/", name)),
+			"transport_url": fmt.Appendf(nil, "rabbit://%s/", name),
 		},
 	)
 	logger.Info("Created TransportURLSecret", "secret", secret)
@@ -170,8 +170,8 @@ func SimulateKeystoneReady(
 	}, timeout, interval).Should(Succeed())
 }
 
-func GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount int, unboundReplicaCount int) map[string]interface{} {
-	spec := map[string]interface{}{
+func GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount int, unboundReplicaCount int) map[string]any {
+	spec := map[string]any{
 		"databaseInstance":           "test-designate-db-instance",
 		"secret":                     SecretName,
 		"designateNetworkAttachment": "designate-attachement",
@@ -195,12 +195,12 @@ func GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount int, unboundRep
 	return spec
 }
 
-func CreateDesignate(name types.NamespacedName, spec map[string]interface{}) client.Object {
+func CreateDesignate(name types.NamespacedName, spec map[string]any) client.Object {
 
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "designate.openstack.org/v1beta1",
 		"kind":       "Designate",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":      name.Name,
 			"namespace": name.Namespace,
 		},
@@ -234,8 +234,8 @@ func CreateDesignateSecret(namespace string) *corev1.Secret {
 }
 
 // DesignateAPI
-func GetDefaultDesignateAPISpec() map[string]interface{} {
-	return map[string]interface{}{
+func GetDefaultDesignateAPISpec() map[string]any {
+	return map[string]any{
 		"databaseHostname":           "hostname-for-designate-api",
 		"databaseInstance":           "test-designate-db-instance",
 		"secret":                     SecretName,
@@ -245,8 +245,8 @@ func GetDefaultDesignateAPISpec() map[string]interface{} {
 	}
 }
 
-func CreateDesignateAPI(name types.NamespacedName, spec map[string]interface{}) client.Object {
-	ownerReferences := []map[string]interface{}{{
+func CreateDesignateAPI(name types.NamespacedName, spec map[string]any) client.Object {
+	ownerReferences := []map[string]any{{
 		"apiVersion":         "designate.openstack.org/v1beta1",
 		"blockOwnerDeletion": true,
 		"controller":         true,
@@ -254,10 +254,10 @@ func CreateDesignateAPI(name types.NamespacedName, spec map[string]interface{}) 
 		"name":               "designate",
 		"uid":                uuid.New().String(),
 	}}
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "designate.openstack.org/v1beta1",
 		"kind":       "DesignateAPI",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":            name.Name,
 			"namespace":       name.Namespace,
 			"ownerReferences": ownerReferences,
@@ -314,8 +314,8 @@ func SimulateDesignateAPIReady(name types.NamespacedName) {
 }
 
 // DesignateBackendbind9
-func GetDefaultDesignateBackendbind9Spec() map[string]interface{} {
-	return map[string]interface{}{
+func GetDefaultDesignateBackendbind9Spec() map[string]any {
+	return map[string]any{
 		"databaseHostname":           "hostname-for-designate-backendbind9",
 		"secret":                     SecretName,
 		"designateNetworkAttachment": "designate-attachement",
@@ -324,8 +324,8 @@ func GetDefaultDesignateBackendbind9Spec() map[string]interface{} {
 	}
 }
 
-func CreateDesignateBackendbind9(name types.NamespacedName, spec map[string]interface{}) client.Object {
-	ownerReferences := []map[string]interface{}{{
+func CreateDesignateBackendbind9(name types.NamespacedName, spec map[string]any) client.Object {
+	ownerReferences := []map[string]any{{
 		"apiVersion":         "designate.openstack.org/v1beta1",
 		"blockOwnerDeletion": true,
 		"controller":         true,
@@ -333,10 +333,10 @@ func CreateDesignateBackendbind9(name types.NamespacedName, spec map[string]inte
 		"name":               "designate",
 		"uid":                uuid.New().String(),
 	}}
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "designate.openstack.org/v1beta1",
 		"kind":       "DesignateBackendbind9",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":            name.Name,
 			"namespace":       name.Namespace,
 			"ownerReferences": ownerReferences,
@@ -360,8 +360,8 @@ func DesignateBackendbind9ConditionGetter(name types.NamespacedName) condition.C
 }
 
 // DesignateMdns
-func GetDefaultDesignateMdnsSpec() map[string]interface{} {
-	return map[string]interface{}{
+func GetDefaultDesignateMdnsSpec() map[string]any {
+	return map[string]any{
 		"databaseHostname":           "hostname-for-designate-mdns",
 		"databaseInstance":           "test-designate-db-instance",
 		"secret":                     SecretName,
@@ -371,8 +371,8 @@ func GetDefaultDesignateMdnsSpec() map[string]interface{} {
 	}
 }
 
-func CreateDesignateMdns(name types.NamespacedName, spec map[string]interface{}) client.Object {
-	ownerReferences := []map[string]interface{}{{
+func CreateDesignateMdns(name types.NamespacedName, spec map[string]any) client.Object {
+	ownerReferences := []map[string]any{{
 		"apiVersion":         "designate.openstack.org/v1beta1",
 		"blockOwnerDeletion": true,
 		"controller":         true,
@@ -380,10 +380,10 @@ func CreateDesignateMdns(name types.NamespacedName, spec map[string]interface{})
 		"name":               "designate",
 		"uid":                uuid.New().String(),
 	}}
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "designate.openstack.org/v1beta1",
 		"kind":       "DesignateMdns",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":            name.Name,
 			"namespace":       name.Namespace,
 			"ownerReferences": ownerReferences,
@@ -407,8 +407,8 @@ func DesignateMdnsConditionGetter(name types.NamespacedName) condition.Condition
 }
 
 // DesignateCentral
-func GetDefaultDesignateCentralSpec() map[string]interface{} {
-	return map[string]interface{}{
+func GetDefaultDesignateCentralSpec() map[string]any {
+	return map[string]any{
 		"databaseHostname":           "hostname-for-designate-central",
 		"secret":                     SecretName,
 		"designateNetworkAttachment": "designate-attachement",
@@ -418,8 +418,8 @@ func GetDefaultDesignateCentralSpec() map[string]interface{} {
 	}
 }
 
-func CreateDesignateCentral(name types.NamespacedName, spec map[string]interface{}) client.Object {
-	ownerReferences := []map[string]interface{}{{
+func CreateDesignateCentral(name types.NamespacedName, spec map[string]any) client.Object {
+	ownerReferences := []map[string]any{{
 		"apiVersion":         "designate.openstack.org/v1beta1",
 		"blockOwnerDeletion": true,
 		"controller":         true,
@@ -428,10 +428,10 @@ func CreateDesignateCentral(name types.NamespacedName, spec map[string]interface
 		"uid":                uuid.New().String(),
 	}}
 
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "designate.openstack.org/v1beta1",
 		"kind":       "DesignateCentral",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":            name.Name,
 			"namespace":       name.Namespace,
 			"ownerReferences": ownerReferences,
@@ -463,8 +463,8 @@ func DesignateCentralConditionGetter(name types.NamespacedName) condition.Condit
 }
 
 // DesignateProducer)
-func GetDefaultDesignateProducerSpec() map[string]interface{} {
-	return map[string]interface{}{
+func GetDefaultDesignateProducerSpec() map[string]any {
+	return map[string]any{
 		"databaseHostname":           "hostname-for-designate-producer",
 		"secret":                     SecretName,
 		"designateNetworkAttachment": "designate-attachement",
@@ -474,8 +474,8 @@ func GetDefaultDesignateProducerSpec() map[string]interface{} {
 	}
 }
 
-func CreateDesignateProducer(name types.NamespacedName, spec map[string]interface{}) client.Object {
-	ownerReferences := []map[string]interface{}{{
+func CreateDesignateProducer(name types.NamespacedName, spec map[string]any) client.Object {
+	ownerReferences := []map[string]any{{
 		"apiVersion":         "designate.openstack.org/v1beta1",
 		"blockOwnerDeletion": true,
 		"controller":         true,
@@ -483,10 +483,10 @@ func CreateDesignateProducer(name types.NamespacedName, spec map[string]interfac
 		"name":               "designate",
 		"uid":                uuid.New().String(),
 	}}
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "designate.openstack.org/v1beta1",
 		"kind":       "DesignateProducer",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":            name.Name,
 			"namespace":       name.Namespace,
 			"ownerReferences": ownerReferences,
@@ -510,8 +510,8 @@ func DesignateProducerConditionGetter(name types.NamespacedName) condition.Condi
 }
 
 // DesignateUnbound
-func GetDefaultUnboundSpec() map[string]interface{} {
-	return map[string]interface{}{
+func GetDefaultUnboundSpec() map[string]any {
+	return map[string]any{
 		"databaseHostame":            "hostname-for-designate-unbound",
 		"secret":                     SecretName,
 		"designateNetworkAttachment": "designate-attachment",
@@ -520,8 +520,8 @@ func GetDefaultUnboundSpec() map[string]interface{} {
 	}
 }
 
-func CreateDesignateUnbound(name types.NamespacedName, spec map[string]interface{}) client.Object {
-	ownerReferences := []map[string]interface{}{{
+func CreateDesignateUnbound(name types.NamespacedName, spec map[string]any) client.Object {
+	ownerReferences := []map[string]any{{
 		"apiVersion":         "designate.openstack.org/v1beta1",
 		"blockOwnerDeletion": true,
 		"controller":         true,
@@ -529,10 +529,10 @@ func CreateDesignateUnbound(name types.NamespacedName, spec map[string]interface
 		"name":               "designate",
 		"uid":                uuid.New().String(),
 	}}
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "designate.openstack.org/v1beta1",
 		"kind":       "DesignateUnbound",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":            name.Name,
 			"namespace":       name.Namespace,
 			"ownerReferences": ownerReferences,
@@ -550,11 +550,11 @@ func GetDesignateUnbound(name types.NamespacedName) *designatev1.DesignateUnboun
 	return instance
 }
 
-func CreateBindIPMap(namespace string, configData map[string]interface{}) client.Object {
-	raw := map[string]interface{}{
+func CreateBindIPMap(namespace string, configData map[string]any) client.Object {
+	raw := map[string]any{
 		"apiVersion": "v1",
 		"kind":       "ConfigMap",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":      designate.BindPredIPConfigMap,
 			"namespace": namespace,
 		},
@@ -565,14 +565,14 @@ func CreateBindIPMap(namespace string, configData map[string]interface{}) client
 
 // Network attachment
 func CreateNAD(name types.NamespacedName) client.Object {
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "k8s.cni.cncf.io/v1",
 		"kind":       "NetworkAttachmentDefinition",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":      name.Name,
 			"namespace": name.Namespace,
 		},
-		"spec": map[string]interface{}{
+		"spec": map[string]any{
 			"config": `{
 				"cniVersion": "0.3.1",
 				"name": "designate",
@@ -606,14 +606,14 @@ func GetNADConfig(name types.NamespacedName) *designate.NADConfig {
 }
 
 func CreateNode(name types.NamespacedName) client.Object {
-	raw := map[string]interface{}{
+	raw := map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Node",
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"name":      name.Name,
 			"namespace": name.Namespace,
 		},
-		"spec": map[string]interface{}{},
+		"spec": map[string]any{},
 	}
 	return th.CreateUnstructured(raw)
 }
@@ -637,16 +637,16 @@ func CreateDesignateNSRecordsConfigMap(name types.NamespacedName) client.Object 
 // test Service components. It returns both the user input representation
 // in the form of map[string]string, and the Golang expected representation
 // used in the test asserts.
-func GetSampleTopologySpec(label string) (map[string]interface{}, []corev1.TopologySpreadConstraint) {
+func GetSampleTopologySpec(label string) (map[string]any, []corev1.TopologySpreadConstraint) {
 	// Build the topology Spec
-	topologySpec := map[string]interface{}{
-		"topologySpreadConstraints": []map[string]interface{}{
+	topologySpec := map[string]any{
+		"topologySpreadConstraints": []map[string]any{
 			{
 				"maxSkew":           1,
 				"topologyKey":       corev1.LabelHostname,
 				"whenUnsatisfiable": "ScheduleAnyway",
-				"labelSelector": map[string]interface{}{
-					"matchLabels": map[string]interface{}{
+				"labelSelector": map[string]any{
+					"matchLabels": map[string]any{
 						"component": label,
 					},
 				},

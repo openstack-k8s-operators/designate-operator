@@ -405,7 +405,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	// TODO(beagles): we really should create a single point of truth for what things are named or
 	// what the names will be based on.
 	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
-	for i := 0; i < serviceCount; i++ {
+	for i := range serviceCount {
 		svc, err := designate.CreateDNSService(
 			fmt.Sprintf("designate-backendbind9-%d", i),
 			instance.Namespace,
@@ -765,7 +765,7 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 			err))
 		return err
 	}
-	templateParameters := make(map[string]interface{})
+	templateParameters := make(map[string]any)
 	if nadInfo.IPAM.CIDR.Addr().Is4() {
 		templateParameters["IPVersion"] = "4"
 	} else {

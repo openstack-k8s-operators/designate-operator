@@ -63,7 +63,7 @@ func ProcessVolumes(volumeDefs []VolumeMapping) ([]corev1.Volume, []corev1.Volum
 		ConfigMount: 0640,
 		MergeMount:  0,
 	}
-	for i := 0; i < len(volumeDefs); i++ {
+	for i := range volumeDefs {
 		v := &volumeDefs[i]
 		accessMode := modeMap[v.Type]
 		var newVolume corev1.Volume

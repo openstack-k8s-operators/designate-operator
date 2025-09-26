@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -282,7 +283,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	}
 
 	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
-	for i := 0; i < serviceCount; i++ {
+	for i := range serviceCount {
 		svc, err := designate.CreateDNSService(
 			fmt.Sprintf("designate-unbound-%d", i),
 			instance.Namespace,
@@ -539,11 +540,9 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	Log.Info("Generating service config map")
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designateunbound.Component), map[string]string{})
 	customData := map[string]string{common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig}
-	for key, data := range instance.Spec.DefaultConfigOverwrite {
-		customData[key] = data
-	}
+	maps.Copy(customData, instance.Spec.DefaultConfigOverwrite)
 
-	templateParameters := make(map[string]interface{})
+	templateParameters := make(map[string]any)
 
 	stubZoneData := make([]StubZoneTmplRec, len(instance.Spec.StubZones))
 	if len(instance.Spec.StubZones) > 0 {

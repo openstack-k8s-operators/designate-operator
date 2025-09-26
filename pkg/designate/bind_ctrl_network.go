@@ -27,7 +27,7 @@ func GetPredictableIPAM(networkParameters *NetworkParameters) (*NADIpam, error) 
 	predParams.CIDR = networkParameters.CIDR
 	predParams.RangeStart = networkParameters.ProviderAllocationEnd.Next()
 	endRange := predParams.RangeStart
-	for i := 0; i < BindProvPredictablePoolSize; i++ {
+	for range BindProvPredictablePoolSize {
 		if !predParams.CIDR.Contains(endRange) {
 			return nil, fmt.Errorf("%w: %d IP addresses in %s", ErrPredictableIPAllocation, BindProvPredictablePoolSize, predParams.CIDR)
 		}
