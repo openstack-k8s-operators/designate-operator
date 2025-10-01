@@ -756,10 +756,12 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 		)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
+				// Since the CA cert secret should have been manually created by the user and referenced in the spec,
+				// we treat this as a warning because it means that the service will not be able to start.
 				instance.Status.Conditions.Set(condition.FalseCondition(
 					condition.TLSInputReadyCondition,
-					condition.RequestedReason,
-					condition.SeverityInfo,
+					condition.ErrorReason,
+					condition.SeverityWarning,
 					condition.TLSInputReadyWaitingMessage, instance.Spec.TLS.CaBundleSecretName))
 				return ctrl.Result{}, nil
 			}
@@ -780,6 +782,8 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 		certsHash, err := instance.Spec.TLS.API.ValidateCertSecrets(ctx, helper, instance.Namespace)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
+				// Since the OpenStackControlPlane creates the API service certs secrets,
+				// we treat this as an info (because the user is not responsible for manually creating them).
 				instance.Status.Conditions.Set(condition.FalseCondition(
 					condition.TLSInputReadyCondition,
 					condition.RequestedReason,
@@ -900,11 +904,13 @@ func (r *DesignateAPIReconciler) reconcileNormal(ctx context.Context, instance *
 		nad, err := nad.GetNADWithName(ctx, helper, netAtt, instance.Namespace)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
+				// Since the net-attach-def CR should have been manually created by the user and referenced in the spec,
+				// we treat this as a warning because it means that the service will not be able to start.
 				Log.Info(fmt.Sprintf("network-attachment-definition %s not found", netAtt))
 				instance.Status.Conditions.Set(condition.FalseCondition(
 					condition.NetworkAttachmentsReadyCondition,
-					condition.RequestedReason,
-					condition.SeverityInfo,
+					condition.ErrorReason,
+					condition.SeverityWarning,
 					condition.NetworkAttachmentsReadyWaitingMessage,
 					netAtt))
 				return ctrl.Result{RequeueAfter: time.Second * 10}, nil
@@ -1172,11 +1178,13 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 	adminPasswordSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Spec.Secret, instance.Namespace)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
+			// Since the service secret should have been manually created by the user and referenced in the spec,
+			// we treat this as a warning because it means that the service will not be able to start.
 			Log.Info(fmt.Sprintf("AdminPassword secret %s not found", instance.Spec.Secret))
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
+				condition.ErrorReason,
+				condition.SeverityWarning,
 				condition.InputReadyWaitingMessage))
 			return nil
 		}
