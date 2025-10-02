@@ -25,6 +25,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+
 	// revive:disable-next-line:dot-imports
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	. "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
@@ -140,49 +141,5 @@ var _ = Describe("DesignateBackendbind9 controller", func() {
 				corev1.ConditionTrue,
 			)
 		})
-
-		// It("should set Service Config Ready Condition", func() {
-		// 	th.ExpectCondition(
-		// 		designateBackendbind9Name,
-		// 		ConditionGetterFunc(DesignateBackendbind9ConditionGetter),
-		// 		condition.ServiceConfigReadyCondition,
-		// 		corev1.ConditionTrue,
-		// 	)
-		// })
-
-		// For some reason the 2 above tests fail because they can't find
-		// the secret with -config-data suffix
-
-		// It("should create the designate.conf file in a Secret", func() {
-		// 	// TODO(oschwart): remove below debug printing
-		// 	secretList := &corev1.SecretList{}
-		// 	listOpts := []client.ListOption{
-		// 		client.InNamespace(designateBackendbind9Name.Namespace),
-		// 	}
-		// 	if err := k8sClient.List(ctx, secretList, listOpts...); err != nil {
-		// 		return
-		// 	}
-
-		// 	fmt.Printf("\nSecrets in namespace %s:\n", designateBackendbind9Name.Namespace)
-		// 	for _, secret := range secretList.Items {
-		// 		fmt.Printf("- Name: %s\n", secret.Name)
-		// 	}
-		// 	configData := th.GetSecret(
-		// 		types.NamespacedName{
-		// 			Namespace: designateBackendbind9Name.Namespace,
-		// 			Name:      fmt.Sprintf("%s-config-named", designateBackendbind9Name.Name)})
-		// 	Expect(configData).ShouldNot(BeNil())
-		// })
-
-		// It("should create a Secret with customServiceConfig input", func() {
-		// 	configData := th.GetSecret(
-		// 		types.NamespacedName{
-		// 			Namespace: designateBackendbind9Name.Namespace,
-		// 			Name:      fmt.Sprintf("%s-config-data", designateBackendbind9Name.Name)})
-		// 	Expect(configData).ShouldNot(BeNil())
-		// 	conf := string(configData.Data["custom.conf"])
-		// 	Expect(conf).Should(
-		// 		ContainSubstring("[DEFAULT]\ndebug=True\n"))
-		// })
 	})
 })

@@ -70,7 +70,7 @@ type UnboundOverrideSpec struct {
 }
 
 type StubZone struct {
-	Name string               `json:"name"`
+	Name string `json:"name"`
 	// +kubebuilder:validation:Optional
 	Options map[string]string `json:"options,omitempty"`
 }

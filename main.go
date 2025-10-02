@@ -47,6 +47,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/operator"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 
+	oshiftapi "github.com/openshift/api/operator/v1"
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/controllers"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
@@ -67,6 +68,7 @@ func init() {
 	utilruntime.Must(redisv1.AddToScheme(scheme))
 	utilruntime.Must(networkv1.AddToScheme(scheme))
 	utilruntime.Must(topologyv1.AddToScheme(scheme))
+	utilruntime.Must(oshiftapi.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
