@@ -22,4 +22,8 @@ const (
 	Component = "designate-unbound"
 	// ServiceName is the name of the designate unbound service
 	ServiceName = "designateunbound"
+	// DefaultJoinSubnetV4 is the default join subnet for IPv4
+	DefaultJoinSubnetV4 = "100.64.0.0/16"
+	// DefaultJoinSubnetV6 is the default join subnet for IPv6
+	DefaultJoinSubnetV6 = "fd98::/64"
 )

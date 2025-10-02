@@ -253,6 +253,7 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		condition.UnknownCondition(designatev1beta1.DesignateCentralReadyCondition, condition.InitReason, designatev1beta1.DesignateCentralReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateWorkerReadyCondition, condition.InitReason, designatev1beta1.DesignateWorkerReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
+		condition.UnknownCondition(designatev1beta1.DesignateUnboundReadyCondition, condition.InitReason, designatev1beta1.DesignateUnboundReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateBackendbind9ReadyCondition, condition.InitReason, designatev1beta1.DesignateBackendbind9ReadyInitMessage),
 		// service account, role, rolebinding conditions
@@ -339,6 +340,8 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		return nil
 	}
 
+	// TODO(beagles):
+	// - Watch for changes to the redis PODs and resync the headless hostnames for the PODs if necessary.
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&designatev1beta1.Designate{}).
 		Owns(&mariadbv1.MariaDBDatabase{}).

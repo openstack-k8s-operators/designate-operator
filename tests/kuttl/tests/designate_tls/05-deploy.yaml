@@ -71,6 +71,8 @@ spec:
         options: {}
       - name: myexample.com
         options: {}
+    networkAttachments:
+      - designate
   designateAPI:
     databaseAccount: designate
     serviceUser: designate

@@ -174,7 +174,7 @@ func GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount int, unboundRep
 	spec := map[string]any{
 		"databaseInstance":           "test-designate-db-instance",
 		"secret":                     SecretName,
-		"designateNetworkAttachment": "designate-attachement",
+		"designateNetworkAttachment": "designate",
 		"databaseAccount":            "designate-db-account",
 	}
 	spec["designateBackendbind9"] = designatev1.DesignateBackendbind9Spec{

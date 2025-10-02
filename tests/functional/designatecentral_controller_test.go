@@ -25,6 +25,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+
 	// "sigs.k8s.io/controller-runtime/pkg/client"
 	// revive:disable-next-line:dot-imports
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
@@ -108,6 +109,8 @@ var _ = Describe("DesignateCentral controller", func() {
 		})
 	})
 
+	// Notes: DesignateCentral's config file is basically hard coded and merged with the main config file
+	// in the designate controller.
 	When("config files are created", func() {
 		var keystoneInternalEndpoint string
 		var keystonePublicEndpoint string
@@ -163,98 +166,18 @@ var _ = Describe("DesignateCentral controller", func() {
 			)
 		})
 
-		// It("should create the designate.conf file in a Secret", func() {
-		// 	// TODO(oschwart): remove below debug printing
-		// 	secretList := &corev1.SecretList{}
-		// 	listOpts := []client.ListOption{
-		// 		client.InNamespace(namespace),
-		// 	}
-		// 	if err := k8sClient.List(ctx, secretList, listOpts...); err != nil {
-		// 		return
-		// 	}
-
-		// 	fmt.Printf("\n=== Secrets in namespace %s ===\n", namespace)
-		// 	for _, secret := range secretList.Items {
-		// 		fmt.Printf("- Name: %s\n", secret.Name)
-		// 	}
-		// 	configData := th.GetSecret(
-		// 		// configData := th.GetSecret(
-		// 		types.NamespacedName{
-		// 			Namespace: namespace,
-		// 			Name:      fmt.Sprintf("%s-config-data", designateCentralName.Name)})
-		// 	Expect(configData).ShouldNot(BeNil())
-		// 	conf := string(configData.Data["designate.conf"])
-		// 	// instance := GetDesignateCentral(designateCentralName)
-
-		// 	// dbs := []struct {
-		// 	// 	Name            string
-		// 	// 	DatabaseAccount string
-		// 	// 	Keyword         string
-		// 	// }{
-		// 	// 	{
-		// 	// 		Name:            designate.DatabaseName,
-		// 	// 		DatabaseAccount: instance.Spec.DatabaseAccount,
-		// 	// 		Keyword:         "connection",
-		// 	// 	},
-		// 	// }
-
-		// 	// for _, db := range dbs {
-		// 	// 	databaseAccount := mariadb.GetMariaDBAccount(
-		// 	// 		types.NamespacedName{
-		// 	// 			Namespace: namespace,
-		// 	// 			Name:      db.DatabaseAccount})
-		// 	// 	databaseSecret := th.GetSecret(
-		// 	// 		types.NamespacedName{
-		// 	// 			Namespace: namespace,
-		// 	// 			Name:      databaseAccount.Spec.Secret})
-
-		// 	// 	Expect(conf).Should(
-		// 	// 		ContainSubstring(
-		// 	// 			fmt.Sprintf(
-		// 	// 				"%s=mysql+pymysql://%s:%s@%s/%s?read_default_file=/etc/my.cnf",
-		// 	// 				db.Keyword,
-		// 	// 				databaseAccount.Spec.UserName,
-		// 	// 				databaseSecret.Data[mariadbv1.DatabasePasswordSelector],
-		// 	// 				instance.Spec.DatabaseHostname,
-		// 	// 				db.Name)))
-		// 	// }
-
-		// 	Expect(conf).Should(
-		// 		ContainSubstring(fmt.Sprintf(
-		// 			"www_authenticate_uri=%s\n", keystonePublicEndpoint)))
-		// 	// TBC: [keystone_authtoken].auth_url and [service_auth].auth_url differ?
-		// 	Expect(conf).Should(
-		// 		ContainSubstring(fmt.Sprintf(
-		// 			"auth_url=%s\n", keystoneInternalEndpoint)))
-		// 	Expect(conf).Should(
-		// 		ContainSubstring(fmt.Sprintf(
-		// 			"auth_url=%s\n", keystoneInternalEndpoint)))
-		// 	// Expect(conf).Should(
-		// 	// 	ContainSubstring(fmt.Sprintf(
-		// 	// 		"username=%s\n", instance.Spec.ServiceUser)))
-
-		// 	ospSecret := th.GetSecret(types.NamespacedName{
-		// 		Name:      SecretName,
-		// 		Namespace: namespace})
-		// 	Expect(conf).Should(
-		// 		ContainSubstring(fmt.Sprintf(
-		// 			"\npassword=%s\n", string(ospSecret.Data["DesignatePassword"]))))
-
-		// 	transportURLSecret := th.GetSecret(transportURLSecretName)
-		// 	Expect(conf).Should(
-		// 		ContainSubstring(fmt.Sprintf(
-		// 			"transport_url=%s\n", string(transportURLSecret.Data["transport_url"]))))
-		// })
-
-		// It("should create a Secret with customServiceConfig input", func() {
-		// 	configData := th.GetSecret(
-		// 		types.NamespacedName{
-		// 			Namespace: designateCentralName.Namespace,
-		// 			Name:      fmt.Sprintf("%s-config-data", designateCentralName.Name)})
-		// 	Expect(configData).ShouldNot(BeNil())
-		// 	conf := string(configData.Data["custom.conf"])
-		// 	Expect(conf).Should(
-		// 		ContainSubstring("[DEFAULT]\ndebug=True\n"))
-		// })
+		// Notes: DesignateCentral's config file is basically hard coded and merged with the main
+		// config file in the designate controller so there is no need to test this here. The
+		// customServiceConfig however is specific to this controller so should be here.
+		It("should create a Secret with customServiceConfig input", func() {
+			configData := th.GetSecret(
+				types.NamespacedName{
+					Namespace: designateCentralName.Namespace,
+					Name:      fmt.Sprintf("%s-config-data", designateCentralName.Name)})
+			Expect(configData).ShouldNot(BeNil())
+			conf := string(configData.Data["custom.conf"])
+			Expect(conf).Should(
+				ContainSubstring("[DEFAULT]\ndebug=True\n"))
+		})
 	})
 })

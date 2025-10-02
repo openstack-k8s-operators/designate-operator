@@ -40,6 +40,7 @@ import (
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designatecentral"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designateproducer"
+	"github.com/openstack-k8s-operators/designate-operator/pkg/designateunbound"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	. "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -122,6 +123,11 @@ func createAndSimulateMdns(mdnsName types.NamespacedName) {
 	DeferCleanup(k8sClient.Delete, ctx, CreateDesignateMdns(mdnsName, mdnsSpec))
 }
 
+func createAndSimulateUnbound(unboundName types.NamespacedName) {
+	unboundSpec := GetDefaultUnboundSpec()
+	DeferCleanup(k8sClient.Delete, ctx, CreateDesignateUnbound(unboundName, unboundSpec))
+}
+
 var _ = Describe("Designate controller", func() {
 	var name string
 	var spec map[string]any
@@ -136,13 +142,14 @@ var _ = Describe("Designate controller", func() {
 	var transportURLSecretName types.NamespacedName
 	var designateDBSyncName types.NamespacedName
 	var designateRedisName types.NamespacedName
+	var designateUnboundName types.NamespacedName
 	var bind9ReplicaCount int
 	var mdnsReplicaCount int
 	var unboundReplicaCount int
 	var designateTopologies []types.NamespacedName
 
 	BeforeEach(func() {
-		name = fmt.Sprintf("designate-%s", uuid.New().String())
+		name = fmt.Sprintf("designate-%s", uuid.New().String()[:10])
 		bind9ReplicaCount = rand.Intn(5) + 1   // #nosec G404
 		mdnsReplicaCount = rand.Intn(5) + 1    // #nosec G404
 		unboundReplicaCount = rand.Intn(5) + 1 // #nosec G404
@@ -196,6 +203,11 @@ var _ = Describe("Designate controller", func() {
 		designateMdnsName = types.NamespacedName{
 			Namespace: namespace,
 			Name:      fmt.Sprintf("designate-mdns-%s", uuid.New().String()),
+		}
+
+		designateUnboundName = types.NamespacedName{
+			Namespace: namespace,
+			Name:      fmt.Sprintf("designate-unbound-%s", uuid.New().String()),
 		}
 
 		designateNSRecordConfigMapName = types.NamespacedName{
@@ -327,9 +339,6 @@ var _ = Describe("Designate controller", func() {
 		})
 	})
 
-	// NAD
-	// TODO
-
 	// DB
 	When("DB is created", func() {
 		BeforeEach(func() {
@@ -374,6 +383,42 @@ var _ = Describe("Designate controller", func() {
 		})
 	})
 
+	// Cluster Network defaults
+	When("The Cluster Network is not set", func() {
+		BeforeEach(func() {
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			createAndSimulateUnbound(designateUnboundName)
+
+			createAndSimulateDB(spec)
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+
+			th.SimulateJobSuccess(designateDBSyncName)
+		})
+
+		It("falls back to default join subnets when cluster network is missing", func() {
+
+			Eventually(func(g Gomega) {
+				unboundName := types.NamespacedName{
+					Namespace: designateName.Namespace,
+					Name:      fmt.Sprintf("%s-unbound", designateName.Name),
+				}
+				secret := th.GetSecret(types.NamespacedName{Namespace: unboundName.Namespace, Name: fmt.Sprintf("%s-config-data", unboundName.Name)})
+				g.Expect(secret).ToNot(BeNil())
+				conf := string(secret.Data["00-base-unbound.conf"])
+				g.Expect(conf).To(ContainSubstring(designateunbound.DefaultJoinSubnetV4))
+				g.Expect(conf).To(ContainSubstring(designateunbound.DefaultJoinSubnetV6))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
 	// Config
 	When("The Config Secrets are created", func() {
 
@@ -382,6 +427,7 @@ var _ = Describe("Designate controller", func() {
 			createAndSimulateRedis(designateRedisName)
 			createAndSimulateDesignateSecrets(designateName)
 			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			createAndSimulateUnbound(designateUnboundName)
 
 			createAndSimulateDB(spec)
 			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
@@ -571,25 +617,16 @@ var _ = Describe("Designate controller", func() {
 				designatev1.DesignateMdnsReadyCondition,
 				designatev1.DesignateUnboundReadyCondition,
 				designatev1.DesignateWorkerReadyCondition,
+				designatev1.DesignateAPIReadyCondition,
+				designatev1.DesignateCentralReadyCondition,
+				designatev1.DesignateProducerReadyCondition,
+				designatev1.DesignateBackendbind9ReadyCondition,
 			} {
 				th.ExpectCondition(
 					designateName,
 					ConditionGetterFunc(DesignateConditionGetter),
 					cond,
 					corev1.ConditionUnknown,
-				)
-			}
-			for _, cond := range []condition.Type{
-				designatev1.DesignateAPIReadyCondition,
-				designatev1.DesignateBackendbind9ReadyCondition,
-				designatev1.DesignateCentralReadyCondition,
-				designatev1.DesignateProducerReadyCondition,
-			} {
-				th.ExpectCondition(
-					designateName,
-					ConditionGetterFunc(DesignateConditionGetter),
-					cond,
-					corev1.ConditionFalse,
 				)
 			}
 		})
@@ -852,7 +889,7 @@ var _ = Describe("Designate controller", func() {
 					Name:      expectedTopology.Name,
 					Namespace: expectedTopology.Namespace,
 				})
-				g.Expect(tp.GetFinalizers()).To(HaveLen(3))
+				g.Expect(tp.GetFinalizers()).To(HaveLen(4))
 				finalizers := tp.GetFinalizers()
 
 				designateAPI := GetDesignateAPI(designateAPIName)

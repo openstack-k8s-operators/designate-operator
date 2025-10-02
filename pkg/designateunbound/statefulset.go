@@ -141,6 +141,9 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 		},
 	}
 
+	// TODO(beagles): the unbound.conf in the config secret should overwrite /etc/unbound.conf. The rest of the
+	// contents should go to /etc/unbound/conf.d.
+
 	if instance.Spec.NodeSelector != nil {
 		statefulSet.Spec.Template.Spec.NodeSelector = *instance.Spec.NodeSelector
 	}
