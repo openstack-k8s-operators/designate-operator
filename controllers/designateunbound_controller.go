@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
 	"github.com/openstack-k8s-operators/designate-operator/pkg/designateunbound"
@@ -74,11 +75,24 @@ type StubZoneTmplRec struct {
 	Servers []string
 }
 
+func getCIDRsFromNADs(nadList []networkv1.NetworkAttachmentDefinition) ([]string, error) {
+	cidrs := []string{}
+	for _, nad := range nadList {
+		nadConfig, err := designate.GetNADConfig(&nad)
+		if err != nil {
+			return nil, err
+		}
+		cidrs = append(cidrs, nadConfig.IPAM.CIDR.String())
+	}
+	return cidrs, nil
+}
+
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/finalizers,verbs=update;patch
 //+kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
 //+kubebuilder:rbac:groups=topology.openstack.org,resources=topologies,verbs=get;list;watch;update
+//+kubebuilder:rbac:groups=operator.openshift.io,resources=networks,verbs=get;list;watch
 
 // Reconcile implementation for designate's Unbound resolver
 func (r *UnboundReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
@@ -315,33 +329,8 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 	}
 	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
 
-	configMapVars := make(map[string]env.Setter)
-	err := r.generateServiceConfigMaps(ctx, instance, helper, &configMapVars)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.ServiceConfigReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.ServiceConfigReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-
-	//
-	// create hash over all the different input resources to identify if any those changed
-	// and a restart/recreate is required.
-	//
-	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
-	if err != nil {
-		return ctrl.Result{}, err
-	} else if hashChanged {
-		// Hash changed and instance status should be updated (which will be done by main defer func),
-		// so we need to return and reconcile again
-		return ctrl.Result{}, nil
-	}
-
-	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
-
+	// We do initial processing of the network attachments before the configs because it influences some of the
+	// automatically configurations.
 	nadList := []networkv1.NetworkAttachmentDefinition{}
 	for _, networkAttachment := range instance.Spec.NetworkAttachments {
 		nad, err := nad.GetNADWithName(ctx, helper, networkAttachment, instance.Namespace)
@@ -371,6 +360,33 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 			nadList = append(nadList, *nad)
 		}
 	}
+
+	configMapVars := make(map[string]env.Setter)
+	err := r.generateServiceConfigMaps(ctx, instance, helper, &configMapVars, nadList)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.ServiceConfigReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.ServiceConfigReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, err
+	}
+
+	//
+	// create hash over all the different input resources to identify if any those changed
+	// and a restart/recreate is required.
+	//
+	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
+	if err != nil {
+		return ctrl.Result{}, err
+	} else if hashChanged {
+		// Hash changed and instance status should be updated (which will be done by main defer func),
+		// so we need to return and reconcile again
+		return ctrl.Result{}, nil
+	}
+
+	instance.Status.Conditions.MarkTrue(condition.ServiceConfigReadyCondition, condition.ServiceConfigReadyMessage)
 
 	serviceAnnotations, err := nad.EnsureNetworksAnnotation(nadList)
 	if err != nil {
@@ -518,6 +534,7 @@ func (r *UnboundReconciler) onIPChange() (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
+// Set stub zone configuration defaults if they are net set by CR data.
 func stubZoneDefaults(values map[string]string) map[string]string {
 
 	if values == nil {
@@ -532,20 +549,84 @@ func stubZoneDefaults(values map[string]string) map[string]string {
 	return values
 }
 
+// getClusterJoinSubnets will return configured join subnets from the cluster network if available. If noit will
+// return the expected defaults defined in the build.
+// TODO(beagles): it might be a good idea to have this settable through an environment variable to bridge
+// unexpected compatibility issues.
+func (r *UnboundReconciler) getClusterJoinSubnets(ctx context.Context) []string {
+	Log := r.GetLogger(ctx)
+
+	// Get the cluster network operator configuration
+	network := &operatorv1.Network{}
+	err := r.Get(ctx, types.NamespacedName{Name: "cluster"}, network)
+	if err != nil {
+		// If we can't get the network config, fall back to defaults.
+		// TODO(beagles): while probably not necessary, we should revisit to see if this should be an error.
+		Log.Info("Unable to get cluster network configuration, using defaults", "error", err)
+		return []string{designateunbound.DefaultJoinSubnetV4, designateunbound.DefaultJoinSubnetV6}
+	}
+
+	var joinSubnets []string
+
+	// NOTE(beagles): we are only handling OVN-Kubernetes configuration at this time. There is a
+	// question of whether we should only set defaults for IP versions that are 'enabled'.
+	// Unfortunately, I'm not sure we can know that for sure from the network operator configuration.
+	// That is, absence of configuration might mean that it is enabled, but with all defaults.
+
+	// Extract join subnets from OVN-Kubernetes configuration
+	if network.Spec.DefaultNetwork.OVNKubernetesConfig != nil {
+		ovnConfig := network.Spec.DefaultNetwork.OVNKubernetesConfig
+
+		// IPv4 join subnet
+		if ovnConfig.IPv4 != nil && ovnConfig.IPv4.InternalJoinSubnet != "" {
+			joinSubnets = append(joinSubnets, ovnConfig.IPv4.InternalJoinSubnet)
+			Log.Info("Found IPv4 join subnet from cluster config", "subnet", ovnConfig.IPv4.InternalJoinSubnet)
+		} else {
+			joinSubnets = append(joinSubnets, designateunbound.DefaultJoinSubnetV4)
+			Log.Info("Using default IPv4 join subnet", "subnet", designateunbound.DefaultJoinSubnetV4)
+		}
+
+		// IPv6 join subnet
+		if ovnConfig.IPv6 != nil && ovnConfig.IPv6.InternalJoinSubnet != "" {
+			joinSubnets = append(joinSubnets, ovnConfig.IPv6.InternalJoinSubnet)
+			Log.Info("Found IPv6 join subnet from cluster config", "subnet", ovnConfig.IPv6.InternalJoinSubnet)
+		} else {
+			joinSubnets = append(joinSubnets, designateunbound.DefaultJoinSubnetV6)
+			Log.Info("Using default IPv6 join subnet", "subnet", designateunbound.DefaultJoinSubnetV6)
+		}
+	} else {
+		// No OVN-Kubernetes config found, use defaults
+		Log.Info("No OVN-Kubernetes configuration found, using defaults")
+		joinSubnets = []string{designateunbound.DefaultJoinSubnetV4, designateunbound.DefaultJoinSubnetV6}
+	}
+
+	return joinSubnets
+}
+
 func (r *UnboundReconciler) generateServiceConfigMaps(
 	ctx context.Context,
 	instance *designatev1.DesignateUnbound,
 	h *helper.Helper,
 	envVars *map[string]env.Setter,
+	nadList []networkv1.NetworkAttachmentDefinition,
 ) error {
 	Log := r.GetLogger(ctx)
 	Log.Info("Generating service config map")
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designateunbound.Component), map[string]string{})
 	customData := map[string]string{common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig}
+	// NOTE(beagles): DefaultConfigOverwrite is bugged in unbound because it is
+	// applied to conf.d when it really is meant to for overwriting stuff in
+	// /etc/unbound. A reasonable fix would be to have special handling for the
+	// "unbound.conf" and if any of the other files exist in /etc/unbound,
+	// overwrite them. The ones that aren't can go into /etc/unbound/conf.d for
+	// backwards compatibility.
 	maps.Copy(customData, instance.Spec.DefaultConfigOverwrite)
 
 	templateParameters := make(map[string]any)
 
+	//
+	// Create stub zone configuration data from predictable IP map.
+	//
 	stubZoneData := make([]StubZoneTmplRec, len(instance.Spec.StubZones))
 	if len(instance.Spec.StubZones) > 0 {
 		bindIPMap := &corev1.ConfigMap{}
@@ -572,6 +653,19 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	}
 	templateParameters["StubZones"] = stubZoneData
 
+	// TODO(beagles): There are situations where the allowCidrs should be overriddable, do we want to support that at the API level or
+	// customServiceConfig
+	// Dynamically discover join subnets from the cluster network operator configuration
+	allowCidrs := r.getClusterJoinSubnets(ctx)
+
+	// TODO(beagles): create entries for each network attachment.
+	nadCIDRs, nadErr := getCIDRsFromNADs(nadList)
+	if nadErr != nil {
+		Log.Error(nadErr, "unable to get CIDRs from network attachment definitions")
+	}
+	allowCidrs = append(allowCidrs, nadCIDRs...)
+	templateParameters["AllowCidrs"] = allowCidrs
+
 	cms := []util.Template{
 		// ConfigMap
 		{
@@ -587,7 +681,7 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	err := secret.EnsureSecrets(ctx, h, instance, cms, envVars)
 
 	if err != nil {
-		Log.Error(err, "uanble to process config map")
+		Log.Error(err, "unable to process config map")
 		return err
 	}
 	Log.Info("Service config map generated")
