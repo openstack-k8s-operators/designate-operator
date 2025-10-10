@@ -68,6 +68,9 @@ spec:
     serviceUser: designate
     tls:
       caBundleSecretName: combined-ca-bundle
+  designateUnbound:
+    networkAttachments:
+      - designate
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -256,7 +259,6 @@ metadata:
     component: designate-unbound
 status:
   phase: Running
-
 ---
 apiVersion: v1
 kind: Service
@@ -286,6 +288,11 @@ spec:
     service: designate
   type: ClusterIP
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-unbound-config-data
+---
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 commands:
@@ -294,5 +301,20 @@ commands:
       then
           echo "Configuration of backend_url failed"
           exit 1
+      fi
+      exit 0
+  - script: |
+      unbound_conf=$(oc get -n $NAMESPACE secret -o json designate-unbound-config-data | jq '.data["00-base-unbound.conf"] | @base64d' | sed -e 's/\\n/\n/g')
+      echo ${unbound_conf}
+      substrings=("access-control:.*100.64.0.0/16.*allow" "access-control:.*fd98::/64.*allow" "access-control:.*172.28.0.0/24.*allow")
+      notfound=""
+      for substring in "${substrings[@]}"; do
+        if ! echo ${unbound_conf} | grep -q "${substring}"; then
+          notfound="${substring} ${notfound}"
+        fi
+      done
+      if [ -n "${notfound}" ]; then
+        echo "Configuration of unbound.conf failed: ${notfound}"
+        exit 1
       fi
       exit 0
