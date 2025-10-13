@@ -553,6 +553,7 @@ func stubZoneDefaults(values map[string]string) map[string]string {
 // return the expected defaults defined in the build.
 // TODO(beagles): it might be a good idea to have this settable through an environment variable to bridge
 // unexpected compatibility issues.
+// NOTE(beagles): we should also consider adding the cidr for the cluster network.
 func (r *UnboundReconciler) getClusterJoinSubnets(ctx context.Context) []string {
 	Log := r.GetLogger(ctx)
 
