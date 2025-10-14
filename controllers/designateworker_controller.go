@@ -54,6 +54,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // GetClient -
@@ -338,56 +339,48 @@ func (r *DesignateWorkerReconciler) SetupWithManager(ctx context.Context, mgr ct
 			handler.EnqueueRequestsFromMapFunc(svcSecretFn)).
 		Watches(
 			&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
+			handler.EnqueueRequestsFromMapFunc(r.requestsForObjectUpdates),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		// watch the config CMs we don't own
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(configMapFn)).
 		Watches(&topologyv1.Topology{},
-			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
+			handler.EnqueueRequestsFromMapFunc(r.requestsForObjectUpdates),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
-func (r *DesignateWorkerReconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
-	requests := []reconcile.Request{}
+// findWorkerListObjects finds all DesignateWorker objects that reference the given source object
+// through a specific field. It returns only the ObjectMeta for matched objects to minimize memory usage.
+func findWorkerListObjects(ctx context.Context, cl client.Client, field string, src client.Object, log *logr.Logger) ([]metav1.ObjectMeta, error) {
+	crList := &designatev1beta1.DesignateWorkerList{}
+	err := cl.List(ctx, crList, &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
+		Namespace:     src.GetNamespace(),
+	})
+	if err != nil {
+		log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
+		return []metav1.ObjectMeta{}, err
+	}
+	items := make([]metav1.ObjectMeta, len(crList.Items))
+	for i, item := range crList.Items {
+		items[i] = item.ObjectMeta
+	}
+	return items, nil
+}
 
+// requestsForObjectUpdates creates reconcile requests for DesignateWorker objects that depend on
+// the given source object (e.g., a Secret or Topology). This method is used as a handler function
+// in the controller's watch setup.
+func (r *DesignateWorkerReconciler) requestsForObjectUpdates(ctx context.Context, src client.Object) []reconcile.Request {
 	Log := r.GetLogger(ctx)
-
 	allWatchFields := []string{
 		passwordSecretField,
 		caBundleSecretNameField,
 		topologyField,
 	}
-
-	for _, field := range allWatchFields {
-		crList := &designatev1beta1.DesignateWorkerList{}
-		listOps := &client.ListOptions{
-			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
-			Namespace:     src.GetNamespace(),
-		}
-		err := r.List(context.TODO(), crList, listOps)
-		if err != nil {
-			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
-			return requests
-		}
-
-		for _, item := range crList.Items {
-			Log.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
-
-			requests = append(requests,
-				reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Name:      item.GetName(),
-						Namespace: item.GetNamespace(),
-					},
-				},
-			)
-		}
-	}
-
-	return requests
+	return CreateRequestsFromObjectUpdates(ctx, r.Client, src, allWatchFields, findWorkerListObjects, &Log)
 }
 
 func (r *DesignateWorkerReconciler) reconcileDelete(ctx context.Context, instance *designatev1beta1.DesignateWorker, helper *helper.Helper) (ctrl.Result, error) {

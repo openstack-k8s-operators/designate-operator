@@ -91,10 +91,15 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 		return nsRecords[i].Priority < nsRecords[j].Priority
 	})
 
+	// Create an ordered list of IPs for the BIND's predictable IPs.
 	bindIPs := make([]string, len(BindMap))
 	keyTmpl := "bind_address_%d"
-	for i := 0; i < len(BindMap); i++ {
-		bindIPs[i] = BindMap[fmt.Sprintf(keyTmpl, i)]
+	for i := range len(BindMap) {
+		if ip, ok := BindMap[fmt.Sprintf(keyTmpl, i)]; ok {
+			bindIPs[i] = ip
+		} else {
+			return "", "", fmt.Errorf("bind IP not found for index %d", i)
+		}
 	}
 
 	masterHosts := make([]string, 0, len(MdnsMap))
