@@ -17,9 +17,18 @@ limitations under the License.
 package designate
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openstack-k8s-operators/lib-common/modules/common"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 )
 
@@ -89,4 +98,76 @@ type Database struct {
 type MessageBus struct {
 	SecretName string
 	Status     MessageBusStatus
+}
+
+// PodLabelingConfig holds configuration for pod labeling
+type PodLabelingConfig struct {
+	ConfigMapName string
+	IPKeyPrefix   string
+	ServiceName   string
+}
+
+// HandlePodLabeling handles adding predictableip labels to pods
+func HandlePodLabeling(ctx context.Context, h *helper.Helper, instanceName, namespace string, config PodLabelingConfig) error {
+	// List all pods owned by this instance
+	podList := &corev1.PodList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels{
+			common.AppSelector: instanceName,
+		},
+	}
+
+	err := h.GetClient().List(ctx, podList, listOpts...)
+	if err != nil {
+		return fmt.Errorf("failed to list pods: %w", err)
+	}
+
+	// Get the IP configmap once for all pods
+	configMap := &corev1.ConfigMap{}
+	err = h.GetClient().Get(ctx, types.NamespacedName{Name: config.ConfigMapName, Namespace: namespace}, configMap)
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			return nil // Configmap not found, skip labeling
+		}
+		return err
+	}
+
+	// Process each pod
+	for _, pod := range podList.Items {
+		// Check if the pod already has the predictableip label
+		if pod.Labels != nil && pod.Labels["predictableip"] != "" {
+			continue
+		}
+
+		// Extract pod index from pod name (e.g., "designate-backendbind9-0" -> "0")
+		podName := pod.Name
+		nameParts := strings.Split(podName, "-")
+		if len(nameParts) == 0 {
+			continue // Skip invalid pod name format
+		}
+		podIndex := nameParts[len(nameParts)-1]
+
+		// Get the IP for this pod index
+		ipKey := fmt.Sprintf("%s%s", config.IPKeyPrefix, podIndex)
+		predictableIP, exists := configMap.Data[ipKey]
+		if !exists {
+			continue // No IP found for this pod index, skip labeling
+		}
+
+		// Add the predictableip label to the pod
+		if pod.Labels == nil {
+			pod.Labels = make(map[string]string)
+		}
+		pod.Labels["predictableip"] = predictableIP
+
+		// Update the pod
+		err = h.GetClient().Update(ctx, &pod)
+		if err != nil {
+			// Log error but continue processing other pods
+			continue
+		}
+	}
+
+	return nil
 }
