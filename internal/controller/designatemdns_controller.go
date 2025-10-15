@@ -332,6 +332,7 @@ func (r *DesignateMdnsReconciler) SetupWithManager(ctx context.Context, mgr ctrl
 		For(&designatev1beta1.DesignateMdns{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.Pod{}).
 		// watch the secrets we don't own
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(svcSecretFn)).
@@ -703,6 +704,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 	)
 
 	ctrlResult, err = statefulSet.CreateOrPatch(ctx, helper)
+	statefulSetUpdated := (ctrlResult != ctrl.Result{})
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DeploymentReadyCondition,
@@ -711,7 +713,7 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 			condition.DeploymentReadyErrorMessage,
 			err.Error()))
 		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
+	} else if statefulSetUpdated {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DeploymentReadyCondition,
 			condition.RequestedReason,
@@ -767,6 +769,20 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 		}
 	}
 	// create StatefulSet - end
+
+	// Handle pod labeling for predictable IPs only when statefulset is ready
+	// This avoids unnecessary reconciliations when pods haven't changed
+	if statefulset.IsReady(deploy) && !statefulSetUpdated {
+		config := designate.PodLabelingConfig{
+			ConfigMapName: designate.MdnsPredIPConfigMap,
+			IPKeyPrefix:   "mdns_address_",
+		}
+		err = designate.HandlePodLabeling(ctx, helper, instance.Name, instance.Namespace, config)
+		if err != nil {
+			Log.Error(err, "Failed to handle pod labeling")
+			// Don't return error as this is not critical for the main reconcile loop
+		}
+	}
 
 	// We reached the end of the Reconcile, update the Ready condition based on
 	// the sub conditions
