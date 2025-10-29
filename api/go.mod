@@ -4,8 +4,8 @@ go 1.24.4
 
 require (
 	github.com/onsi/ginkgo/v2 v2.27.1
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20250929092825-4c2402451077
-	github.com/openstack-k8s-operators/lib-common/modules/storage v0.6.1-0.20250929092825-4c2402451077
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20251027074416-ab5c045dbe00
+	github.com/openstack-k8s-operators/lib-common/modules/storage v0.6.1-0.20251027074416-ab5c045dbe00
 	k8s.io/api v0.31.13
 	k8s.io/apimachinery v0.31.13
 	k8s.io/client-go v0.31.13
@@ -14,7 +14,7 @@ require (
 
 require (
 	github.com/onsi/gomega v1.38.2
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20251006091515-442e0bfc5d15
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20251027233324-053afb24d94c
 )
 
 require (
