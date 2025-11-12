@@ -67,6 +67,14 @@ func getOrDefault(source string, def string) string {
 	return source
 }
 
+// NOTE(beagles): refactoring this is a little tricky because it has multiple
+// side-effects. It sets a parameter in conditions, sets a hash in the envVars,
+// and returns results. The function name is a little misleading as well because
+// it doesn't actually get the secret. It's more that it checks for it and gets
+// the hash. At the very least a rename to"ensureSecret" is warranted. It might
+// also be better to move into a separate file along with other helper
+// functions.
+
 // helper function for retrieving a secret.
 func getSecret(
 	ctx context.Context,
@@ -701,6 +709,9 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrlResult, nil
 	}
 
+	// NOTE(beagles): consider moving the API reconcile until after the pools
+	// yaml can be created. This avoid the "no servers" error that occurs when
+	// there aren't any configured DNS servers.
 	//
 	// normal reconcile tasks
 	//
@@ -747,6 +758,8 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 	Log.Info("Deployment API task reconciled")
+
+	// NOTE(beagles): Consider moving IP Map construction into a separate function.
 
 	// Handle Mdns predictable IPs configmap
 	nad, err := nad.GetNADWithName(ctx, helper, instance.Spec.DesignateNetworkAttachment, instance.Namespace)
@@ -850,6 +863,8 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
+	// NOTE(beagles): Consider moving pools yaml generation into a separate function.
+
 	Log.Info("Bind configmap was created successfully")
 	if len(nsRecords) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
 		Log.Info("NS records data found")
@@ -908,7 +923,10 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		}
 	}
 
-	// deploy designate-central
+	// NOTE(beagles): Kind of makes you wish for macros. These are all the same
+	// pattern with just different names.
+	//
+	//  deploy designate-central
 	designateCentral, op, err := r.centralDeploymentCreateOrUpdate(ctx, instance)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(

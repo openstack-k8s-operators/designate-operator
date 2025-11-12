@@ -48,6 +48,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -215,47 +216,39 @@ func (r *UnboundReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ConfigMap{}).
 		Owns(&appsv1.StatefulSet{}).
 		Watches(&topologyv1.Topology{},
-			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
+			handler.EnqueueRequestsFromMapFunc(r.requestsForObjectUpdates),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
 }
 
-func (r *UnboundReconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
-	requests := []reconcile.Request{}
+// findUnboundListObjects finds all DesignateUnbound objects that reference the given source object
+// through a specific field. It returns only the ObjectMeta for matched objects to minimize memory usage.
+func findUnboundListObjects(ctx context.Context, cl client.Client, field string, src client.Object, log *logr.Logger) ([]metav1.ObjectMeta, error) {
+	crList := &designatev1.DesignateUnboundList{}
+	err := cl.List(ctx, crList, &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
+		Namespace:     src.GetNamespace(),
+	})
+	if err != nil {
+		log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
+		return []metav1.ObjectMeta{}, err
+	}
+	items := make([]metav1.ObjectMeta, len(crList.Items))
+	for i, item := range crList.Items {
+		items[i] = item.ObjectMeta
+	}
+	return items, nil
+}
 
+// requestsForObjectUpdates creates reconcile requests for DesignateUnbound objects that depend on
+// the given source object (e.g., a Topology). This method is used as a handler function
+// in the controller's watch setup.
+func (r *UnboundReconciler) requestsForObjectUpdates(ctx context.Context, src client.Object) []reconcile.Request {
 	Log := r.GetLogger(ctx)
-
 	allWatchFields := []string{
 		topologyField,
 	}
-
-	for _, field := range allWatchFields {
-		crList := &designatev1.DesignateUnboundList{}
-		listOps := &client.ListOptions{
-			FieldSelector: fields.OneTermEqualSelector(field, src.GetName()),
-			Namespace:     src.GetNamespace(),
-		}
-		err := r.List(context.TODO(), crList, listOps)
-		if err != nil {
-			Log.Error(err, fmt.Sprintf("listing %s for field: %s - %s", crList.GroupVersionKind().Kind, field, src.GetNamespace()))
-			return requests
-		}
-
-		for _, item := range crList.Items {
-			Log.Info(fmt.Sprintf("input source %s changed, reconcile: %s - %s", src.GetName(), item.GetName(), item.GetNamespace()))
-
-			requests = append(requests,
-				reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Name:      item.GetName(),
-						Namespace: item.GetNamespace(),
-					},
-				},
-			)
-		}
-	}
-
-	return requests
+	return CreateRequestsFromObjectUpdates(ctx, r.Client, src, allWatchFields, findUnboundListObjects, &Log)
 }
 
 func (r *UnboundReconciler) reconcileDelete(ctx context.Context, instance *designatev1.DesignateUnbound, helper *helper.Helper) (ctrl.Result, error) {
@@ -553,6 +546,7 @@ func stubZoneDefaults(values map[string]string) map[string]string {
 // return the expected defaults defined in the build.
 // TODO(beagles): it might be a good idea to have this settable through an environment variable to bridge
 // unexpected compatibility issues.
+// NOTE(beagles): we should also consider adding the cidr for the cluster network.
 func (r *UnboundReconciler) getClusterJoinSubnets(ctx context.Context) []string {
 	Log := r.GetLogger(ctx)
 

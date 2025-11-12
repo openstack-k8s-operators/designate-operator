@@ -128,6 +128,11 @@ func (r *Designate) ValidateCreate() (admission.Warnings, error) {
 		allErrs = append(allErrs, err...)
 	}
 
+	// NOTE(beagles): validator here and for updates about
+	// - nsRecords ending with period
+	// - the same not mentioned multiple times for different priorities.
+	// - check expected names in service overrides (maybe just check camel case)
+	//
 	if len(allErrs) != 0 {
 		return nil, apierrors.NewInvalid(
 			schema.GroupKind{Group: "designate.openstack.org", Kind: "Designate"},
