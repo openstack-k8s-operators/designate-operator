@@ -862,7 +862,13 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Data: make(map[string]string),
 		}
 
-		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecords)
+		multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.GetNamespace())
+		if err != nil {
+			Log.Error(err, "Failed to get multipool configuration")
+			return ctrl.Result{}, err
+		}
+
+		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecords, multipoolConfig)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
