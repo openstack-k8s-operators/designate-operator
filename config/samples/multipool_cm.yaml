@@ -1,0 +1,40 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: designate-multipool-config
+  namespace: openstack
+data:
+  pools: |
+    - name: default
+      description: "Default BIND Pool"
+      attributes:
+        availability_zone: "az1"
+      bindReplicas: 2
+      nsRecords:
+        - hostname: ns1.example.org.
+          priority: 1
+        - hostname: ns2.example.org.
+          priority: 2
+    - name: pool1
+      description: "Pool for Zone 1"
+      attributes:
+        availability_zone: "az2"
+        region: "us-west"
+      bindReplicas: 2
+      nsRecords:
+        - hostname: ns3.example.org.
+          priority: 1
+        - hostname: ns4.example.org.
+          priority: 2
+    - name: pool2
+      description: "Pool for Zone 2"
+      attributes:
+        availability_zone: "az3"
+        region: "us-east"
+      bindReplicas: 3
+      nsRecords:
+        - hostname: ns5.example.org.
+          priority: 1
+        - hostname: ns6.example.org.
+          priority: 2
