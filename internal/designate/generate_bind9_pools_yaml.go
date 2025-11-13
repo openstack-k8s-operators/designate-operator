@@ -16,8 +16,10 @@ package designate
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -28,6 +30,32 @@ import (
 
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
+	corev1 "k8s.io/api/core/v1"
+	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+var (
+	// ErrNoPoolsDefined is returned when no pools are defined in multipool configuration
+	ErrNoPoolsDefined = errors.New("at least one pool must be defined")
+	// ErrDuplicatePoolName is returned when duplicate pool names are found
+	ErrDuplicatePoolName = errors.New("duplicate pool name")
+	// ErrEmptyPoolName is returned when a pool has an empty name
+	ErrEmptyPoolName = errors.New("pool has empty name")
+	// ErrInvalidBindReplicas is returned when pool has invalid bindReplicas value
+	ErrInvalidBindReplicas = errors.New("pool has invalid bindReplicas (must be greater than 0)")
+	// ErrDefaultPoolMissing is returned when default pool is not present in multipool configuration
+	ErrDefaultPoolMissing = errors.New("default pool must be present in multipool configuration")
+)
+
+const (
+	// MultipoolConfigMapName is the name of the ConfigMap containing multipool configuration
+	MultipoolConfigMapName = "designate-multipool-config"
+	// MultipoolConfigMapKey is the key in the ConfigMap containing the pools configuration
+	MultipoolConfigMapKey = "pools"
+	// DefaultPoolName is the name of the default pool (must not be deleted)
+	DefaultPoolName = "default"
 )
 
 // Pool represents a designate pool configuration
@@ -82,8 +110,151 @@ type CatalogZone struct {
 	Refresh int    `yaml:"refresh"`
 }
 
+// PoolConfig defines configuration for a single pool from the multipool ConfigMap
+// This is an internal type for parsing the ConfigMap, not part of the CRD API
+type PoolConfig struct {
+	Name         string                              `yaml:"name"`
+	Description  string                              `yaml:"description,omitempty"`
+	Attributes   map[string]string                   `yaml:"attributes,omitempty"`
+	BindReplicas int32                               `yaml:"bindReplicas"`
+	NSRecords    []designatev1.DesignateNSRecord      `yaml:"nsRecords,omitempty"`
+}
+
+// MultipoolConfig defines the complete multipool configuration
+type MultipoolConfig struct {
+	Pools []PoolConfig
+}
+
+// GetMultipoolConfig reads and parses the multipool ConfigMap
+// Returns nil if ConfigMap doesn't exist
+func GetMultipoolConfig(ctx context.Context, k8sClient client.Client, namespace string) (*MultipoolConfig, error) {
+	configMap := &corev1.ConfigMap{}
+	err := k8sClient.Get(ctx, types.NamespacedName{
+		Name:      MultipoolConfigMapName,
+		Namespace: namespace,
+	}, configMap)
+
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	poolsYaml, ok := configMap.Data[MultipoolConfigMapKey]
+	if !ok {
+		return nil, fmt.Errorf("ConfigMap %s does not contain key %s", MultipoolConfigMapName, MultipoolConfigMapKey)
+	}
+
+	var pools []PoolConfig
+	if err := yaml.Unmarshal([]byte(poolsYaml), &pools); err != nil {
+		return nil, fmt.Errorf("failed to parse multipool config: %w", err)
+	}
+
+	config := &MultipoolConfig{Pools: pools}
+
+	if err := validateMultipoolConfig(config); err != nil {
+		return nil, fmt.Errorf("invalid multipool config: %w", err)
+	}
+
+	return config, nil
+}
+
+// validateMultipoolConfig validates the multipool configuration
+func validateMultipoolConfig(config *MultipoolConfig) error {
+	if len(config.Pools) == 0 {
+		return ErrNoPoolsDefined
+	}
+
+	poolNames := make(map[string]bool)
+	hasDefault := false
+
+	for i, pool := range config.Pools {
+		// Check for duplicate pool names
+		if poolNames[pool.Name] {
+			return fmt.Errorf("%w: %s", ErrDuplicatePoolName, pool.Name)
+		}
+		poolNames[pool.Name] = true
+
+		// Check if default pool exists
+		if pool.Name == DefaultPoolName {
+			hasDefault = true
+		}
+
+		// Validate pool name is not empty
+		if pool.Name == "" {
+			return fmt.Errorf("%w at index %d", ErrEmptyPoolName, i)
+		}
+
+		// Validate bindReplicas must be greater than 0
+		if pool.BindReplicas <= 0 {
+			return fmt.Errorf("%w: pool %s has %d", ErrInvalidBindReplicas, pool.Name, pool.BindReplicas)
+		}
+	}
+
+	// Ensure default pool exists and cannot be removed
+	if !hasDefault {
+		return fmt.Errorf("%w: '%s'", ErrDefaultPoolMissing, DefaultPoolName)
+	}
+
+	return nil
+}
+
 // GeneratePoolsYamlDataAndHash sorts all pool resources to get the correct hash every time
-func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord) (string, string, error) {
+func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord, multipoolConfig *MultipoolConfig) (string, string, error) {
+	masterHosts := make([]string, 0, len(MdnsMap))
+	for _, host := range MdnsMap {
+		masterHosts = append(masterHosts, host)
+	}
+	sort.Strings(masterHosts)
+
+	var pools []Pool
+
+	if multipoolConfig == nil {
+		pool, err := generateDefaultPool(BindMap, masterHosts, nsRecords)
+		if err != nil {
+			return "", "", err
+		}
+		pools = []Pool{pool}
+	} else {
+		var err error
+		pools, err = generateMultiplePools(BindMap, masterHosts, multipoolConfig)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	poolBytes, err := yaml.Marshal(pools)
+	if err != nil {
+		return "", "", fmt.Errorf("error marshalling pools for hash: %w", err)
+	}
+	hasher := sha256.New()
+	hasher.Write(poolBytes)
+	poolHash := hex.EncodeToString(hasher.Sum(nil))
+
+	opTemplates, err := util.GetTemplatesPath()
+	if err != nil {
+		return "", "", err
+	}
+	poolsYamlPath := path.Join(opTemplates, PoolsYamlPath)
+	poolsYaml, err := os.ReadFile(poolsYamlPath) // #nosec G304
+	if err != nil {
+		return "", "", err
+	}
+	tmpl, err := template.New("pools").Parse(string(poolsYaml))
+	if err != nil {
+		return "", "", err
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, pools)
+	if err != nil {
+		return "", "", err
+	}
+
+	return buf.String(), poolHash, nil
+}
+
+func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsRecords []designatev1.DesignateNSRecord) (Pool, error) {
 	sort.Slice(nsRecords, func(i, j int) bool {
 		if nsRecords[i].Hostname != nsRecords[j].Hostname {
 			return nsRecords[i].Hostname < nsRecords[j].Hostname
@@ -96,12 +267,6 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 	for i := 0; i < len(BindMap); i++ {
 		bindIPs[i] = BindMap[fmt.Sprintf(keyTmpl, i)]
 	}
-
-	masterHosts := make([]string, 0, len(MdnsMap))
-	for _, host := range MdnsMap {
-		masterHosts = append(masterHosts, host)
-	}
-	sort.Strings(masterHosts)
 
 	targets := make([]Target, len(bindIPs))
 	nameservers := make([]Nameserver, len(bindIPs))
@@ -139,7 +304,6 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 	//	Refresh: 60,
 	// }
 	defaultAttributes := make(map[string]string)
-	// Create the Pool struct with the dynamic values
 	pool := Pool{
 		Name:        "default",
 		Description: "Default BIND Pool",
@@ -150,32 +314,81 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 		CatalogZone: nil, // set to catalogZone if this section should be presented
 	}
 
-	poolBytes, err := yaml.Marshal(pool)
-	if err != nil {
-		return "", "", fmt.Errorf("error marshalling pool for hash: %w", err)
-	}
-	hasher := sha256.New()
-	hasher.Write(poolBytes)
-	poolHash := hex.EncodeToString(hasher.Sum(nil))
+	return pool, nil
+}
 
-	opTemplates, err := util.GetTemplatesPath()
-	if err != nil {
-		return "", "", err
-	}
-	poolsYamlPath := path.Join(opTemplates, PoolsYamlPath)
-	poolsYaml, err := os.ReadFile(poolsYamlPath) // #nosec G304
-	if err != nil {
-		return "", "", err
-	}
-	tmpl, err := template.New("pool").Parse(string(poolsYaml))
-	if err != nil {
-		return "", "", err
-	}
-	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, pool)
-	if err != nil {
-		return "", "", err
+func generateMultiplePools(BindMap map[string]string, masterHosts []string, multipoolConfig *MultipoolConfig) ([]Pool, error) {
+	pools := make([]Pool, 0, len(multipoolConfig.Pools))
+	bindIndex := 0
+
+	for _, poolConfig := range multipoolConfig.Pools {
+		nsRecords := poolConfig.NSRecords
+		sort.Slice(nsRecords, func(i, j int) bool {
+			if nsRecords[i].Hostname != nsRecords[j].Hostname {
+				return nsRecords[i].Hostname < nsRecords[j].Hostname
+			}
+			return nsRecords[i].Priority < nsRecords[j].Priority
+		})
+
+		poolBindIPs := make([]string, poolConfig.BindReplicas)
+		for i := int32(0); i < poolConfig.BindReplicas; i++ {
+			keyTmpl := "bind_address_%d"
+			poolBindIPs[i] = BindMap[fmt.Sprintf(keyTmpl, bindIndex)]
+			bindIndex++
+		}
+
+		targets := make([]Target, poolConfig.BindReplicas)
+		nameservers := make([]Nameserver, poolConfig.BindReplicas)
+		for i := int32(0); i < poolConfig.BindReplicas; i++ {
+			masters := make([]Master, len(masterHosts))
+			for j, masterHost := range masterHosts {
+				masters[j] = Master{
+					Host: masterHost,
+					Port: 5354,
+				}
+			}
+			bindIP := poolBindIPs[i]
+
+			nameservers[i] = Nameserver{
+				Host: bindIP,
+				Port: 53,
+			}
+			targets[i] = Target{
+				Type:        "bind9",
+				Description: fmt.Sprintf("BIND9 Server for pool %s (%s)", poolConfig.Name, bindIP),
+				Masters:     masters,
+				Options: Options{
+					Host:        bindIP,
+					Port:        53,
+					RNDCHost:    bindIP,
+					RNDCPort:    953,
+					RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, bindIndex-int(poolConfig.BindReplicas)+int(i)),
+				},
+			}
+		}
+
+		attributes := poolConfig.Attributes
+		if attributes == nil {
+			attributes = make(map[string]string)
+		}
+
+		// Catalog zone is an optional section
+		// catalogZone := &CatalogZone{
+		// 	FQDN:    "example.org.",
+		//	Refresh: 60,
+		// }
+		pool := Pool{
+			Name:        poolConfig.Name,
+			Description: poolConfig.Description,
+			Attributes:  attributes,
+			NSRecords:   nsRecords,
+			Nameservers: nameservers,
+			Targets:     targets,
+			CatalogZone: nil, // set to catalogZone if this section should be presented
+		}
+
+		pools = append(pools, pool)
 	}
 
-	return buf.String(), poolHash, nil
+	return pools, nil
 }
