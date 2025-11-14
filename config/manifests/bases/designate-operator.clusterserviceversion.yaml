@@ -119,6 +119,7 @@ spec:
   - name: Designate Operator
     url: https://github.com/openstack-k8s-operators/designate-operator
   maturity: alpha
+  minKubeVersion: 0.0.0
   provider:
     name: Red Hat Inc.
     url: https://redhat.com/
