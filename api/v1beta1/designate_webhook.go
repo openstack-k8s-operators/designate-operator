@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -59,15 +58,6 @@ func SetupDesignateDefaults(defaults DesignateDefaults) {
 	designateDefaults = defaults
 	designatelog.Info("Designate defaults initialized", "defaults", defaults)
 }
-
-// SetupWebhookWithManager sets up the webhook with the Manager
-func (r *Designate) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
-		Complete()
-}
-
-//+kubebuilder:webhook:path=/mutate-designate-openstack-org-v1beta1-designate,mutating=true,failurePolicy=fail,sideEffects=None,groups=designate.openstack.org,resources=designates,verbs=create;update,versions=v1beta1,name=mdesignate.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &Designate{}
 
@@ -111,9 +101,6 @@ func (spec *DesignateSpec) Default() {
 func (spec *DesignateSpecCore) Default() {
 	// validations go here for the ControlPlane
 }
-
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-designate-openstack-org-v1beta1-designate,mutating=false,failurePolicy=fail,sideEffects=None,groups=designate.openstack.org,resources=designates,verbs=create;update,versions=v1beta1,name=vdesignate.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &Designate{}
 
