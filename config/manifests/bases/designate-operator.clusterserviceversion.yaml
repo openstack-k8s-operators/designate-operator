@@ -25,11 +25,6 @@ spec:
       kind: DesignateCentrals
       name: designatecentrals.designate.openstack.org
       version: v1beta1
-    - description: DesignateUnbound is the Schema for the designateunbound API
-      displayName: Designate Unbound
-      kind: DesignateUnbound
-      name: designateunbounds.designate.openstack.org
-      version: v1beta1
     - description: DesignateAPI is the Schema for the designateapis API
       displayName: Designate API
       kind: DesignateAPI
@@ -38,6 +33,11 @@ spec:
       - description: TLS - Parameters related to the TLS
         displayName: TLS
         path: tls
+      version: v1beta1
+    - description: DesignateBackendbind9 is the Schema for the designatebackendbind9
+      displayName: Designate Backendbind9
+      kind: DesignateBackendbind9
+      name: designatebackendbind9s.designate.openstack.org
       version: v1beta1
     - description: DesignateCentral is the Schema for the designatecentral API
       displayName: Designate Central
@@ -87,6 +87,11 @@ spec:
         displayName: TLS
         path: designateWorker.tls
       version: v1beta1
+    - description: DesignateUnbound is the Schema for the designateworker API
+      displayName: Designate Unbound
+      kind: DesignateUnbound
+      name: designateunbounds.designate.openstack.org
+      version: v1beta1
     - description: DesignateWorker is the Schema for the designateworker API
       displayName: Designate Worker
       kind: DesignateWorker
@@ -119,6 +124,7 @@ spec:
   - name: Designate Operator
     url: https://github.com/openstack-k8s-operators/designate-operator
   maturity: alpha
+  minKubeVersion: 0.0.0
   provider:
     name: Red Hat Inc.
     url: https://redhat.com/
