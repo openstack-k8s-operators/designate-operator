@@ -1,0 +1,30 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      cat <<EOF | oc apply -n $NAMESPACE -f -
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: designate-multipool-config
+      data:
+        pools: |
+          - name: default
+            description: "Default BIND Pool"
+            attributes:
+              availability_zone: "az1"
+            bindReplicas: 1
+            nsRecords:
+              - hostname: ns1.example.org.
+                priority: 1
+          - name: pool1
+            description: "Pool for Zone 1"
+            attributes:
+              availability_zone: "az2"
+              region: "us-west"
+            bindReplicas: 1
+            nsRecords:
+              - hostname: ns2.example.org.
+                priority: 1
+      EOF
+      echo "Recreated multipool ConfigMap - migrating back to multipool mode"

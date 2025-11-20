@@ -1,0 +1,39 @@
+# Verify pool0 still has 1 replica
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool0
+  labels:
+    pool: default
+    pool-index: "0"
+status:
+  readyReplicas: 1
+---
+# Verify pool1 scaled up to 3 replicas
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool1
+  labels:
+    pool: pool1
+    pool-index: "1"
+spec:
+  replicas: 3
+status:
+  readyReplicas: 3
+---
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+status:
+  designateBackendbind9ReadyCount: 4  # 1 + 3 replicas
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: DesignateBackendbind9Ready

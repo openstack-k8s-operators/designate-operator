@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/gomega"    //revive:disable:dot-imports
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	// revive:disable-next-line:dot-imports
@@ -140,6 +141,119 @@ var _ = Describe("DesignateBackendbind9 controller", func() {
 				condition.InputReadyCondition,
 				corev1.ConditionTrue,
 			)
+		})
+	})
+
+	// Multipool ConfigMap tests - these test the multipool configuration parsing
+	When("multipool ConfigMap is created", func() {
+		var multipoolConfigMapName types.NamespacedName
+
+		BeforeEach(func() {
+			multipoolConfigMapName = types.NamespacedName{
+				Name:      designate.MultipoolConfigMapName,
+				Namespace: namespace,
+			}
+		})
+
+		It("should parse valid multipool configuration", func() {
+			multipoolConfig := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      multipoolConfigMapName.Name,
+					Namespace: multipoolConfigMapName.Namespace,
+				},
+				Data: map[string]string{
+					"pools": `- name: default
+  description: "Default Pool"
+  bindReplicas: 1
+  nsRecords:
+    - hostname: ns1.example.org.
+      priority: 1
+- name: pool1
+  description: "Pool 1"
+  bindReplicas: 2
+  nsRecords:
+    - hostname: ns2.example.org.
+      priority: 1`,
+				},
+			}
+			Expect(k8sClient.Create(ctx, multipoolConfig)).Should(Succeed())
+			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
+
+			// Verify we can fetch and parse the config
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(config).ShouldNot(BeNil())
+			Expect(config.Pools).To(HaveLen(2))
+			Expect(config.Pools[0].Name).To(Equal("default"))
+			Expect(config.Pools[0].BindReplicas).To(Equal(int32(1)))
+			Expect(config.Pools[1].Name).To(Equal("pool1"))
+			Expect(config.Pools[1].BindReplicas).To(Equal(int32(2)))
+		})
+
+		It("should not fail if multipool ConfigMap is missing", func() {
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(config).Should(BeNil())
+		})
+
+		It("should reject invalid YAML in multipool config", func() {
+			invalidConfig := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      multipoolConfigMapName.Name,
+					Namespace: multipoolConfigMapName.Namespace,
+				},
+				Data: map[string]string{
+					"pools": `invalid: yaml: content:
+  - this is not valid`,
+				},
+			}
+			Expect(k8sClient.Create(ctx, invalidConfig)).Should(Succeed())
+			DeferCleanup(k8sClient.Delete, ctx, invalidConfig)
+
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			Expect(err).Should(HaveOccurred())
+			Expect(config).Should(BeNil())
+		})
+
+		It("should maintain stable pool ordering regardless of ConfigMap order", func() {
+			// Create a ConfigMap with pools in non-alphabetical order
+			multipoolConfig := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      multipoolConfigMapName.Name,
+					Namespace: multipoolConfigMapName.Namespace,
+				},
+				Data: map[string]string{
+					"pools": `- name: pool2
+  description: "Pool 2"
+  bindReplicas: 1
+  nsRecords:
+    - hostname: ns3.example.org.
+      priority: 1
+- name: default
+  description: "Default Pool"
+  bindReplicas: 1
+  nsRecords:
+    - hostname: ns1.example.org.
+      priority: 1
+- name: pool1
+  description: "Pool 1"
+  bindReplicas: 1
+  nsRecords:
+    - hostname: ns2.example.org.
+      priority: 1`,
+				},
+			}
+			Expect(k8sClient.Create(ctx, multipoolConfig)).Should(Succeed())
+			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
+
+			// Fetch and verify pools are sorted alphabetically
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(config).ShouldNot(BeNil())
+			Expect(config.Pools).To(HaveLen(3))
+			Expect(config.Pools[0].Name).To(Equal("default"), "First pool should be 'default'")
+			Expect(config.Pools[1].Name).To(Equal("pool1"), "Second pool should be 'pool1'")
+			Expect(config.Pools[2].Name).To(Equal("pool2"), "Third pool should be 'pool2'")
 		})
 	})
 })

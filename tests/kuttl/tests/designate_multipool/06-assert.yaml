@@ -1,0 +1,37 @@
+# Verify single StatefulSet exists
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9
+spec:
+  replicas: 3
+status:
+  readyReplicas: 3
+---
+# Verify pool StatefulSets were deleted
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # Check that pool StatefulSets no longer exist
+      if oc get statefulset designate-backendbind9-pool0 -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Pool StatefulSets should be deleted"
+        exit 1
+      fi
+      if oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Pool StatefulSets should be deleted"
+        exit 1
+      fi
+      echo "SUCCESS: Migrated to single pool mode"
+---
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+status:
+  designateBackendbind9ReadyCount: 3  # Single pool with default 3 replicas
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
