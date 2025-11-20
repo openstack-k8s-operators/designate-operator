@@ -133,6 +133,24 @@ type DesignateReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
+// getMultipoolConfig is a helper method that retrieves multipool configuration
+// with consistent error handling and logging
+func (r *DesignateReconciler) getMultipoolConfig(
+	ctx context.Context,
+	k8sClient client.Client,
+	namespace string,
+) (*designate.MultipoolConfig, error) {
+	Log := r.GetLogger(ctx)
+
+	multipoolConfig, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+	if err != nil {
+		Log.Error(err, "Failed to get multipool configuration")
+		return nil, err
+	}
+
+	return multipoolConfig, nil
+}
+
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designates/finalizers,verbs=update;patch
@@ -748,6 +766,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	Log.Info("Deployment API task reconciled")
 
+	// Get multipool configuration once for use in bind IP allocation and pools.yaml generation
+	multipoolConfig, err := r.getMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Handle Mdns predictable IPs configmap
 	nad, err := nad.GetNADWithName(ctx, helper, instance.Spec.DesignateNetworkAttachment, instance.Namespace)
 	if err != nil {
@@ -826,9 +850,16 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	// Unlike mDNS, we can have 0 binds when byob is used.
 	// NOTE(beagles) Really it might make more sense to have BYOB be an explicit flag and not assume that a 0
 	// value is a byob case. Something to think about.
-	bindReplicaCount := int(*instance.Spec.DesignateBackendbind9.Replicas)
 	var bindNames []string
-	for i := range bindReplicaCount {
+	totalBinds := 0
+	if multipoolConfig != nil {
+		for _, pool := range multipoolConfig.Pools {
+			totalBinds += int(pool.BindReplicas)
+		}
+	} else {
+		totalBinds = int(*instance.Spec.DesignateBackendbind9.Replicas)
+	}
+	for i := range totalBinds {
 		bindNames = append(bindNames, fmt.Sprintf("bind_address_%d", i))
 	}
 
@@ -860,12 +891,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 				Labels:    bindLabels,
 			},
 			Data: make(map[string]string),
-		}
-
-		multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.GetNamespace())
-		if err != nil {
-			Log.Error(err, "Failed to get multipool configuration")
-			return ctrl.Result{}, err
 		}
 
 		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecords, multipoolConfig)
@@ -1312,11 +1337,24 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	Log := r.GetLogger(ctx)
 
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), map[string]string{})
-	replicas := int(*instance.Spec.DesignateBackendbind9.Replicas)
+
+	var replicas int
+	multipoolConfig, err := r.getMultipoolConfig(ctx, h.GetClient(), instance.Namespace)
+	if err != nil {
+		return err
+	}
+
+	if multipoolConfig != nil {
+		for _, pool := range multipoolConfig.Pools {
+			replicas += int(pool.BindReplicas)
+		}
+	} else {
+		replicas = int(*instance.Spec.DesignateBackendbind9.Replicas)
+	}
 
 	// Get the secret first by providing the same name and namespace
 	secret := &corev1.Secret{}
-	err := h.GetClient().Get(ctx, types.NamespacedName{
+	err = h.GetClient().Get(ctx, types.NamespacedName{
 		Name:      designate.DesignateBindKeySecret,
 		Namespace: instance.Namespace,
 	}, secret)

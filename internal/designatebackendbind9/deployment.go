@@ -38,7 +38,7 @@ import (
 
 const (
 	// PVCSuffix is the suffix used for PVC names
-	PVCSuffix = "-designate-bind"
+	PVCSuffix = "-data"
 )
 
 // StatefulSet creates a StatefulSet for the designate backend bind9 service
@@ -48,6 +48,7 @@ func StatefulSet(
 	labels map[string]string,
 	annotations map[string]string,
 	topology *topologyv1.Topology,
+	statefulSetName string,
 ) (*appsv1.StatefulSet, error) {
 
 	// TODO(beagles): Dbl check that running as the default kolla/tcib user works okay here. Permissions on some of the
@@ -86,12 +87,13 @@ func StatefulSet(
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
+	// Use instance.Name for secret references (shared across pools in multipool mode)
 	serviceVolumes := getServicePodVolumes(instance.Name)
 
 	serviceName := fmt.Sprintf("%s-backendbind9", designate.ServiceName)
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.Name,
+			Name:      statefulSetName,
 			Namespace: instance.Namespace,
 			Labels:    labels,
 		},
@@ -128,17 +130,13 @@ func StatefulSet(
 		WhenDeleted: appsv1.DeletePersistentVolumeClaimRetentionPolicyType,
 		WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
 	}
-	blockOwnerDeletion := false
-	ownerRef := metav1.NewControllerRef(instance, instance.GroupVersionKind())
-	ownerRef.BlockOwnerDeletion = &blockOwnerDeletion
 
 	statefulSet.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{
 		{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            instance.Name + PVCSuffix,
-				Namespace:       instance.Namespace,
-				Labels:          labels,
-				OwnerReferences: []metav1.OwnerReference{*ownerRef},
+				Name:      instance.Name + PVCSuffix,
+				Namespace: instance.Namespace,
+				Labels:    labels,
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{

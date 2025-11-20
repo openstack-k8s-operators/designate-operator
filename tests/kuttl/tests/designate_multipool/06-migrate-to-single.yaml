@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      # Delete multipool ConfigMap to return to single pool mode
+      oc delete configmap designate-multipool-config -n $NAMESPACE
+      echo "Deleted multipool ConfigMap - migrating to single pool mode"

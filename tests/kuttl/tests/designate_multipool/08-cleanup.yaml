@@ -1,0 +1,8 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      oc delete designate designate -n $NAMESPACE
+      oc delete configmap designate-multipool-config -n $NAMESPACE
+      # Clean up any remaining PVCs from the StatefulSets
+      oc delete pvc -l service=designate-backendbind9 -n $NAMESPACE

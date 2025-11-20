@@ -1,0 +1,46 @@
+# Verify 3 pools are deployed
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool0
+  labels:
+    pool: default
+    pool-index: "0"
+status:
+  readyReplicas: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool1
+  labels:
+    pool: pool1
+    pool-index: "1"
+status:
+  readyReplicas: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool2
+  labels:
+    pool: pool2
+    pool-index: "2"
+status:
+  readyReplicas: 1
+---
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+status:
+  designateBackendbind9ReadyCount: 3  # 3 pools × 1 replica each
+  conditions:
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: Ready
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: DesignateBackendbind9Ready

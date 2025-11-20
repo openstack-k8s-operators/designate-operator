@@ -113,11 +113,11 @@ type CatalogZone struct {
 // PoolConfig defines configuration for a single pool from the multipool ConfigMap
 // This is an internal type for parsing the ConfigMap, not part of the CRD API
 type PoolConfig struct {
-	Name         string                              `yaml:"name"`
-	Description  string                              `yaml:"description,omitempty"`
-	Attributes   map[string]string                   `yaml:"attributes,omitempty"`
-	BindReplicas int32                               `yaml:"bindReplicas"`
-	NSRecords    []designatev1.DesignateNSRecord      `yaml:"nsRecords,omitempty"`
+	Name         string                          `yaml:"name"`
+	Description  string                          `yaml:"description,omitempty"`
+	Attributes   map[string]string               `yaml:"attributes,omitempty"`
+	BindReplicas int32                           `yaml:"bindReplicas"`
+	NSRecords    []designatev1.DesignateNSRecord `yaml:"nsRecords,omitempty"`
 }
 
 // MultipoolConfig defines the complete multipool configuration
@@ -150,6 +150,11 @@ func GetMultipoolConfig(ctx context.Context, k8sClient client.Client, namespace 
 	if err := yaml.Unmarshal([]byte(poolsYaml), &pools); err != nil {
 		return nil, fmt.Errorf("failed to parse multipool config: %w", err)
 	}
+
+	// Sort pools by name for stable ordering
+	sort.Slice(pools, func(i, j int) bool {
+		return pools[i].Name < pools[j].Name
+	})
 
 	config := &MultipoolConfig{Pools: pools}
 
@@ -318,10 +323,17 @@ func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsReco
 }
 
 func generateMultiplePools(BindMap map[string]string, masterHosts []string, multipoolConfig *MultipoolConfig) ([]Pool, error) {
-	pools := make([]Pool, 0, len(multipoolConfig.Pools))
+	// Sort pools by name for stable ordering
+	sortedPools := make([]PoolConfig, len(multipoolConfig.Pools))
+	copy(sortedPools, multipoolConfig.Pools)
+	sort.Slice(sortedPools, func(i, j int) bool {
+		return sortedPools[i].Name < sortedPools[j].Name
+	})
+
+	pools := make([]Pool, 0, len(sortedPools))
 	bindIndex := 0
 
-	for _, poolConfig := range multipoolConfig.Pools {
+	for _, poolConfig := range sortedPools {
 		nsRecords := poolConfig.NSRecords
 		sort.Slice(nsRecords, func(i, j int) bool {
 			if nsRecords[i].Hostname != nsRecords[j].Hostname {
