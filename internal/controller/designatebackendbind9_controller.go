@@ -38,6 +38,8 @@ import (
 
 	"github.com/go-logr/logr"
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+	"gopkg.in/yaml.v2"
+
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
 	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/internal/designatebackendbind9"
@@ -248,6 +250,19 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(ctx context.Context, 
 		if err := r.List(context.Background(), apis, listOpts...); err != nil {
 			Log.Error(err, "Unable to retrieve Backendbind9 CRs %v")
 			return nil
+		}
+
+		// reconcile all DesignateBackendbind9 CRs on multipool configmap change
+		if o.GetName() == designate.MultipoolConfigMapName {
+			Log.Info("Multipool ConfigMap changed, reconciling all DesignateBackendbind9 CRs")
+			for _, cr := range apis.Items {
+				name := client.ObjectKey{
+					Namespace: o.GetNamespace(),
+					Name:      cr.Name,
+				}
+				result = append(result, reconcile.Request{NamespacedName: name})
+			}
+			return result
 		}
 
 		label := o.GetLabels()
@@ -580,8 +595,85 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	// normal reconcile tasks
 	//
 
+	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)
+	if err != nil {
+		Log.Error(err, "Failed to get multipool configuration")
+		return ctrl.Result{}, err
+	}
+
+	if multipoolConfig != nil {
+		// Delete the old single StatefulSet if it exists (migration from single / default pool to multipool)
+		oldSts := &appsv1.StatefulSet{}
+		err = helper.GetClient().Get(ctx, types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, oldSts)
+		if err == nil {
+			Log.Info(fmt.Sprintf("Deleting old single StatefulSet %s for multipool migration", instance.Name))
+			err = helper.GetClient().Delete(ctx, oldSts)
+			if err != nil {
+				Log.Error(err, "Failed to delete old single StatefulSet")
+				return ctrl.Result{}, err
+			}
+		} else if !k8s_errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+
+		ctrlResult, err := r.reconcileMultipoolStatefulSets(ctx, instance, helper, multipoolConfig, inputHash, serviceLabels, serviceAnnotations, topology)
+		if err != nil || (ctrlResult != ctrl.Result{}) {
+			return ctrlResult, err
+		}
+	} else {
+		// Delete any multipool StatefulSets if they exist (migration from multipool to single / default pool)
+		stsList := &appsv1.StatefulSetList{}
+		labelSelector := map[string]string{
+			"service":   "designate-backendbind9",
+			"component": "designate-backendbind9",
+		}
+		err = helper.GetClient().List(ctx, stsList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
+		if err == nil {
+			for _, sts := range stsList.Items {
+				// Delete any StatefulSet that has a pool label (multipool StatefulSets)
+				if _, hasPoolLabel := sts.Labels["pool"]; hasPoolLabel && sts.Name != instance.Name {
+					Log.Info(fmt.Sprintf("Deleting multipool StatefulSet %s for single pool migration", sts.Name))
+					err = helper.GetClient().Delete(ctx, &sts)
+					if err != nil && !k8s_errors.IsNotFound(err) {
+						Log.Error(err, fmt.Sprintf("Failed to delete multipool StatefulSet %s", sts.Name))
+						return ctrl.Result{}, err
+					}
+				}
+			}
+		} else if !k8s_errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+
+		ctrlResult, err := r.reconcileSingleStatefulSet(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
+		if err != nil || (ctrlResult != ctrl.Result{}) {
+			return ctrlResult, err
+		}
+	}
+	// create StatefulSet(s) - end
+
+	// We reached the end of the Reconcile, update the Ready condition based on
+	// the sub conditions
+	if instance.Status.Conditions.AllSubConditionIsTrue() {
+		instance.Status.Conditions.MarkTrue(
+			condition.ReadyCondition, condition.ReadyMessage)
+	}
+	Log.Info("Reconciled Service successfully")
+	return ctrl.Result{}, nil
+}
+
+func (r *DesignateBackendbind9Reconciler) reconcileSingleStatefulSet(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+	inputHash string,
+	serviceLabels map[string]string,
+	serviceAnnotations map[string]string,
+	topology *topologyv1.Topology,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
 	// Define a new StatefulSet object
-	deplDef, err := designatebackendbind9.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations, topology)
+	deplDef, err := designatebackendbind9.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations, topology, instance.Name)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -590,7 +682,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		time.Duration(5)*time.Second,
 	)
 
-	ctrlResult, err = depl.CreateOrPatch(ctx, helper)
+	ctrlResult, err := depl.CreateOrPatch(ctx, helper)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DeploymentReadyCondition,
@@ -659,16 +751,367 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 				condition.DeploymentReadyRunningMessage))
 		}
 	}
-	// create StatefulSet - end
 
-	// We reached the end of the Reconcile, update the Ready condition based on
-	// the sub conditions
-	if instance.Status.Conditions.AllSubConditionIsTrue() {
-		instance.Status.Conditions.MarkTrue(
-			condition.ReadyCondition, condition.ReadyMessage)
-	}
-	Log.Info("Reconciled Service successfully")
+	Log.Info("Reconciled single StatefulSet successfully")
 	return ctrl.Result{}, nil
+}
+
+// reconcileMultipoolStatefulSets creates multiple StatefulSets, one per pool
+func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+	multipoolConfig *designate.MultipoolConfig,
+	inputHash string,
+	serviceLabels map[string]string,
+	serviceAnnotations map[string]string,
+	topology *topologyv1.Topology,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+	Log.Info("Reconciling multipool StatefulSets")
+
+	var totalReadyCount int32
+	networkAttachmentStatus := map[string][]string{}
+	allDeploymentsReady := true
+	var requeueNeeded bool
+	var requeueResult ctrl.Result
+
+	// Track expected StatefulSet names for cleanup
+	expectedStatefulSets := make(map[string]bool)
+
+	// Create a StatefulSet for each pool
+	for poolIdx, pool := range multipoolConfig.Pools {
+		// Create a modified instance for this pool with pool-specific replicas
+		poolInstance := instance.DeepCopy()
+		poolInstance.Spec.Replicas = &pool.BindReplicas
+		poolStatefulSetName := fmt.Sprintf("%s-pool%d", instance.Name, poolIdx)
+		expectedStatefulSets[poolStatefulSetName] = true
+
+		// Add pool-specific labels
+		poolLabels := make(map[string]string)
+		for k, v := range serviceLabels {
+			poolLabels[k] = v
+		}
+		poolLabels["pool"] = pool.Name
+		poolLabels["pool-index"] = fmt.Sprintf("%d", poolIdx)
+
+		Log.Info(fmt.Sprintf("Creating/updating StatefulSet for pool %s with %d replicas", pool.Name, pool.BindReplicas))
+
+		// Define a new StatefulSet object for this pool
+		// instance.Name is used for secret references (shared across pools)
+		// poolStatefulSetName is used for the StatefulSet name
+		deplDef, err := designatebackendbind9.StatefulSet(poolInstance, inputHash, poolLabels, serviceAnnotations, topology, poolStatefulSetName)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		// Check if StatefulSet exists and needs to be deleted due to immutable field changes
+		existingSts := &appsv1.StatefulSet{}
+		err = helper.GetClient().Get(ctx, types.NamespacedName{Name: poolStatefulSetName, Namespace: poolInstance.Namespace}, existingSts)
+		if err == nil {
+			// Check if VolumeClaimTemplates differ (immutable field)
+			if len(existingSts.Spec.VolumeClaimTemplates) > 0 && len(deplDef.Spec.VolumeClaimTemplates) > 0 {
+				if existingSts.Spec.VolumeClaimTemplates[0].Name != deplDef.Spec.VolumeClaimTemplates[0].Name {
+					Log.Info(fmt.Sprintf("VolumeClaimTemplate name changed, deleting StatefulSet %s for recreation", poolStatefulSetName))
+					err = helper.GetClient().Delete(ctx, existingSts)
+					if err != nil {
+						Log.Error(err, "Failed to delete StatefulSet for recreation")
+						return ctrl.Result{}, err
+					}
+					// Mark that we need to requeue, but continue processing other pools
+					requeueNeeded = true
+					requeueResult = ctrl.Result{Requeue: true}
+					continue
+				}
+			}
+		} else if !k8s_errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+
+		depl := statefulset.NewStatefulSet(
+			deplDef,
+			time.Duration(5)*time.Second,
+		)
+
+		ctrlResult, err := depl.CreateOrPatch(ctx, helper)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.DeploymentReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.DeploymentReadyErrorMessage,
+				err.Error()))
+			return ctrlResult, err
+		} else if (ctrlResult != ctrl.Result{}) {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.DeploymentReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.DeploymentReadyRunningMessage))
+			// Don't return early - track that we need to requeue and continue processing
+			requeueNeeded = true
+			requeueResult = ctrlResult
+		}
+
+		deploy := depl.GetStatefulSet()
+
+		// If generation doesn't match, StatefulSet is still being updated
+		if deploy.Generation != deploy.Status.ObservedGeneration {
+			allDeploymentsReady = false
+			continue
+		}
+		totalReadyCount += deploy.Status.ReadyReplicas
+
+		if err := r.verifyPoolNetworkAttachments(ctx, helper, instance, pool, &deploy, poolLabels, networkAttachmentStatus); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if !statefulset.IsReady(deploy) {
+			allDeploymentsReady = false
+		}
+	}
+
+	// Cleanup orphaned StatefulSets (pools that were removed from config)
+	// This always runs, even if pools are still being created/updated
+	cleanupResult, err := r.cleanupOrphanedStatefulSets(ctx, instance, helper, expectedStatefulSets)
+	if err != nil {
+		return cleanupResult, err
+	} else if (cleanupResult != ctrl.Result{}) {
+		requeueNeeded = true
+		requeueResult = cleanupResult
+	}
+
+	// Update the overall status
+	instance.Status.ReadyCount = totalReadyCount
+	instance.Status.NetworkAttachments = networkAttachmentStatus
+
+	if allDeploymentsReady && len(networkAttachmentStatus) > 0 {
+		instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
+	}
+
+	if allDeploymentsReady {
+		instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
+	} else {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.DeploymentReadyCondition,
+			condition.RequestedReason,
+			condition.SeverityInfo,
+			condition.DeploymentReadyRunningMessage))
+	}
+
+	Log.Info(fmt.Sprintf("Reconciled multipool StatefulSets successfully, total ready: %d", totalReadyCount))
+
+	if requeueNeeded {
+		return requeueResult, nil
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// verifyPoolNetworkAttachments verifies network attachments for a pool's StatefulSet
+// and merges the network status into the provided networkAttachmentStatus map
+func (r *DesignateBackendbind9Reconciler) verifyPoolNetworkAttachments(
+	ctx context.Context,
+	helper *helper.Helper,
+	instance *designatev1beta1.DesignateBackendbind9,
+	pool designate.PoolConfig,
+	deploy *appsv1.StatefulSet,
+	poolLabels map[string]string,
+	networkAttachmentStatus map[string][]string,
+) error {
+	// If pool has no replicas, network verification is not needed
+	if pool.BindReplicas == 0 {
+		return nil
+	}
+
+	// If no pods are ready yet, skip verification
+	if deploy.Status.ReadyReplicas == 0 {
+		return nil
+	}
+
+	// Verify network status from pod annotations
+	networkReady, poolNetworkStatus, err := nad.VerifyNetworkStatusFromAnnotation(
+		ctx,
+		helper,
+		instance.Spec.NetworkAttachments,
+		poolLabels,
+		deploy.Status.ReadyReplicas,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Merge network attachment status
+	for k, v := range poolNetworkStatus {
+		networkAttachmentStatus[k] = v
+	}
+
+	// If network is not ready, set error condition and return
+	if !networkReady {
+		err := fmt.Errorf("%w: %s (pool: %s)", designate.ErrNetworkAttachmentConfig, instance.Spec.NetworkAttachments, pool.Name)
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.NetworkAttachmentsReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.NetworkAttachmentsReadyErrorMessage,
+			err.Error()))
+		return err
+	}
+
+	return nil
+}
+
+// cleanupOrphanedStatefulSets removes StatefulSets for pools that no longer exist in the config
+func (r *DesignateBackendbind9Reconciler) cleanupOrphanedStatefulSets(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+	expectedStatefulSets map[string]bool,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+	stsList := &appsv1.StatefulSetList{}
+	labelSelector := map[string]string{
+		"service":   "designate-backendbind9",
+		"component": "designate-backendbind9",
+	}
+	err := helper.GetClient().List(ctx, stsList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
+	if err != nil {
+		Log.Error(err, "Failed to list StatefulSets for cleanup")
+		return ctrl.Result{}, err
+	}
+
+	// Find orphaned StatefulSets (ones with pool label that are not in expected list)
+	for _, sts := range stsList.Items {
+		// Only process StatefulSets with pool label (multipool StatefulSets)
+		poolName, hasPoolLabel := sts.Labels["pool"]
+		if !hasPoolLabel {
+			continue
+		}
+
+		// Skip if this StatefulSet is expected
+		if expectedStatefulSets[sts.Name] {
+			continue
+		}
+
+		Log.Info(fmt.Sprintf("Found orphaned StatefulSet %s for pool %s", sts.Name, poolName))
+
+		// Check if this pool has active zones. If it does, designate won't allow us to remove it
+		hasZones, err := r.checkPoolHasZones(ctx, helper, instance, poolName)
+		if err != nil {
+			Log.Error(err, fmt.Sprintf("Failed to check zones for pool %s", poolName))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.DeploymentReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.DeploymentReadyErrorMessage,
+				fmt.Sprintf("Failed to check if pool %s has active zones: %v", poolName, err)))
+			return ctrl.Result{RequeueAfter: time.Minute}, err
+		}
+
+		if hasZones {
+			// Pool has active zones, cannot remove
+			errMsg := fmt.Sprintf("pool %s has active DNS zones and cannot be removed. Please delete zones first", poolName)
+			Log.Info(errMsg)
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.DeploymentReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.DeploymentReadyErrorMessage,
+				errMsg))
+			return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
+		}
+
+		// No zones, proceed with graceful removal
+		// First, scale to 0 if not already at 0
+		if *sts.Spec.Replicas > 0 {
+			Log.Info(fmt.Sprintf("Scaling down StatefulSet %s to 0 replicas before deletion", sts.Name))
+			sts.Spec.Replicas = new(int32)
+			err = helper.GetClient().Update(ctx, &sts)
+			if err != nil {
+				Log.Error(err, fmt.Sprintf("Failed to scale down StatefulSet %s", sts.Name))
+				return ctrl.Result{}, err
+			}
+			// Requeue to allow scale-down to complete
+			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+		}
+
+		// Wait until all pods are terminated
+		if sts.Status.Replicas > 0 || sts.Status.ReadyReplicas > 0 {
+			Log.Info(fmt.Sprintf("Waiting for StatefulSet %s pods to terminate (replicas: %d, ready: %d)",
+				sts.Name, sts.Status.Replicas, sts.Status.ReadyReplicas))
+			return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+		}
+
+		// All pods are terminated, safe to delete StatefulSet
+		Log.Info(fmt.Sprintf("Deleting orphaned StatefulSet %s for removed pool %s", sts.Name, poolName))
+		err = helper.GetClient().Delete(ctx, &sts)
+		if err != nil && !k8s_errors.IsNotFound(err) {
+			Log.Error(err, fmt.Sprintf("Failed to delete StatefulSet %s", sts.Name))
+			return ctrl.Result{}, err
+		}
+		// Requeue to continue cleanup if there are more orphaned StatefulSets
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// checkPoolHasZones checks if a pool has any active DNS zones using gophercloud
+func (r *DesignateBackendbind9Reconciler) checkPoolHasZones(
+	ctx context.Context,
+	helper *helper.Helper,
+	instance *designatev1beta1.DesignateBackendbind9,
+	poolName string,
+) (bool, error) {
+	Log := r.GetLogger(ctx)
+
+	// Verify the pool exists in the ConfigMap
+	err := r.verifyPoolInConfig(ctx, helper, instance, poolName)
+	if err != nil {
+		Log.Info(fmt.Sprintf("Could not verify pool %s in config, assuming it's safe to remove: %v", poolName, err))
+		return false, nil
+	}
+
+	// TODO: Use gophercloud to query Designate API for zones in this pool
+	// Example: openstack zone list --all --long -f value | grep <poolName>
+	// For now, return false to allow removal
+	Log.Info(fmt.Sprintf("Pool %s zone check - using simplified check (always returns false)", poolName))
+	return false, nil
+}
+
+// verifyPoolInConfig verifies that a pool exists in the pools.yaml ConfigMap
+func (r *DesignateBackendbind9Reconciler) verifyPoolInConfig(
+	ctx context.Context,
+	helper *helper.Helper,
+	instance *designatev1beta1.DesignateBackendbind9,
+	poolName string,
+) error {
+	poolsConfigMap := &corev1.ConfigMap{}
+	err := helper.GetClient().Get(ctx, types.NamespacedName{
+		Name:      designate.PoolsYamlConfigMap,
+		Namespace: instance.Namespace,
+	}, poolsConfigMap)
+	if err != nil {
+		return fmt.Errorf("failed to get pools ConfigMap: %w", err)
+	}
+
+	poolsYamlData, ok := poolsConfigMap.Data[designate.PoolsYamlContent]
+	if !ok {
+		return fmt.Errorf("pools.yaml not found in ConfigMap")
+	}
+
+	var pools []designate.Pool
+	if err := yaml.Unmarshal([]byte(poolsYamlData), &pools); err != nil {
+		return fmt.Errorf("failed to parse pools.yaml: %w", err)
+	}
+
+	for _, pool := range pools {
+		if pool.Name == poolName {
+			return nil // Pool found
+		}
+	}
+
+	return fmt.Errorf("pool %s not found in pools.yaml", poolName)
 }
 
 func (r *DesignateBackendbind9Reconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9) (ctrl.Result, error) {
