@@ -1,0 +1,183 @@
+/*
+Copyright 2024.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package functional_test
+
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+	. "github.com/onsi/ginkgo/v2" //revive:disable:dot-imports
+	. "github.com/onsi/gomega"    //revive:disable:dot-imports
+	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+
+	// "sigs.k8s.io/controller-runtime/pkg/client"
+	// revive:disable-next-line:dot-imports
+	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
+	. "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
+	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
+)
+
+var _ = Describe("DesignateCentral controller", func() {
+	var name string
+	var spec map[string]any
+	var designateCentralName types.NamespacedName
+	var designateRedisName types.NamespacedName
+	var transportURLSecretName types.NamespacedName
+
+	BeforeEach(func() {
+		name = fmt.Sprintf("designate-central-%s", uuid.New().String())
+		spec = GetDefaultDesignateCentralSpec()
+
+		transportURLSecretName = types.NamespacedName{
+			Namespace: namespace,
+			Name:      RabbitmqSecretName,
+		}
+
+		designateCentralName = types.NamespacedName{
+			Name:      name,
+			Namespace: namespace,
+		}
+
+		designateRedisName = types.NamespacedName{
+			Namespace: namespace,
+			Name:      "designate-redis",
+		}
+	})
+	When("a DesignateCentral instance is created", func() {
+		BeforeEach(func() {
+			DeferCleanup(th.DeleteInstance, CreateDesignateCentral(designateCentralName, spec))
+		})
+
+		It("should have the Status fields initialized", func() {
+			designateCentral := GetDesignateCentral(designateCentralName)
+			Expect(designateCentral.Status.ReadyCount).Should(Equal(int32(0)))
+		})
+
+		It("should have a finalizer", func() {
+			// the reconciler loop adds the finalizer so we have to wait for
+			// it to run
+			Eventually(func() []string {
+				return GetDesignateCentral(designateCentralName).Finalizers
+			}, timeout, interval).Should(ContainElement("openstack.org/designatecentral"))
+		})
+
+		It("should have a expected default values", func() {
+			designateCentral := GetDesignateCentral((designateCentralName))
+			Expect(designateCentral.Spec.ServiceUser).Should(Equal("designate"))
+			Expect(designateCentral.Spec.DatabaseAccount).Should(Equal("designate"))
+			Expect(designateCentral.Spec.PasswordSelectors.Service).Should(Equal("DesignatePassword"))
+		})
+
+		It("should not create a secret", func() {
+			secret := types.NamespacedName{
+				Namespace: designateCentralName.Namespace,
+				Name:      fmt.Sprintf("%s-%s", designateCentralName.Name, "config-data"),
+			}
+			th.AssertSecretDoesNotExist(secret)
+		})
+	})
+
+	When("a proper secret is provided and TransportURL is created", func() {
+		BeforeEach(func() {
+			DeferCleanup(th.DeleteInstance, CreateDesignateCentral(designateCentralName, spec))
+			DeferCleanup(k8sClient.Delete, ctx, CreateDesignateSecret(namespace))
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(transportURLSecretName))
+		})
+
+		It("should not create a secret", func() {
+			secret := types.NamespacedName{
+				Namespace: designateCentralName.Namespace,
+				Name:      fmt.Sprintf("%s-%s", designateCentralName.Name, "config-data"),
+			}
+			th.AssertSecretDoesNotExist(secret)
+		})
+	})
+
+	// Notes: DesignateCentral's config file is basically hard coded and merged with the main config file
+	// in the designate controller.
+	When("config files are created", func() {
+		var keystoneInternalEndpoint string
+		var keystonePublicEndpoint string
+
+		BeforeEach(func() {
+			keystoneName := keystone.CreateKeystoneAPI(namespace)
+			DeferCleanup(keystone.DeleteKeystoneAPI, keystoneName)
+			keystoneInternalEndpoint = fmt.Sprintf("http://keystone-for-%s-internal", designateCentralName.Name)
+			keystonePublicEndpoint = fmt.Sprintf("http://keystone-for-%s-public", designateCentralName.Name)
+			SimulateKeystoneReady(keystoneName, keystonePublicEndpoint, keystoneInternalEndpoint)
+
+			createAndSimulateRedis(designateRedisName)
+			DeferCleanup(k8sClient.Delete, ctx, CreateDesignateSecret(namespace))
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(transportURLSecretName))
+
+			spec["customServiceConfig"] = "[DEFAULT]\ndebug=True\n"
+			DeferCleanup(th.DeleteInstance, CreateDesignateCentral(designateCentralName, spec))
+
+			mariaDBDatabaseName := mariadb.CreateMariaDBDatabase(namespace, designate.DatabaseCRName, mariadbv1.MariaDBDatabaseSpec{})
+			mariaDBDatabase := mariadb.GetMariaDBDatabase(mariaDBDatabaseName)
+			DeferCleanup(k8sClient.Delete, ctx, mariaDBDatabase)
+
+			designateCentral := GetDesignateCentral(designateCentralName)
+			apiMariaDBAccount, apiMariaDBSecret := mariadb.CreateMariaDBAccountAndSecret(
+				types.NamespacedName{
+					Namespace: namespace,
+					Name:      designateCentral.Spec.DatabaseAccount,
+				}, mariadbv1.MariaDBAccountSpec{})
+			DeferCleanup(k8sClient.Delete, ctx, apiMariaDBAccount)
+			DeferCleanup(k8sClient.Delete, ctx, apiMariaDBSecret)
+
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+		})
+
+		It("should be in state of having the input ready", func() {
+			th.ExpectCondition(
+				designateCentralName,
+				ConditionGetterFunc(DesignateCentralConditionGetter),
+				condition.InputReadyCondition,
+				corev1.ConditionTrue,
+			)
+		})
+
+		It("should set Service Config Ready Condition", func() {
+			th.ExpectCondition(
+				designateCentralName,
+				ConditionGetterFunc(DesignateCentralConditionGetter),
+				condition.ServiceConfigReadyCondition,
+				corev1.ConditionTrue,
+			)
+		})
+
+		// Notes: DesignateCentral's config file is basically hard coded and merged with the main
+		// config file in the designate controller so there is no need to test this here. The
+		// customServiceConfig however is specific to this controller so should be here.
+		It("should create a Secret with customServiceConfig input", func() {
+			configData := th.GetSecret(
+				types.NamespacedName{
+					Namespace: designateCentralName.Namespace,
+					Name:      fmt.Sprintf("%s-config-data", designateCentralName.Name)})
+			Expect(configData).ShouldNot(BeNil())
+			conf := string(configData.Data["custom.conf"])
+			Expect(conf).Should(
+				ContainSubstring("[DEFAULT]\ndebug=True\n"))
+		})
+	})
+})
