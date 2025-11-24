@@ -12,7 +12,7 @@ webhooks:
       namespace: system
       path: /mutate-designate-openstack-org-v1beta1-designate
   failurePolicy: Fail
-  name: mdesignate.kb.io
+  name: mdesignate-v1beta1.kb.io
   rules:
   - apiGroups:
     - designate.openstack.org
@@ -38,7 +38,7 @@ webhooks:
       namespace: system
       path: /validate-designate-openstack-org-v1beta1-designate
   failurePolicy: Fail
-  name: vdesignate.kb.io
+  name: vdesignate-v1beta1.kb.io
   rules:
   - apiGroups:
     - designate.openstack.org
