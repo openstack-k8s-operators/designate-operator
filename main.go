@@ -234,6 +234,11 @@ func main() {
 			os.Exit(1)
 		}
 
+		// Register ConfigMap webhook for multipool validation
+		mgr.GetWebhookServer().Register("/validate-v1-configmap", &webhook.Admission{
+			Handler: &controllers.MultipoolConfigMapValidator{},
+		})
+
 		checker = mgr.GetWebhookServer().StartedChecker()
 	}
 
