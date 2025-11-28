@@ -13,22 +13,16 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 commands:
   - script: |
-      # Check that pool StatefulSets no longer exist
-      if oc get statefulset designate-backendbind9-pool0 -n $NAMESPACE 2>/dev/null; then
-        echo "ERROR: Pool StatefulSets should be deleted"
-        exit 1
-      fi
+      # Check that numbered pool StatefulSets no longer exist
+      # Note: pool0 (designate-backendbind9) is preserved and reused for single-pool mode
       if oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE 2>/dev/null; then
-        echo "ERROR: Pool StatefulSets should be deleted"
+        echo "ERROR: Numbered pool StatefulSets (pool1, pool2, etc.) should be deleted"
         exit 1
       fi
-      # Check that pool services no longer exist
-      if oc get service designate-backendbind9-pool0-0 -n $NAMESPACE 2>/dev/null; then
-        echo "ERROR: Pool services should be deleted"
-        exit 1
-      fi
+      # Check that multipool services no longer exist
+      # Pool0 services (designate-backendbind9-N) become single-pool services (same name)
       if oc get service designate-backendbind9-pool1-0 -n $NAMESPACE 2>/dev/null; then
-        echo "ERROR: Pool services should be deleted"
+        echo "ERROR: Multipool services should be deleted"
         exit 1
       fi
       # Check that numbered pool ConfigMaps no longer exist

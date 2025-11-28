@@ -1,8 +1,8 @@
-# Verify pool0 StatefulSet exists
+# Verify pool0 StatefulSet exists (reuses single-pool name for backwards compatibility)
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: designate-backendbind9-pool0
+  name: designate-backendbind9
   labels:
     pool: default
     pool-index: "0"
@@ -20,17 +20,21 @@ metadata:
 status:
   readyReplicas: 1
 ---
-# Verify old single StatefulSet was deleted
+# Verify single-pool StatefulSet was preserved and converted to pool0
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 commands:
   - script: |
-      # Check that old single StatefulSet no longer exists
-      if oc get statefulset designate-backendbind9 -n $NAMESPACE 2>/dev/null; then
-        echo "ERROR: Old single StatefulSet should be deleted"
+      # Verify the single-pool StatefulSet (designate-backendbind9) now has pool labels
+      if ! oc get statefulset designate-backendbind9 -n $NAMESPACE -o jsonpath='{.metadata.labels.pool}' 2>/dev/null | grep -q "default"; then
+        echo "ERROR: Single-pool StatefulSet should be preserved and have pool=default label"
         exit 1
       fi
-      echo "SUCCESS: Migrated back to multipool mode"
+      if ! oc get statefulset designate-backendbind9 -n $NAMESPACE -o jsonpath='{.metadata.labels.pool-index}' 2>/dev/null | grep -q "0"; then
+        echo "ERROR: Single-pool StatefulSet should have pool-index=0 label"
+        exit 1
+      fi
+      echo "SUCCESS: Migrated back to multipool mode (pool0 reused single-pool StatefulSet)"
 ---
 apiVersion: designate.openstack.org/v1beta1
 kind: Designate

@@ -593,19 +593,9 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 			}
 		}
 
-		// Delete the old single StatefulSet if it exists (migration from single / default pool to multipool)
-		oldSts := &appsv1.StatefulSet{}
-		err = helper.GetClient().Get(ctx, types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, oldSts)
-		if err == nil {
-			Log.Info(fmt.Sprintf("Deleting old single StatefulSet %s for multipool migration", instance.Name))
-			err = helper.GetClient().Delete(ctx, oldSts)
-			if err != nil {
-				Log.Error(err, "Failed to delete old single StatefulSet")
-				return ctrl.Result{}, err
-			}
-		} else if !k8s_errors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
+		// No need to delete the old single StatefulSet during migration to multipool
+		// Pool 0 will reuse the same StatefulSet name (instance.Name) for backwards compatibility
+		// This avoids unnecessary downtime and resource recreation
 
 		// Create pool-specific services
 		ctrlResult, err := r.reconcileMultipoolServices(ctx, instance, helper, multipoolConfig, serviceLabels)
@@ -650,14 +640,16 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 			return ctrl.Result{}, err
 		}
 
-		// Delete any multipool StatefulSets if they exist (migration from multipool to single / default pool)
+		// Delete numbered pool StatefulSets if they exist (pool1, pool2, etc.)
+		// Pool0 (instance.Name) will be reused for single-pool mode
 		stsList := &appsv1.StatefulSetList{}
 		err = helper.GetClient().List(ctx, stsList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
 		if err == nil {
 			for _, sts := range stsList.Items {
-				// Delete any StatefulSet that has a pool label (multipool StatefulSets)
+				// Delete numbered pool StatefulSets (pool1, pool2, etc.)
+				// Keep instance.Name (pool0) as it will be reused for single-pool mode
 				if _, hasPoolLabel := sts.Labels["pool"]; hasPoolLabel && sts.Name != instance.Name {
-					Log.Info(fmt.Sprintf("Deleting multipool StatefulSet %s for single pool migration", sts.Name))
+					Log.Info(fmt.Sprintf("Deleting numbered pool StatefulSet %s for single pool migration", sts.Name))
 					err = helper.GetClient().Delete(ctx, &sts)
 					if err != nil && !k8s_errors.IsNotFound(err) {
 						Log.Error(err, fmt.Sprintf("Failed to delete multipool StatefulSet %s", sts.Name))
@@ -863,8 +855,15 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolServices(
 	serviceIdx := 0
 	for poolIdx, pool := range multipoolConfig.Pools {
 		for i := 0; i < int(pool.BindReplicas); i++ {
-			// Service name must match the pod name: designate-backendbind9-pool<N>-<i>
-			serviceName := fmt.Sprintf("designate-backendbind9-pool%d-%d", poolIdx, i)
+			// Service name must match the pod name
+			// Pool 0 pods: designate-backendbind9-0, designate-backendbind9-1, etc.
+			// Pool 1+ pods: designate-backendbind9-pool1-0, designate-backendbind9-pool1-1, etc.
+			var serviceName string
+			if poolIdx == 0 {
+				serviceName = fmt.Sprintf("designate-backendbind9-%d", i)
+			} else {
+				serviceName = fmt.Sprintf("designate-backendbind9-pool%d-%d", poolIdx, i)
+			}
 			expectedServices[serviceName] = true
 
 			// Ensure we have enough Override.Services entries
@@ -968,7 +967,14 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
 		// Create a modified instance for this pool with pool-specific replicas
 		poolInstance := instance.DeepCopy()
 		poolInstance.Spec.Replicas = &pool.BindReplicas
-		poolStatefulSetName := fmt.Sprintf("%s-pool%d", instance.Name, poolIdx)
+		// Pool 0 (default) uses instance.Name for backwards compatibility
+		// Pool 1+ use instance.Name-pool1, pool2, etc.
+		var poolStatefulSetName string
+		if poolIdx == 0 {
+			poolStatefulSetName = instance.Name
+		} else {
+			poolStatefulSetName = fmt.Sprintf("%s-pool%d", instance.Name, poolIdx)
+		}
 		expectedStatefulSets[poolStatefulSetName] = true
 
 		// Add pool-specific labels
