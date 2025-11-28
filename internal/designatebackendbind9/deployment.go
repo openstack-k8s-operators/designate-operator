@@ -17,6 +17,7 @@ package designatebackendbind9
 
 import (
 	"fmt"
+	"strings"
 
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	designate "github.com/openstack-k8s-operators/designate-operator/internal/designate"
@@ -49,6 +50,7 @@ func StatefulSet(
 	annotations map[string]string,
 	topology *topologyv1.Topology,
 	statefulSetName string,
+	bindIPConfigMapName string,
 ) (*appsv1.StatefulSet, error) {
 
 	// TODO(beagles): Dbl check that running as the default kolla/tcib user works okay here. Permissions on some of the
@@ -87,8 +89,18 @@ func StatefulSet(
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
+	// Determine if TSIG is needed based on StatefulSet name
+	// Only non-default pools (pool1, pool2, etc.) need TSIG, not pool0 (default pool)
+	var tsigSecretName string
+	var includeTSIG bool
+	if statefulSetName != instance.Name && !strings.Contains(statefulSetName, "-pool0") {
+		// This is a non-default pool StatefulSet, add TSIG support
+		tsigSecretName = statefulSetName + "-tsig"
+		includeTSIG = true
+	}
+
 	// Use instance.Name for secret references (shared across pools in multipool mode)
-	serviceVolumes := getServicePodVolumes(instance.Name)
+	serviceVolumes := getServicePodVolumes(instance.Name, bindIPConfigMapName, tsigSecretName)
 
 	serviceName := fmt.Sprintf("%s-backendbind9", designate.ServiceName)
 	statefulSet := &appsv1.StatefulSet{
@@ -190,7 +202,7 @@ func StatefulSet(
 	env := env.MergeEnvs([]corev1.EnvVar{}, envVars)
 	initContainerDetails := designate.InitContainerDetails{
 		ContainerImage: instance.Spec.ContainerImage,
-		VolumeMounts:   getInitVolumeMounts(),
+		VolumeMounts:   getInitVolumeMounts(includeTSIG),
 		EnvVars:        env,
 	}
 	predIPContainerDetails := designate.PredIPContainerDetails{

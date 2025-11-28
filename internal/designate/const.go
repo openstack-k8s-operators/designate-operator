@@ -86,4 +86,7 @@ const (
 
 	// DefaultOverwriteTemplate sprintf template for common default overwrite secret
 	DefaultOverwriteTemplate = "%s-defaults"
+
+	// TsigSecretSuffix is the suffix for TSIG secret names in multipool mode
+	TsigSecretSuffix = "-tsig"
 )

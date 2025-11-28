@@ -868,20 +868,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
-	Log.Info("Before creating bind configmap")
-
-	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), bindConfigMap, func() error {
-		bindConfigMap.Labels = util.MergeStringMaps(bindConfigMap.Labels, bindLabels)
-		bindConfigMap.Data = updatedBindMap
-		return controllerutil.SetControllerReference(instance, bindConfigMap, helper.GetScheme())
-	})
-
-	if err != nil {
-		Log.Info("Unable to create config map for bind ips...")
-		return ctrl.Result{}, err
+	// Reconcile all bind IP ConfigMaps (main ConfigMap + per-pool ConfigMaps in multipool mode)
+	ctrlResult, err = r.reconcileBindConfigMaps(ctx, instance, helper, multipoolConfig, updatedBindMap, bindLabels)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
 	}
 
-	Log.Info("Bind configmap was created successfully")
 	if len(nsRecords) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
 		Log.Info("NS records data found")
 		poolsYamlConfigMap := &corev1.ConfigMap{
@@ -893,7 +885,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Data: make(map[string]string),
 		}
 
-		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecords, multipoolConfig)
+		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(updatedBindMap, mdnsConfigMap.Data, nsRecords, multipoolConfig)
 		if err != nil {
 			return ctrl.Result{}, err
 		}

@@ -27,26 +27,46 @@ done
 mkdir /var/lib/config-data/merged/named
 cp -f /var/lib/config-data/default/named/* /var/lib/config-data/merged/named/
 
+# Add TSIG configuration if it exists (for multipool non-default pools)
+if [[ -f "/var/lib/tsig/tsigkeys.conf" ]]; then
+    cp /var/lib/tsig/tsigkeys.conf /var/lib/config-data/merged/named/tsigkeys.conf
+    echo 'include "/etc/named/tsigkeys.conf";' >> /var/lib/config-data/merged/named.conf
+    echo "Added TSIG configuration to named.conf"
+fi
+
 # Using the index for the podname, get the matching rndc key and copy it into the proper location
 
 if [[ -z "${POD_NAME}" ]]; then
     echo "ERROR: requires the POD_NAME variable to be set"
     exit 1
 fi
-if [[ -z "${RNDC_PREFIX}" ]]; then
-    rndc_prefix="rndc-key-"
-else
-    rndc_prefix="${RNDC_PREFIX}-"
-fi
 
 # get the index off of the pod name
 set -f
 name_parts=(${POD_NAME//-/ })
 pod_index="${name_parts[-1]}"
-rndc_key_filename="/var/lib/config-data/keys/${rndc_prefix}${pod_index}"
+
+# Try to read RNDC key name from per-pool ConfigMap (multipool mode)
+rndc_key_map_file="/var/lib/predictableips/rndc_key_${pod_index}"
+if [[ -f "${rndc_key_map_file}" ]]; then
+    # Multipool mode: read the RNDC key name from ConfigMap
+    rndc_key_name=$(cat "${rndc_key_map_file}")
+    rndc_key_filename="/var/lib/config-data/keys/${rndc_key_name}"
+    echo "Using RNDC key from ConfigMap: ${rndc_key_name}"
+else
+    # Single-pool mode: use pod index to determine RNDC key
+    if [[ -z "${RNDC_PREFIX}" ]]; then
+        rndc_prefix="rndc-key-"
+    else
+        rndc_prefix="${RNDC_PREFIX}-"
+    fi
+    rndc_key_filename="/var/lib/config-data/keys/${rndc_prefix}${pod_index}"
+    echo "Using RNDC key from pod index: ${rndc_prefix}${pod_index}"
+fi
+
 if [[ -f "${rndc_key_filename}" ]]; then
     cp ${rndc_key_filename} /var/lib/config-data/merged/named/rndc.key
 else
-    echo "ERROR: rndc key not found!"
+    echo "ERROR: rndc key not found at ${rndc_key_filename}!"
     exit 1
 fi
