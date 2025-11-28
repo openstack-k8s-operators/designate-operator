@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"regexp"
 
 	"gopkg.in/yaml.v2"
 
@@ -635,21 +636,34 @@ var _ = Describe("Designate controller", func() {
 			bindConfigMap := th.GetConfigMap(types.NamespacedName{
 				Name:      designate.BindPredIPConfigMap,
 				Namespace: namespace})
-			Expect(bindConfigMap.Data).To(HaveLen(bind9ReplicaCount))
+			// ConfigMap should have both bind_address_N and rndc_key_N entries
+			Expect(bindConfigMap.Data).To(HaveLen(bind9ReplicaCount * 2))
 
 			usedIPs := make(map[string]bool)
-			for key, ipAddress := range bindConfigMap.Data {
-				// verify key with bind_address_N format
-				Expect(key).To(MatchRegexp(`^bind_address_\d+$`))
+			bindAddressCount := 0
+			rndcKeyCount := 0
+			for key, value := range bindConfigMap.Data {
+				// verify key format (either bind_address_N or rndc_key_N)
+				if matched, _ := regexp.MatchString(`^bind_address_\d+$`, key); matched {
+					bindAddressCount++
+					// verify valid IP format
+					ip := net.ParseIP(value)
+					Expect(ip).NotTo(BeNil(), "Invalid IP format: %s", value)
 
-				// verify valid IP format
-				ip := net.ParseIP(ipAddress)
-				Expect(ip).NotTo(BeNil(), "Invalid IP format: %s", ipAddress)
-
-				// check there are no duplicate IPs
-				Expect(usedIPs[ipAddress]).To(BeFalse(), "Duplicate IP found: %s", ipAddress)
-				usedIPs[ipAddress] = true
+					// check there are no duplicate IPs
+					Expect(usedIPs[value]).To(BeFalse(), "Duplicate IP found: %s", value)
+					usedIPs[value] = true
+				} else if matched, _ := regexp.MatchString(`^rndc_key_\d+$`, key); matched {
+					rndcKeyCount++
+					// verify rndc key name format (rndc-key-N)
+					Expect(value).To(MatchRegexp(`^rndc-key-\d+$`))
+				} else {
+					Fail(fmt.Sprintf("Unexpected key format in bind ConfigMap: %s", key))
+				}
 			}
+			// Verify we have the correct number of each type
+			Expect(bindAddressCount).To(Equal(bind9ReplicaCount))
+			Expect(rndcKeyCount).To(Equal(bind9ReplicaCount))
 
 			mdnsConfigMap := th.GetConfigMap(types.NamespacedName{
 				Name:      designate.MdnsPredIPConfigMap,
