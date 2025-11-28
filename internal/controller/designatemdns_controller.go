@@ -533,6 +533,10 @@ func (r *DesignateMdnsReconciler) reconcileNormal(ctx context.Context, instance 
 		common.ComponentSelector: designatemdns.Component,
 	}
 
+	// TODO(oschwart): Determine if we should error out when Override.Services has fewer entries than replicas.
+	// Currently using min() allows deployment to proceed with partial services (some pods have no external service),
+	// which may result in incomplete mdns configuration. Consider erroring out for consistency with bind9 multipool mode,
+	// or keep min() for backward compatibility but document that all replicas need Override.Services entries.
 	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
 	for i := range serviceCount {
 		svc, err := designate.CreateDNSService(

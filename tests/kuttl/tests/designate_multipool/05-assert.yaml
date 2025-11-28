@@ -35,15 +35,71 @@ metadata:
 status:
   readyReplicas: 1
 ---
-# Verify that pool2 StatefulSet was deleted
+# Verify that ALL pool2 resources are deleted (prevent resource leaks)
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 commands:
   - script: |
-      # Check that pool2 StatefulSet no longer exists
+      set -e
+      ERRORS=0
+
+      echo "Verifying all pool2 resources are deleted..."
+
+      # 1. Check that pool2 StatefulSet no longer exists
       if oc get statefulset designate-backendbind9-pool2 -n $NAMESPACE 2>/dev/null; then
         echo "ERROR: designate-backendbind9-pool2 StatefulSet still exists after pool removal"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ Pool2 StatefulSet deleted"
+      fi
+
+      # 2. Check that pool2 services no longer exist
+      # Services follow pattern: designate-backendbind9-pool2-{0,1,2,...}
+      pool2_services=$(oc get services -n $NAMESPACE -l pool=pool2 --no-headers 2>/dev/null | wc -l)
+      if [ "$pool2_services" -gt 0 ]; then
+        echo "ERROR: Found $pool2_services pool2 services that should be deleted"
+        oc get services -n $NAMESPACE -l pool=pool2
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ Pool2 services deleted"
+      fi
+
+      # 3. Check that pool2-specific ConfigMap no longer exists
+      if oc get configmap designate-bind-ip-map-pool2 -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: designate-bind-ip-map-pool2 ConfigMap still exists after pool removal"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ Pool2 ConfigMap deleted"
+      fi
+
+      # 4. Check that pool2 PVCs are deleted (if storage was used)
+      # PVCs follow pattern: {volume-name}-designate-backendbind9-pool2-{0,1,2,...}
+      pool2_pvcs=$(oc get pvc -n $NAMESPACE 2>/dev/null | grep "designate-backendbind9-pool2" | wc -l)
+      if [ "$pool2_pvcs" -gt 0 ]; then
+        echo "ERROR: Found $pool2_pvcs pool2 PVCs that should be deleted"
+        oc get pvc -n $NAMESPACE | grep "designate-backendbind9-pool2"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ Pool2 PVCs deleted (or none existed)"
+      fi
+
+      # 5. Verify TSIG secret still exists (shared by pool1, should NOT be deleted)
+      if ! oc get secret designate-backendbind9-tsig -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: TSIG secret was incorrectly deleted (pool1 still needs it)"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ TSIG secret retained (still needed by pool1)"
+      fi
+
+      if [ "$ERRORS" -gt 0 ]; then
+        echo "FAILED: Found $ERRORS orphaned resources after pool2 removal"
         exit 1
       fi
-      echo "SUCCESS: designate-backendbind9-pool2 StatefulSet was successfully deleted"
+
+      echo "SUCCESS: All pool2 resources were cleaned up properly"
+      echo "  - StatefulSet: deleted"
+      echo "  - Services: deleted"
+      echo "  - ConfigMap: deleted"
+      echo "  - PVCs: deleted"
+      echo "  - TSIG secret: retained (shared resource)"
       exit 0

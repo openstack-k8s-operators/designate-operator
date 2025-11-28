@@ -120,3 +120,41 @@ metadata:
     pool-index: "1"
 status:
   readyReplicas: 1
+---
+# Verify pool-specific services are created
+apiVersion: v1
+kind: Service
+metadata:
+  name: designate-backendbind9-pool0-0
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: designate-backendbind9-pool1-0
+---
+# Verify per-pool bind IP ConfigMaps are created with RNDC key mappings
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: designate-bind-ip-map
+data:
+  bind_address_0: ""  # Will be filled by predictable IP controller
+  rndc_key_0: rndc-key-0
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: designate-bind-ip-map-pool1
+data:
+  bind_address_0: ""  # Will be filled by predictable IP controller
+  rndc_key_0: rndc-key-1
+---
+# Verify TSIG secret is created for non-default pools
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-backendbind9-tsig
+  labels:
+    service: designate-backendbind9
+    component: designate-backendbind9
+type: Opaque
