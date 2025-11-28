@@ -6,8 +6,9 @@ commands:
       set -e
 
       # Verify pool0 StatefulSet mounts the default ConfigMap (no TSIG)
+      # Pool 0 uses the base name (designate-backendbind9) for backwards compatibility
       echo "Checking pool0 volume mounts..."
-      pool0_volumes=$(oc get statefulset designate-backendbind9-pool0 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[*].name}')
+      pool0_volumes=$(oc get statefulset designate-backendbind9 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[*].name}')
 
       # Pool0 should mount designate-bind-ip-map
       if ! echo "$pool0_volumes" | grep -q "designate-bind-ip-map"; then

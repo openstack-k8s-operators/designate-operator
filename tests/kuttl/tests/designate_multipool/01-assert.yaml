@@ -101,10 +101,11 @@ status:
     type: ServiceConfigReady
 ---
 # Verify that 2 StatefulSets are created for the 2 pools
+# Pool 0 uses the base name (designate-backendbind9) for backwards compatibility
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: designate-backendbind9-pool0
+  name: designate-backendbind9
   labels:
     pool: default
     pool-index: "0"
@@ -122,10 +123,11 @@ status:
   readyReplicas: 1
 ---
 # Verify pool-specific services are created
+# Pool 0 services use base name pattern (designate-backendbind9-N)
 apiVersion: v1
 kind: Service
 metadata:
-  name: designate-backendbind9-pool0-0
+  name: designate-backendbind9-0
 ---
 apiVersion: v1
 kind: Service

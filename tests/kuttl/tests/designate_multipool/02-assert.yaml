@@ -1,8 +1,9 @@
 # Verify pool0 still has 1 replica
+# Pool 0 uses the base name (designate-backendbind9) for backwards compatibility
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: designate-backendbind9-pool0
+  name: designate-backendbind9
   labels:
     pool: default
     pool-index: "0"
