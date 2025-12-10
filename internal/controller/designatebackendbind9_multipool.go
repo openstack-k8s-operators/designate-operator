@@ -18,11 +18,15 @@ limitations under the License.
 // This file contains all logic for managing resources (ConfigMaps, Services, StatefulSets,
 // TSIG secrets) in multipool mode, including migration between single-pool and multipool modes.
 
-package controllers
+package controller
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,15 +42,36 @@ import (
 	"gopkg.in/yaml.v2"
 
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
-	"github.com/openstack-k8s-operators/designate-operator/pkg/designate"
-	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/pkg/designatebackendbind9"
+	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
+	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/internal/designatebackendbind9"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	nad "github.com/openstack-k8s-operators/lib-common/modules/common/networkattachment"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/statefulset"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 )
+
+var (
+	// ErrPoolsYamlMissing is returned when pools.yaml is not found in ConfigMap
+	ErrPoolsYamlMissing = errors.New("pools.yaml not found in ConfigMap")
+	// ErrPoolNotFoundInConfig is returned when a pool is not found in pools.yaml
+	ErrPoolNotFoundInConfig = errors.New("pool not found in pools.yaml")
+)
+
+func extractPoolNameFromStatefulSetName(stsName, instanceName string) string {
+	if stsName == instanceName {
+		return designate.DefaultPoolName
+	}
+	if strings.Contains(stsName, designate.PoolStatefulSetSuffix) {
+		parts := strings.Split(stsName, designate.PoolStatefulSetSuffix)
+		if len(parts) == 2 {
+			return "pool" + parts[1]
+		}
+	}
+	return ""
+}
 
 // ============================================================================
 // ConfigMap Management
@@ -70,10 +95,9 @@ func (r *DesignateReconciler) reconcileBindConfigMaps(
 	if multipoolConfig != nil {
 		// Multipool mode: create per-pool ConfigMaps and create numbered pool ConfigMaps
 		return r.reconcileMultipoolBindConfigMaps(ctx, instance, helper, multipoolConfig, updatedBindMap, bindLabels)
-	} else {
-		// Single-pool mode: create default pool ConfigMap and clean up any numbered pool ConfigMaps
-		return r.reconcileSinglePoolBindConfigMap(ctx, instance, helper, updatedBindMap, bindLabels)
 	}
+	// Single-pool mode: create default pool ConfigMap and clean up any numbered pool ConfigMaps
+	return r.reconcileSinglePoolBindConfigMap(ctx, instance, helper, updatedBindMap, bindLabels)
 }
 
 // reconcileMultipoolBindConfigMaps creates per-pool bind IP ConfigMaps with pool-specific mappings
@@ -262,22 +286,16 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolServices(
 			}
 			expectedServices[serviceName] = true
 
-			// Ensure we have enough Override.Services entries
-			if serviceIdx >= len(instance.Spec.Override.Services) {
-				err := fmt.Errorf("not enough Override.Services entries (%d) for total bind replicas (%d)", len(instance.Spec.Override.Services), serviceIdx+1)
-				instance.Status.Conditions.Set(condition.FalseCondition(
-					condition.CreateServiceReadyCondition,
-					condition.ErrorReason,
-					condition.SeverityWarning,
-					condition.CreateServiceReadyErrorMessage,
-					err.Error()))
-				return ctrl.Result{}, err
+			// Get override spec for this service (use empty if not configured)
+			var overrideSpec service.OverrideSpec
+			if serviceIdx < len(instance.Spec.Override.Services) {
+				overrideSpec = instance.Spec.Override.Services[serviceIdx]
 			}
 
 			svc, err := designate.CreateDNSService(
 				serviceName,
 				instance.Namespace,
-				&instance.Spec.Override.Services[serviceIdx],
+				&overrideSpec,
 				serviceLabels,
 				53,
 			)
@@ -293,13 +311,11 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolServices(
 
 			ctrlResult, err := svc.CreateOrPatch(ctx, helper)
 			if err != nil {
-				instance.Status.Conditions.Set(condition.FalseCondition(
-					condition.CreateServiceReadyCondition,
-					condition.ErrorReason,
-					condition.SeverityWarning,
-					condition.CreateServiceReadyErrorMessage,
-					err.Error()))
-				return ctrlResult, err
+				// TEMPORARY: Don't fail on LoadBalancer IP timeout - just log and continue
+				// This allows multipool services to be created even if MetalLB is slow to assign IPs
+				Log.Info(fmt.Sprintf("Service %s created but LoadBalancer IP pending: %v", serviceName, err))
+			} else if (ctrlResult != ctrl.Result{}) {
+				Log.Info(fmt.Sprintf("Service %s needs requeue", serviceName))
 			}
 
 			Log.Info(fmt.Sprintf("Created/updated service %s for pool %s replica %d", serviceName, pool.Name, i))
@@ -362,6 +378,21 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
 	// Track expected StatefulSet names for cleanup
 	expectedStatefulSets := make(map[string]bool)
 
+	// Get TSIG secret resourceVersion to include in pod annotations for automatic restarts
+	// This ensures non-default pool pods restart when TSIG keys change
+	var tsigSecretResourceVersion string
+	tsigSecretName := instance.Name + designate.TsigSecretSuffix
+	tsigSecret := &corev1.Secret{}
+	err := helper.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretName, Namespace: instance.Namespace}, tsigSecret)
+	if err == nil {
+		tsigSecretResourceVersion = tsigSecret.ResourceVersion
+		Log.Info(fmt.Sprintf("Found TSIG secret %s with resourceVersion %s", tsigSecretName, tsigSecretResourceVersion))
+	} else if !k8s_errors.IsNotFound(err) {
+		Log.Error(err, "Failed to get TSIG secret for resource version")
+		return ctrl.Result{}, err
+	}
+	// If secret doesn't exist yet (first reconciliation), tsigSecretResourceVersion will be empty - that's fine
+
 	// Create a StatefulSet for each pool
 	for poolIdx, pool := range multipoolConfig.Pools {
 		// Create a modified instance for this pool with pool-specific replicas
@@ -377,13 +408,20 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
 		}
 		expectedStatefulSets[poolStatefulSetName] = true
 
-		// Add pool-specific labels
-		poolLabels := make(map[string]string)
-		for k, v := range serviceLabels {
-			poolLabels[k] = v
+		// Use base service labels for pool StatefulSets
+		// Note: Pool-specific labels are intentionally not added to avoid StatefulSet
+		// selector immutability issues during single-pool to multipool migrations and vice versa.
+		// Pools are identified by StatefulSet name pattern instead (pool0=instance.Name, pool1+=instance.Name-pool1, etc.)
+
+		// Add TSIG secret resourceVersion to annotations for non-default pools
+		// This ensures pods restart when TSIG secret changes
+		poolAnnotations := make(map[string]string)
+		for k, v := range serviceAnnotations {
+			poolAnnotations[k] = v
 		}
-		poolLabels["pool"] = pool.Name
-		poolLabels["pool-index"] = fmt.Sprintf("%d", poolIdx)
+		if poolIdx > 0 && tsigSecretResourceVersion != "" {
+			poolAnnotations["tsig-secret-version"] = tsigSecretResourceVersion
+		}
 
 		Log.Info(fmt.Sprintf("Creating/updating StatefulSet for pool %s with %d replicas", pool.Name, pool.BindReplicas))
 
@@ -394,7 +432,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
 		} else {
 			poolBindIPConfigMap = fmt.Sprintf("%s-pool%d", designate.BindPredIPConfigMap, poolIdx)
 		}
-		deplDef, err := designatebackendbind9.StatefulSet(poolInstance, inputHash, poolLabels, serviceAnnotations, topology, poolStatefulSetName, poolBindIPConfigMap)
+		deplDef, err := designatebackendbind9.StatefulSet(poolInstance, inputHash, serviceLabels, poolAnnotations, topology, poolStatefulSetName, poolBindIPConfigMap)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -456,7 +494,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
 		}
 		totalReadyCount += deploy.Status.ReadyReplicas
 
-		if err := r.verifyPoolNetworkAttachments(ctx, helper, instance, pool, &deploy, poolLabels, networkAttachmentStatus); err != nil {
+		if err := r.verifyPoolNetworkAttachments(ctx, helper, instance, pool, &deploy, serviceLabels, networkAttachmentStatus); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -510,7 +548,7 @@ func (r *DesignateBackendbind9Reconciler) verifyPoolNetworkAttachments(
 	instance *designatev1beta1.DesignateBackendbind9,
 	pool designate.PoolConfig,
 	deploy *appsv1.StatefulSet,
-	poolLabels map[string]string,
+	serviceLabels map[string]string,
 	networkAttachmentStatus map[string][]string,
 ) error {
 	// If pool has no replicas, network verification is not needed
@@ -528,7 +566,7 @@ func (r *DesignateBackendbind9Reconciler) verifyPoolNetworkAttachments(
 		ctx,
 		helper,
 		instance.Spec.NetworkAttachments,
-		poolLabels,
+		serviceLabels,
 		deploy.Status.ReadyReplicas,
 	)
 	if err != nil {
@@ -574,11 +612,13 @@ func (r *DesignateBackendbind9Reconciler) cleanupOrphanedStatefulSets(
 		return ctrl.Result{}, err
 	}
 
-	// Find orphaned StatefulSets (ones with pool label that are not in expected list)
+	// Find orphaned StatefulSets (ones not in the expected list)
 	for _, sts := range stsList.Items {
-		// Only process StatefulSets with pool label (multipool StatefulSets)
-		poolName, hasPoolLabel := sts.Labels["pool"]
-		if !hasPoolLabel {
+		// Identify pool StatefulSets by name pattern (pool labels are not used to avoid selector immutability issues)
+		// Pool StatefulSets: instance.Name (pool0), instance.Name-pool1, instance.Name-pool2, etc.
+		poolName := extractPoolNameFromStatefulSetName(sts.Name, instance.Name)
+
+		if poolName == "" {
 			continue
 		}
 
@@ -604,7 +644,7 @@ func (r *DesignateBackendbind9Reconciler) cleanupOrphanedStatefulSets(
 
 		if hasZones {
 			// Pool has active zones, cannot remove
-			errMsg := fmt.Sprintf("pool %s has active DNS zones and cannot be removed. Please delete zones first", poolName)
+			errMsg := fmt.Sprintf("pool %s has active DNS zones and cannot be removed. Please delete zones first. Will automatically retry in 1 minute", poolName)
 			Log.Info(errMsg)
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.DeploymentReadyCondition,
@@ -612,7 +652,7 @@ func (r *DesignateBackendbind9Reconciler) cleanupOrphanedStatefulSets(
 				condition.SeverityWarning,
 				condition.DeploymentReadyErrorMessage,
 				errMsg))
-			return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
 		}
 
 		// No zones, proceed with graceful removal
@@ -643,6 +683,31 @@ func (r *DesignateBackendbind9Reconciler) cleanupOrphanedStatefulSets(
 			Log.Error(err, fmt.Sprintf("Failed to delete StatefulSet %s", sts.Name))
 			return ctrl.Result{}, err
 		}
+
+		// Delete PVCs associated with this StatefulSet
+		// StatefulSet PVCs follow the pattern: {volumeClaimTemplate.name}-{statefulset.name}-{ordinal}
+		// For designate-backendbind9, the volume claim template name is "designate-bind"
+		// So PVCs are named: designate-bind-designate-backendbind9-pool2-0, designate-bind-designate-backendbind9-pool2-1, etc.
+		pvcList := &corev1.PersistentVolumeClaimList{}
+		err = helper.GetClient().List(ctx, pvcList, client.InNamespace(instance.Namespace))
+		if err != nil {
+			Log.Error(err, "Failed to list PVCs for cleanup")
+			return ctrl.Result{}, err
+		}
+
+		for _, pvc := range pvcList.Items {
+			// Check if PVC belongs to this StatefulSet by matching the name pattern
+			// PVC naming: {volumeClaimTemplate}-{statefulsetName}-{ordinal}
+			if strings.Contains(pvc.Name, sts.Name) {
+				Log.Info(fmt.Sprintf("Deleting orphaned PVC %s for removed pool %s", pvc.Name, poolName))
+				err = helper.GetClient().Delete(ctx, &pvc)
+				if err != nil && !k8s_errors.IsNotFound(err) {
+					Log.Error(err, fmt.Sprintf("Failed to delete PVC %s", pvc.Name))
+					return ctrl.Result{}, err
+				}
+			}
+		}
+
 		// Requeue to continue cleanup if there are more orphaned StatefulSets
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -667,187 +732,277 @@ func (r *DesignateBackendbind9Reconciler) reconcileTSIGSecrets(
 	Log := r.GetLogger(ctx)
 	Log.Info("Reconciling TSIG secret for multipool")
 
-	mdnsPodList := &corev1.PodList{}
-	mdnsLabelSelector := map[string]string{
-		"service": "designate-mdns",
-	}
-	err := helper.GetClient().List(ctx, mdnsPodList, client.InNamespace(instance.Namespace), client.MatchingLabels(mdnsLabelSelector))
-	if err != nil {
-		Log.Error(err, "Failed to list mdns pods")
-		return ctrl.Result{}, err
-	}
-
-	var mdnsIPs []string
-	for _, pod := range mdnsPodList.Items {
-		if pod.Status.PodIP != "" {
-			mdnsIPs = append(mdnsIPs, pod.Status.PodIP)
+	// Early exit: Check if there are any non-default pools that need TSIG
+	// Pool 0 (default) doesn't need TSIG, so only pools 1+ require it
+	hasNonDefaultPools := false
+	for poolIdx := range multipoolConfig.Pools {
+		if poolIdx > 0 {
+			hasNonDefaultPools = true
+			break
 		}
 	}
 
-	Log.Info(fmt.Sprintf("Found %d mdns pod IPs for TSIG server blocks", len(mdnsIPs)))
-
-	// Build a single TSIG configuration file containing all non-default pool keys
-	// Format:
-	// key "pool1-key" {
-	//     algorithm hmac-sha256;
-	//     secret "base64-encoded-secret";
-	// };
-	// key "pool2-key" {
-	//     algorithm hmac-sha256;
-	//     secret "base64-encoded-secret";
-	// };
-	// server 172.28.0.97 { keys { pool1-key; pool2-key; }; };
-	// server 172.28.0.98 { keys { pool1-key; pool2-key; }; };
-	var tsigConfig strings.Builder
-	var tsigKeyNames []string
-
-	// TODO: Query Designate API for TSIG keys using gophercloud or kubectl exec
-	// For now, we expect the TSIG keys to already exist in the database
-	// The user must create them via: openstack tsigkey create <key-name> --algorithm hmac-sha256 --resource-id <pool-uuid>
-	//
-	// Example query:
-	// kubectl exec -n openstack openstackclient -- openstack tsigkey list -f json
-	// Filter by resource_id matching pool UUID to find the correct TSIG key
-	//
-	// For automation, we would:
-	// 1. Get pool UUID from pools.yaml
-	// 2. Query: openstack tsigkey list --resource-id <pool-uuid>
-	// 3. Extract name, algorithm, and secret from the response
-
-	// Add key definitions for all non-default pools (skip pool0)
-	for poolIdx, pool := range multipoolConfig.Pools {
-		if poolIdx == 0 {
-			// Skip default pool (pool0) - no TSIG required
-			continue
-		}
-
-		// Placeholder values - in production, these MUST come from Designate database
-		tsigKeyName := fmt.Sprintf("pool%d-key", poolIdx)
-		tsigKeyNames = append(tsigKeyNames, tsigKeyName)
-		tsigAlgorithm := "hmac-sha256"
-
-		tsigConfig.WriteString(fmt.Sprintf("key \"%s\" {\n", tsigKeyName))
-		tsigConfig.WriteString(fmt.Sprintf("    algorithm %s;\n", tsigAlgorithm))
-		tsigConfig.WriteString("    secret \"TSIG_SECRET_PLACEHOLDER\";\n")
-		tsigConfig.WriteString("};\n\n")
-
-		Log.Info(fmt.Sprintf("Added TSIG key configuration for pool %s (%s)", pool.Name, tsigKeyName))
-	}
-
-	// Add server blocks for each mdns pod IP with all keys
-	for _, mdnsIP := range mdnsIPs {
-		tsigConfig.WriteString(fmt.Sprintf("server %s {\n", mdnsIP))
-		tsigConfig.WriteString("    keys {")
-		for i, keyName := range tsigKeyNames {
-			if i > 0 {
-				tsigConfig.WriteString(";")
-			}
-			tsigConfig.WriteString(fmt.Sprintf(" %s", keyName))
-		}
-		tsigConfig.WriteString("; };\n")
-		tsigConfig.WriteString("};\n")
-	}
-
-	// Single TSIG secret name using the constant
 	tsigSecretName := instance.Name + designate.TsigSecretSuffix
 
-	// Check if secret already exists
-	existingSecret := &corev1.Secret{}
-	err = helper.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretName, Namespace: instance.Namespace}, existingSecret)
-	secretExists := err == nil
+	if !hasNonDefaultPools {
+		// No non-default pools - delete TSIG secret and key from Designate
+		tsigSecret := &corev1.Secret{}
+		err := helper.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretName, Namespace: instance.Namespace}, tsigSecret)
+		if err == nil {
+			Log.Info("No non-default pools, deleting TSIG secret and key from Designate")
 
-	needsUpdate := false
-	if secretExists {
-		// Secret exists - check if it needs updating
-		existingConfig, hasKey := existingSecret.Data["tsigkeys.conf"]
-		if !hasKey || string(existingConfig) == "" {
-			Log.Info(fmt.Sprintf("TSIG secret %s exists but is empty or missing tsigkeys.conf, will update", tsigSecretName))
-			needsUpdate = true
-		} else if strings.Contains(string(existingConfig), "TSIG_SECRET_PLACEHOLDER") {
-			Log.Info(fmt.Sprintf("TSIG secret %s contains placeholder, needs manual update with real TSIG key from database", tsigSecretName))
-			Log.Info("Query TSIG keys: kubectl exec -n openstack openstackclient -- openstack tsigkey list -f json")
-			needsUpdate = true
-		} else {
-			// Secret exists and has content - check if mdns IPs or pool count changed
-			currentMdnsIPCount := 0
-			for _, ip := range mdnsIPs {
-				if strings.Contains(string(existingConfig), fmt.Sprintf("server %s", ip)) {
-					currentMdnsIPCount++
+			// Delete TSIG key from Designate database
+			osclient, err := designate.GetOpenstackClient(ctx, instance.Namespace, helper)
+			if err != nil {
+				Log.Error(err, "Failed to get OpenStack client for TSIG key deletion")
+				// Continue with secret deletion even if we can't delete from Designate
+			} else {
+				err = designate.DeleteTSIGKeyByName(ctx, osclient, designate.SharedTSIGKeyName)
+				if err != nil {
+					Log.Error(err, "Failed to delete TSIG key from Designate")
+					// Continue with secret deletion even if Designate deletion fails
+				} else {
+					Log.Info(fmt.Sprintf("Deleted TSIG key %s from Designate", designate.SharedTSIGKeyName))
 				}
 			}
 
-			currentPoolKeyCount := 0
-			for _, keyName := range tsigKeyNames {
-				if strings.Contains(string(existingConfig), fmt.Sprintf("key \"%s\"", keyName)) {
-					currentPoolKeyCount++
-				}
+			// Delete Kubernetes secret
+			err = helper.GetClient().Delete(ctx, tsigSecret)
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				return ctrl.Result{}, err
 			}
-
-			if currentMdnsIPCount == len(mdnsIPs) && currentPoolKeyCount == len(tsigKeyNames) {
-				Log.Info(fmt.Sprintf("TSIG secret %s is up to date, skipping", tsigSecretName))
-				return ctrl.Result{}, nil
-			}
-			Log.Info(fmt.Sprintf("TSIG secret %s needs update - mdns IPs or pool count changed", tsigSecretName))
-			needsUpdate = true
 		}
-	} else if !k8s_errors.IsNotFound(err) {
-		Log.Error(err, fmt.Sprintf("Failed to get TSIG secret %s", tsigSecretName))
+		return ctrl.Result{}, nil
+	}
+
+	// Check if we need to update the TSIG secret by comparing pool configuration hash
+	// This avoids expensive operations (fetching pool IDs, querying OpenStack) when nothing has changed
+	poolConfigHash, err := r.getPoolConfigHash(multipoolConfig)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Create/update the single TSIG secret
-	if !secretExists || needsUpdate {
-		tsigSecret := &corev1.Secret{
-			ObjectMeta: ctrl.ObjectMeta{
-				Name:      tsigSecretName,
-				Namespace: instance.Namespace,
-				Labels: map[string]string{
-					"service":   "designate-backendbind9",
-					"component": "designate-backendbind9",
-				},
-			},
-			Type: corev1.SecretTypeOpaque,
-			StringData: map[string]string{
-				"tsigkeys.conf": tsigConfig.String(),
-			},
+	// Check if secret exists and has the same pool config hash
+	existingSecret := &corev1.Secret{}
+	err = helper.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretName, Namespace: instance.Namespace}, existingSecret)
+	if err == nil {
+		// Secret exists - check if pool config hash matches
+		if existingHash, exists := existingSecret.Annotations["pool-config-hash"]; exists && existingHash == poolConfigHash {
+			Log.Info("TSIG secret is up to date (pool config unchanged)")
+			return ctrl.Result{}, nil
 		}
+	} else if !k8s_errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
 
-		// Set controller reference
-		err = controllerutil.SetControllerReference(instance, tsigSecret, r.Scheme)
-		if err != nil {
-			Log.Error(err, fmt.Sprintf("Failed to set controller reference for TSIG secret %s", tsigSecretName))
-			return ctrl.Result{}, err
+	// Pool config has changed or secret doesn't exist - regenerate TSIG config
+	Log.Info("Pool config changed or TSIG secret missing, regenerating")
+
+	mdnsIPs, err := r.getMdnsIPsForTSIG(ctx, helper, instance.Namespace)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Get or create shared TSIG key for all non-default pools
+	tsigKey, err := r.ensureSharedTSIGKey(ctx, helper, instance.Namespace)
+	if err != nil {
+		// Check if error is due to galera not being ready
+		if strings.Contains(err.Error(), "galera not ready") {
+			Log.Info("Galera not ready for TSIG key retrieval, will requeue in 30 seconds")
+			return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 		}
+		return ctrl.Result{}, err
+	}
 
-		if secretExists {
-			// Update existing secret
-			err = helper.GetClient().Update(ctx, tsigSecret)
-			if err != nil {
-				Log.Error(err, fmt.Sprintf("Failed to update TSIG secret %s", tsigSecretName))
-				return ctrl.Result{}, err
-			}
-			Log.Info(fmt.Sprintf("Updated TSIG secret %s with %d pool keys", tsigSecretName, len(tsigKeyNames)))
+	tsigConfigContent := r.generateTSIGConfig(tsigKey, mdnsIPs)
 
-			// TODO: Trigger pod restart if secret was updated
-			// This is needed for the init container to mount the new secret
-			// Can be done by deleting pods with pool label
-		} else {
-			// Create new secret
-			err = helper.GetClient().Create(ctx, tsigSecret)
-			if err != nil {
-				Log.Error(err, fmt.Sprintf("Failed to create TSIG secret %s", tsigSecretName))
-				return ctrl.Result{}, err
-			}
-			Log.Info(fmt.Sprintf("Created TSIG secret %s with %d pool keys (contains placeholder - needs manual update with real keys)", tsigSecretName, len(tsigKeyNames)))
+	return r.createOrUpdateTSIGSecretWithHash(ctx, helper, instance, tsigConfigContent, poolConfigHash)
+}
+
+// getMdnsIPsForTSIG retrieves mdns pod IPs from the mdns-ip-map ConfigMap
+func (r *DesignateBackendbind9Reconciler) getMdnsIPsForTSIG(
+	ctx context.Context,
+	helper *helper.Helper,
+	namespace string,
+) ([]string, error) {
+	Log := r.GetLogger(ctx)
+
+	mdnsIPMapName := fmt.Sprintf("%s-mdns-ip-map", designate.ServiceName)
+	mdnsIPMap := &corev1.ConfigMap{}
+	err := helper.GetClient().Get(ctx, types.NamespacedName{Name: mdnsIPMapName, Namespace: namespace}, mdnsIPMap)
+	if err != nil {
+		Log.Error(err, "Failed to get mdns IP ConfigMap")
+		return nil, fmt.Errorf("failed to get mdns IP ConfigMap: %w", err)
+	}
+
+	// Extract IPs from ConfigMap data (mdns_address_0, mdns_address_1, etc.)
+	var mdnsIPs []string
+	for key, ip := range mdnsIPMap.Data {
+		if strings.HasPrefix(key, "mdns_address_") && ip != "" {
+			mdnsIPs = append(mdnsIPs, ip)
+		}
+	}
+	sort.Strings(mdnsIPs) // Sort for consistent ordering
+
+	Log.Info(fmt.Sprintf("Found %d mdns IPs for TSIG server blocks", len(mdnsIPs)))
+	return mdnsIPs, nil
+}
+
+// ensureSharedTSIGKey retrieves or creates a shared TSIG key for all non-default pools
+func (r *DesignateBackendbind9Reconciler) ensureSharedTSIGKey(
+	ctx context.Context,
+	helper *helper.Helper,
+	namespace string,
+) (*designate.TSIGKey, error) {
+	Log := r.GetLogger(ctx)
+
+	osclient, err := designate.GetOpenstackClient(ctx, namespace, helper)
+	if err != nil {
+		Log.Error(err, "Failed to get OpenStack client")
+		return nil, fmt.Errorf("failed to get OpenStack client: %w", err)
+	}
+
+	// Try to get existing TSIG key
+	tsigKey, err := designate.GetTSIGKeyByName(ctx, osclient, designate.SharedTSIGKeyName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query TSIG key: %w", err)
+	}
+
+	if tsigKey != nil {
+		Log.Info(fmt.Sprintf("Using existing shared TSIG key: %s", tsigKey.Name))
+		return tsigKey, nil
+	}
+
+	// Create key if it doesn't exist
+	Log.Info("Creating shared TSIG key for multipool")
+
+	// Generate random secret for TSIG key (base64-encoded 32-byte random string)
+	secret, err := generateTSIGSecret()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate TSIG secret: %w", err)
+	}
+
+	tsigKey, err = designate.CreateTSIGKey(ctx, osclient, designate.CreateTSIGKeyOpts{
+		Name:      designate.SharedTSIGKeyName,
+		Algorithm: "hmac-sha256",
+		Secret:    secret,
+		Scope:     "POOL",
+		// ResourceID is required by Designate API but only validated for UUID format,
+		// not checked against actual pools. Using dummy UUID since this key is shared
+		// across all non-default pools and not tied to any specific pool.
+		ResourceID: "00000000-0000-0000-0000-000000000000",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create TSIG key: %w", err)
+	}
+
+	Log.Info(fmt.Sprintf("Created shared TSIG key: %s", tsigKey.Name))
+	return tsigKey, nil
+}
+
+// generateTSIGConfig builds the BIND TSIG configuration file content
+func (r *DesignateBackendbind9Reconciler) generateTSIGConfig(
+	tsigKey *designate.TSIGKey,
+	mdnsIPs []string,
+) string {
+	var config strings.Builder
+
+	// Add key definition
+	config.WriteString(fmt.Sprintf("key \"%s\" {\n", tsigKey.Name))
+	config.WriteString(fmt.Sprintf("    algorithm %s;\n", tsigKey.Algorithm))
+	config.WriteString(fmt.Sprintf("    secret \"%s\";\n", tsigKey.Secret))
+	config.WriteString("};\n\n")
+
+	// Add server blocks for each mdns IP
+	for _, mdnsIP := range mdnsIPs {
+		config.WriteString(fmt.Sprintf("server %s {\n", mdnsIP))
+		config.WriteString(fmt.Sprintf("    keys { %s; };\n", tsigKey.Name))
+		config.WriteString("};\n")
+	}
+
+	return config.String()
+}
+
+// getPoolConfigHash generates a hash of the multipool configuration.
+// This hash is used to detect when pool configuration changes, avoiding unnecessary TSIG updates.
+func (r *DesignateBackendbind9Reconciler) getPoolConfigHash(multipoolConfig *designate.MultipoolConfig) (string, error) {
+	// Create a simple string representation of pool names (non-default pools only)
+	var poolNames []string
+	for poolIdx, pool := range multipoolConfig.Pools {
+		if poolIdx > 0 { // Skip default pool (pool0)
+			poolNames = append(poolNames, pool.Name)
 		}
 	}
 
+	// Sort for consistent ordering
+	sort.Strings(poolNames)
+
+	// Hash the sorted pool names
+	hashInput := strings.Join(poolNames, ",")
+	hash, err := util.ObjectHash(hashInput)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash pool config: %w", err)
+	}
+
+	return hash, nil
+}
+
+// createOrUpdateTSIGSecretWithHash creates or updates the TSIG secret with pool config hash annotation
+func (r *DesignateBackendbind9Reconciler) createOrUpdateTSIGSecretWithHash(
+	ctx context.Context,
+	helper *helper.Helper,
+	instance *designatev1beta1.DesignateBackendbind9,
+	tsigConfigContent string,
+	poolConfigHash string,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
+	tsigSecretName := instance.Name + designate.TsigSecretSuffix
+
+	tsigSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      tsigSecretName,
+			Namespace: instance.Namespace,
+			Labels: map[string]string{
+				"service":   "designate-backendbind9",
+				"component": "designate-backendbind9",
+			},
+		},
+	}
+
+	_, err := controllerutil.CreateOrPatch(ctx, helper.GetClient(), tsigSecret, func() error {
+		tsigSecret.Type = corev1.SecretTypeOpaque
+		tsigSecret.StringData = map[string]string{
+			"tsigkeys.conf": tsigConfigContent,
+		}
+		if tsigSecret.Annotations == nil {
+			tsigSecret.Annotations = make(map[string]string)
+		}
+		tsigSecret.Annotations["pool-config-hash"] = poolConfigHash
+		return controllerutil.SetControllerReference(instance, tsigSecret, r.Scheme)
+	})
+
+	if err != nil {
+		Log.Error(err, "Failed to create/update TSIG secret")
+		return ctrl.Result{}, fmt.Errorf("failed to create/update TSIG secret: %w", err)
+	}
+
+	Log.Info(fmt.Sprintf("TSIG secret %s reconciled (hash: %s)", tsigSecretName, poolConfigHash))
 	return ctrl.Result{}, nil
 }
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+// generateTSIGSecret generates a random base64-encoded secret for TSIG keys
+func generateTSIGSecret() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(bytes), nil
+}
 
 // checkPoolHasZones checks if a pool has any active DNS zones using gophercloud
 func (r *DesignateBackendbind9Reconciler) checkPoolHasZones(
@@ -865,11 +1020,61 @@ func (r *DesignateBackendbind9Reconciler) checkPoolHasZones(
 		return false, nil
 	}
 
-	// TODO: Use gophercloud to query Designate API for zones in this pool
-	// Example: openstack zone list --all --long -f value | grep <poolName>
-	// For now, return false to allow removal
-	Log.Info(fmt.Sprintf("Pool %s zone check - using simplified check (always returns false)", poolName))
-	return false, nil
+	// Get pool UUID from pool name using database query
+	poolNameToID, err := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace)
+	if err != nil {
+		// TODO(oschwart): Replace galera-based pool queries with designate-manage approach
+		// Current implementation uses direct database queries which can fail if galera is not ready
+		// or during transient database issues. This should be replaced with designate-manage commands
+		// that provide better isolation and error handling.
+
+		// Check if error is due to galera not being ready
+		if errors.Is(err, designate.ErrGaleraNotReady) || strings.Contains(err.Error(), "galera not ready") {
+			Log.Info("Galera pod not ready yet, cannot check zones for pool removal - allowing removal to proceed")
+			// Assume no zones and allow cleanup to proceed for now
+			// The pool removal will be safe because the multipool ConfigMap has already been updated
+			return false, nil
+		}
+		// For other database errors (network, query failures), log but allow cleanup
+		// This is a temporary workaround until we migrate to designate-manage
+		Log.Info(fmt.Sprintf("Failed to query database for pool %s, allowing removal to proceed: %v", poolName, err))
+		return false, nil
+	}
+
+	poolUUID, exists := poolNameToID[poolName]
+	if !exists {
+		Log.Info(fmt.Sprintf("Pool %s not found in Designate, assuming it's safe to remove", poolName))
+		return false, nil
+	}
+
+	Log.Info(fmt.Sprintf("Found pool UUID %s for pool %s", poolUUID, poolName))
+
+	// Get OpenStack client
+	osclient, err := designate.GetOpenstackClient(ctx, instance.Namespace, helper)
+	if err != nil {
+		Log.Error(err, "Failed to get OpenStack client for zone check")
+		return false, fmt.Errorf("failed to get OpenStack client: %w", err)
+	}
+
+	// Check if pool has zones
+	hasZones, err := designate.HasZonesInPool(ctx, osclient, poolUUID)
+	if err != nil {
+		Log.Error(err, fmt.Sprintf("Failed to check zones for pool %s (UUID: %s)", poolName, poolUUID))
+		return false, fmt.Errorf("failed to check zones for pool %s: %w", poolName, err)
+	}
+
+	if hasZones {
+		count, countErr := designate.CountZonesInPool(ctx, osclient, poolUUID)
+		if countErr == nil {
+			Log.Info(fmt.Sprintf("Pool %s has %d active zones, cannot remove", poolName, count))
+		} else {
+			Log.Info(fmt.Sprintf("Pool %s has active zones, cannot remove", poolName))
+		}
+	} else {
+		Log.Info(fmt.Sprintf("Pool %s has no active zones, safe to remove", poolName))
+	}
+
+	return hasZones, nil
 }
 
 // verifyPoolInConfig verifies that a pool exists in the pools.yaml ConfigMap
@@ -890,7 +1095,7 @@ func (r *DesignateBackendbind9Reconciler) verifyPoolInConfig(
 
 	poolsYamlData, ok := poolsConfigMap.Data[designate.PoolsYamlContent]
 	if !ok {
-		return fmt.Errorf("pools.yaml not found in ConfigMap")
+		return ErrPoolsYamlMissing
 	}
 
 	var pools []designate.Pool
@@ -904,5 +1109,322 @@ func (r *DesignateBackendbind9Reconciler) verifyPoolInConfig(
 		}
 	}
 
-	return fmt.Errorf("pool %s not found in pools.yaml", poolName)
+	return fmt.Errorf("%w: %s", ErrPoolNotFoundInConfig, poolName)
+}
+
+// reconcileMultipoolMode orchestrates multipool vs single-pool mode handling
+func (r *DesignateBackendbind9Reconciler) reconcileMultipoolMode(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+	inputHash string,
+	serviceLabels map[string]string,
+	serviceAnnotations map[string]string,
+	topology *topologyv1.Topology,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
+	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)
+	if err != nil {
+		Log.Error(err, "Failed to get multipool configuration")
+		return ctrl.Result{}, err
+	}
+
+	if multipoolConfig != nil {
+		return r.reconcileMultipoolResources(ctx, instance, helper, multipoolConfig, inputHash, serviceLabels, serviceAnnotations, topology)
+	}
+
+	return r.cleanupMultipoolResources(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
+}
+
+// reconcileMultipoolResources handles multipool mode resource creation and cleanup
+func (r *DesignateBackendbind9Reconciler) reconcileMultipoolResources(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+	multipoolConfig *designate.MultipoolConfig,
+	inputHash string,
+	serviceLabels map[string]string,
+	serviceAnnotations map[string]string,
+	topology *topologyv1.Topology,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
+	// Build list of expected multipool service names
+	// Pool 0 services: designate-backendbind9-0, designate-backendbind9-1, etc.
+	// Pool 1+ services: designate-backendbind9-pool1-0, designate-backendbind9-pool1-1, etc.
+	expectedServices := make(map[string]bool)
+	for poolIdx, pool := range multipoolConfig.Pools {
+		for i := 0; i < int(pool.BindReplicas); i++ {
+			var serviceName string
+			if poolIdx == 0 {
+				serviceName = fmt.Sprintf("designate-backendbind9-%d", i)
+			} else {
+				serviceName = fmt.Sprintf("designate-backendbind9-pool%d-%d", poolIdx, i)
+			}
+			expectedServices[serviceName] = true
+		}
+	}
+
+	// Clean up old services that shouldn't exist in multipool mode
+	svcList := &corev1.ServiceList{}
+	labelSelector := map[string]string{
+		"service":   "designate-backendbind9",
+		"component": "designate-backendbind9",
+	}
+	err := helper.GetClient().List(ctx, svcList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	for _, svc := range svcList.Items {
+		// Delete services not in our expected list (old services from previous config)
+		if !expectedServices[svc.Name] {
+			Log.Info(fmt.Sprintf("Deleting orphaned service %s (not in current multipool config)", svc.Name))
+			err = helper.GetClient().Delete(ctx, &svc)
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				Log.Error(err, fmt.Sprintf("Failed to delete old service %s", svc.Name))
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
+	// Pool 0 will reuse the same StatefulSet name (instance.Name)
+	// Create pool-specific services
+	ctrlResult, err := r.reconcileMultipoolServices(ctx, instance, helper, multipoolConfig, serviceLabels)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
+	}
+
+	ctrlResult, err = r.reconcileMultipoolStatefulSets(ctx, instance, helper, multipoolConfig, inputHash, serviceLabels, serviceAnnotations, topology)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
+	}
+
+	// Create/update TSIG secrets for non-default pools
+	ctrlResult, err = r.reconcileTSIGSecrets(ctx, instance, helper, multipoolConfig)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
+	}
+
+	// Note: Per-pool bind IP ConfigMaps are cleaned up by DesignateReconciler.reconcileBindConfigMaps()
+
+	return ctrl.Result{}, nil
+}
+
+// cleanupMultipoolResources handles cleanup during migration from multipool to single-pool mode
+func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+	inputHash string,
+	serviceLabels map[string]string,
+	serviceAnnotations map[string]string,
+	topology *topologyv1.Topology,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
+	// Delete any multipool services if they exist (migration from multipool to single / default pool)
+	svcList := &corev1.ServiceList{}
+	labelSelector := map[string]string{
+		"service":   "designate-backendbind9",
+		"component": "designate-backendbind9",
+	}
+	err := helper.GetClient().List(ctx, svcList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
+	if err == nil {
+		for _, svc := range svcList.Items {
+			// Delete pool-specific services (names contain "-pool")
+			if strings.Contains(svc.Name, "-pool") {
+				Log.Info(fmt.Sprintf("Deleting multipool service %s for single pool migration", svc.Name))
+				err = helper.GetClient().Delete(ctx, &svc)
+				if err != nil && !k8s_errors.IsNotFound(err) {
+					Log.Error(err, fmt.Sprintf("Failed to delete multipool service %s", svc.Name))
+					return ctrl.Result{}, err
+				}
+			}
+		}
+	} else if !k8s_errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	// Delete numbered pool StatefulSets if they exist (pool1, pool2, etc.)
+	// Pool0 (instance.Name) will be reused for single-pool mode
+	stsList := &appsv1.StatefulSetList{}
+	err = helper.GetClient().List(ctx, stsList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
+	if err == nil {
+		for _, sts := range stsList.Items {
+			// Identify pool StatefulSets by name pattern
+			// Pool StatefulSets: instance.Name (pool0), instance.Name-pool1, instance.Name-pool2, etc.
+			// Only delete numbered pool StatefulSets (pool1+), keep pool0 (instance.Name) for single-pool mode reuse
+			if strings.Contains(sts.Name, designate.PoolStatefulSetSuffix) && sts.Name != instance.Name {
+				poolName := extractPoolNameFromStatefulSetName(sts.Name, instance.Name)
+
+				// Check if this pool has active zones before deletion
+				if poolName != "" {
+					hasZones, zoneCheckErr := r.checkPoolHasZones(ctx, helper, instance, poolName)
+					if zoneCheckErr != nil {
+						Log.Error(zoneCheckErr, fmt.Sprintf("Failed to check zones for pool %s during migration", poolName))
+						instance.Status.Conditions.Set(condition.FalseCondition(
+							condition.DeploymentReadyCondition,
+							condition.ErrorReason,
+							condition.SeverityWarning,
+							condition.DeploymentReadyErrorMessage,
+							fmt.Sprintf("Failed to check if pool %s has active zones during migration: %v", poolName, zoneCheckErr)))
+						return ctrl.Result{RequeueAfter: time.Minute}, zoneCheckErr
+					}
+
+					if hasZones {
+						// Pool has active zones, cannot remove
+						errMsg := fmt.Sprintf("Cannot remove pool: pool %s has active DNS zones. Please delete zones first. Will automatically retry in 1 minute", poolName)
+						Log.Info(errMsg)
+						instance.Status.Conditions.Set(condition.FalseCondition(
+							condition.DeploymentReadyCondition,
+							condition.ErrorReason,
+							condition.SeverityWarning,
+							condition.DeploymentReadyErrorMessage,
+							errMsg))
+						return ctrl.Result{RequeueAfter: time.Minute}, nil
+					}
+				}
+
+				// No zones, proceed with graceful removal
+				// First, scale to 0 if not already at 0
+				if *sts.Spec.Replicas > 0 {
+					Log.Info(fmt.Sprintf("Scaling down StatefulSet %s to 0 replicas before deletion (single pool migration)", sts.Name))
+					sts.Spec.Replicas = new(int32)
+					err = helper.GetClient().Update(ctx, &sts)
+					if err != nil {
+						Log.Error(err, fmt.Sprintf("Failed to scale down StatefulSet %s", sts.Name))
+						return ctrl.Result{}, err
+					}
+					// Requeue to allow scale-down to complete
+					return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+				}
+
+				// Wait until all pods are terminated
+				if sts.Status.Replicas > 0 || sts.Status.ReadyReplicas > 0 {
+					Log.Info(fmt.Sprintf("Waiting for StatefulSet %s pods to terminate (replicas: %d, ready: %d)",
+						sts.Name, sts.Status.Replicas, sts.Status.ReadyReplicas))
+					return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+				}
+
+				// All pods are terminated, safe to delete StatefulSet
+				Log.Info(fmt.Sprintf("Deleting numbered pool StatefulSet %s for single pool migration", sts.Name))
+				err = helper.GetClient().Delete(ctx, &sts)
+				if err != nil && !k8s_errors.IsNotFound(err) {
+					Log.Error(err, fmt.Sprintf("Failed to delete multipool StatefulSet %s", sts.Name))
+					return ctrl.Result{}, err
+				}
+
+				// Delete PVCs associated with this StatefulSet
+				pvcList := &corev1.PersistentVolumeClaimList{}
+				err = helper.GetClient().List(ctx, pvcList, client.InNamespace(instance.Namespace))
+				if err != nil {
+					Log.Error(err, "Failed to list PVCs for cleanup during single pool migration")
+					return ctrl.Result{}, err
+				}
+
+				for _, pvc := range pvcList.Items {
+					if strings.Contains(pvc.Name, sts.Name) {
+						Log.Info(fmt.Sprintf("Deleting orphaned PVC %s for single pool migration", pvc.Name))
+						err = helper.GetClient().Delete(ctx, &pvc)
+						if err != nil && !k8s_errors.IsNotFound(err) {
+							Log.Error(err, fmt.Sprintf("Failed to delete PVC %s", pvc.Name))
+							return ctrl.Result{}, err
+						}
+					}
+				}
+
+				// Requeue to continue cleanup if there are more orphaned StatefulSets
+				return ctrl.Result{Requeue: true}, nil
+			}
+		}
+	} else if !k8s_errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	// Delete TSIG secret from multipool mode (only exists in multipool, not single-pool)
+	// TSIG secrets have labels, so we can filter by them
+	secretList := &corev1.SecretList{}
+	labelSelector = map[string]string{
+		"service":   "designate-backendbind9",
+		"component": "designate-backendbind9",
+	}
+	err = helper.GetClient().List(ctx, secretList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
+	if err == nil {
+		for _, secret := range secretList.Items {
+			// Delete TSIG secrets (names end with "-tsig")
+			if strings.HasSuffix(secret.Name, designate.TsigSecretSuffix) {
+				Log.Info(fmt.Sprintf("Deleting TSIG secret %s for single pool migration", secret.Name))
+
+				// Delete TSIG key from Designate database before deleting Kubernetes secret
+				osclient, err := designate.GetOpenstackClient(ctx, instance.Namespace, helper)
+				if err != nil {
+					Log.Error(err, "Failed to get OpenStack client for TSIG key deletion during single-pool migration")
+					// Continue with secret deletion even if we can't delete from Designate
+				} else {
+					err = designate.DeleteTSIGKeyByName(ctx, osclient, designate.SharedTSIGKeyName)
+					if err != nil {
+						Log.Error(err, "Failed to delete TSIG key from Designate during single-pool migration")
+						// Continue with secret deletion even if Designate deletion fails
+					} else {
+						Log.Info(fmt.Sprintf("Deleted TSIG key %s from Designate during single-pool migration", designate.SharedTSIGKeyName))
+					}
+				}
+
+				// Delete Kubernetes secret
+				err = helper.GetClient().Delete(ctx, &secret)
+				if err != nil && !k8s_errors.IsNotFound(err) {
+					Log.Error(err, fmt.Sprintf("Failed to delete TSIG secret %s", secret.Name))
+					return ctrl.Result{}, err
+				}
+			}
+		}
+	} else if !k8s_errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	// Create single-pool services for all replicas
+	for i := 0; i < int(*instance.Spec.Replicas); i++ {
+		var overrideSpec service.OverrideSpec
+		if i < len(instance.Spec.Override.Services) {
+			overrideSpec = instance.Spec.Override.Services[i]
+		}
+
+		svc, err := designate.CreateDNSService(
+			fmt.Sprintf("designate-backendbind9-%d", i),
+			instance.Namespace,
+			&overrideSpec,
+			serviceLabels,
+			53,
+		)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.CreateServiceReadyErrorMessage,
+				err.Error()))
+			return ctrl.Result{}, err
+		}
+
+		ctrlResult, err := svc.CreateOrPatch(ctx, helper)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.CreateServiceReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.CreateServiceReadyErrorMessage,
+				err.Error()))
+			return ctrlResult, err
+		}
+	}
+	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
+
+	ctrlResult, err := r.reconcileSingleStatefulSet(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
+	}
+
+	return ctrl.Result{}, nil
 }

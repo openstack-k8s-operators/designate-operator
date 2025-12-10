@@ -89,4 +89,16 @@ const (
 
 	// TsigSecretSuffix is the suffix for TSIG secret names in multipool mode
 	TsigSecretSuffix = "-tsig"
+
+	// MultipoolConfigMapName is the name of the ConfigMap containing multipool configuration
+	MultipoolConfigMapName = "designate-multipool-config"
+
+	// DefaultPoolName is the name of the default pool (pool0)
+	DefaultPoolName = "default"
+
+	// PoolStatefulSetSuffix is the suffix for numbered pool StatefulSets (pool1, pool2, etc.)
+	PoolStatefulSetSuffix = "-pool"
+
+	// SharedTSIGKeyName is the name of the shared TSIG key used for all non-default pools
+	SharedTSIGKeyName = "multipool-shared-key"
 )

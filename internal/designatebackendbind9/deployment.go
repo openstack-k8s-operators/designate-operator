@@ -39,7 +39,7 @@ import (
 
 const (
 	// PVCSuffix is the suffix used for PVC names
-	PVCSuffix = "-data"
+	PVCSuffix = "-designate-bind"
 )
 
 // StatefulSet creates a StatefulSet for the designate backend bind9 service
@@ -95,7 +95,8 @@ func StatefulSet(
 	var includeTSIG bool
 	if statefulSetName != instance.Name && !strings.Contains(statefulSetName, "-pool0") {
 		// This is a non-default pool StatefulSet, add TSIG support
-		tsigSecretName = statefulSetName + "-tsig"
+		// Note: All pools share the same TSIG secret (instance.Name + "-tsig")
+		tsigSecretName = instance.Name + designate.TsigSecretSuffix
 		includeTSIG = true
 	}
 

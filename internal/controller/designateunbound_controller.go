@@ -296,10 +296,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		common.ComponentSelector: designateunbound.Component,
 	}
 
-	// TODO(oschwart): Determine if we should error out when Override.Services has fewer entries than replicas.
-	// Currently using min() allows deployment to proceed with partial services (some pods have no external service),
-	// which may result in incomplete unbound configuration. Consider erroring out for consistency with bind9 multipool mode,
-	// or keep min() for backward compatibility but document that all replicas need Override.Services entries.
+	// Create services only for entries in Override.Services to avoid creating services with empty specs
 	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
 	for i := range serviceCount {
 		svc, err := designate.CreateDNSService(

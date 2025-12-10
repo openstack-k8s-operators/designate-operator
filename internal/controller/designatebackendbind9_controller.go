@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package controller implements the DesignateBackendbind9 controller.
+//
 // Core reconciliation logic for DesignateBackendbind9.
 // For multipool-specific resource management (ConfigMaps, Services, StatefulSets, TSIG),
 // see designatebackendbind9_multipool.go.
@@ -21,7 +23,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -307,6 +308,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(ctx context.Context, 
 		For(&designatev1beta1.DesignateBackendbind9{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.Secret{}).
 		// watch the config CMs we don't own
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(configMapFn)).
@@ -563,175 +565,11 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	// normal reconcile tasks
 	//
 
-	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)
-	if err != nil {
-		Log.Error(err, "Failed to get multipool configuration")
-		return ctrl.Result{}, err
+	// Handle multipool vs single-pool mode orchestration
+	ctrlResult, err = r.reconcileMultipoolMode(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
 	}
-
-	if multipoolConfig != nil {
-		// Delete old single-pool services (migration from single to multipool)
-		// Single-pool services follow pattern: designate-backendbind9-0, designate-backendbind9-1
-		// Multipool services follow pattern: designate-backendbind9-pool0-0, designate-backendbind9-pool1-0
-		svcList := &corev1.ServiceList{}
-		labelSelector := map[string]string{
-			"service":   "designate-backendbind9",
-			"component": "designate-backendbind9",
-		}
-		err = helper.GetClient().List(ctx, svcList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
-		if err != nil && !k8s_errors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-
-		for _, svc := range svcList.Items {
-			// Delete services without "-pool" in name (old single-pool services)
-			if !strings.Contains(svc.Name, "-pool") {
-				Log.Info(fmt.Sprintf("Deleting old single-pool service %s for multipool migration", svc.Name))
-				err = helper.GetClient().Delete(ctx, &svc)
-				if err != nil && !k8s_errors.IsNotFound(err) {
-					Log.Error(err, fmt.Sprintf("Failed to delete old service %s", svc.Name))
-					return ctrl.Result{}, err
-				}
-			}
-		}
-
-		// No need to delete the old single StatefulSet during migration to multipool
-		// Pool 0 will reuse the same StatefulSet name (instance.Name) for backwards compatibility
-		// This avoids unnecessary downtime and resource recreation
-
-		// Create pool-specific services
-		ctrlResult, err := r.reconcileMultipoolServices(ctx, instance, helper, multipoolConfig, serviceLabels)
-		if err != nil || (ctrlResult != ctrl.Result{}) {
-			return ctrlResult, err
-		}
-
-		ctrlResult, err = r.reconcileMultipoolStatefulSets(ctx, instance, helper, multipoolConfig, inputHash, serviceLabels, serviceAnnotations, topology)
-		if err != nil || (ctrlResult != ctrl.Result{}) {
-			return ctrlResult, err
-		}
-
-		// Create/update TSIG secrets for non-default pools
-		ctrlResult, err = r.reconcileTSIGSecrets(ctx, instance, helper, multipoolConfig)
-		if err != nil || (ctrlResult != ctrl.Result{}) {
-			return ctrlResult, err
-		}
-
-		// Note: Per-pool bind IP ConfigMaps are cleaned up by DesignateReconciler.reconcileBindConfigMaps()
-
-	} else {
-		// Delete any multipool services if they exist (migration from multipool to single / default pool)
-		svcList := &corev1.ServiceList{}
-		labelSelector := map[string]string{
-			"service":   "designate-backendbind9",
-			"component": "designate-backendbind9",
-		}
-		err = helper.GetClient().List(ctx, svcList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
-		if err == nil {
-			for _, svc := range svcList.Items {
-				// Delete pool-specific services (names contain "-pool")
-				if strings.Contains(svc.Name, "-pool") {
-					Log.Info(fmt.Sprintf("Deleting multipool service %s for single pool migration", svc.Name))
-					err = helper.GetClient().Delete(ctx, &svc)
-					if err != nil && !k8s_errors.IsNotFound(err) {
-						Log.Error(err, fmt.Sprintf("Failed to delete multipool service %s", svc.Name))
-						return ctrl.Result{}, err
-					}
-				}
-			}
-		} else if !k8s_errors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-
-		// Delete numbered pool StatefulSets if they exist (pool1, pool2, etc.)
-		// Pool0 (instance.Name) will be reused for single-pool mode
-		stsList := &appsv1.StatefulSetList{}
-		err = helper.GetClient().List(ctx, stsList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
-		if err == nil {
-			for _, sts := range stsList.Items {
-				// Delete numbered pool StatefulSets (pool1, pool2, etc.)
-				// Keep instance.Name (pool0) as it will be reused for single-pool mode
-				if _, hasPoolLabel := sts.Labels["pool"]; hasPoolLabel && sts.Name != instance.Name {
-					Log.Info(fmt.Sprintf("Deleting numbered pool StatefulSet %s for single pool migration", sts.Name))
-					err = helper.GetClient().Delete(ctx, &sts)
-					if err != nil && !k8s_errors.IsNotFound(err) {
-						Log.Error(err, fmt.Sprintf("Failed to delete multipool StatefulSet %s", sts.Name))
-						return ctrl.Result{}, err
-					}
-				}
-			}
-		} else if !k8s_errors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-
-		// Delete TSIG secret from multipool mode (only exists in multipool, not single-pool)
-		// TSIG secrets have labels, so we can filter by them
-		secretList := &corev1.SecretList{}
-		labelSelector = map[string]string{
-			"service":   "designate-backendbind9",
-			"component": "designate-backendbind9",
-		}
-		err = helper.GetClient().List(ctx, secretList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
-		if err == nil {
-			for _, secret := range secretList.Items {
-				// Delete TSIG secrets (names end with "-tsig")
-				if strings.HasSuffix(secret.Name, designate.TsigSecretSuffix) {
-					Log.Info(fmt.Sprintf("Deleting TSIG secret %s for single pool migration", secret.Name))
-					err = helper.GetClient().Delete(ctx, &secret)
-					if err != nil && !k8s_errors.IsNotFound(err) {
-						Log.Error(err, fmt.Sprintf("Failed to delete TSIG secret %s", secret.Name))
-						return ctrl.Result{}, err
-					}
-				}
-			}
-		} else if !k8s_errors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-
-		// Create single-pool services
-		// TODO(oschwart): Determine if we should error out when Override.Services has fewer entries than replicas.
-		// Currently using min() allows deployment to proceed with partial services (some pods have no external service),
-		// which may result in a broken DNS configuration. Multipool mode (reconcileMultipoolServices) errors out in this
-		// case for consistency. However, changing this behavior could break existing deployments that rely on the lenient
-		// behavior. Consider: (1) error out for consistency with multipool, or (2) keep min() for backward compatibility
-		// but document that all replicas need corresponding Override.Services entries for proper DNS functionality.
-		serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
-		for i := 0; i < serviceCount; i++ {
-			svc, err := designate.CreateDNSService(
-				fmt.Sprintf("designate-backendbind9-%d", i),
-				instance.Namespace,
-				&instance.Spec.Override.Services[i],
-				serviceLabels,
-				53,
-			)
-			if err != nil {
-				instance.Status.Conditions.Set(condition.FalseCondition(
-					condition.CreateServiceReadyCondition,
-					condition.ErrorReason,
-					condition.SeverityWarning,
-					condition.CreateServiceReadyErrorMessage,
-					err.Error()))
-				return ctrl.Result{}, err
-			}
-
-			ctrlResult, err := svc.CreateOrPatch(ctx, helper)
-			if err != nil {
-				instance.Status.Conditions.Set(condition.FalseCondition(
-					condition.CreateServiceReadyCondition,
-					condition.ErrorReason,
-					condition.SeverityWarning,
-					condition.CreateServiceReadyErrorMessage,
-					err.Error()))
-				return ctrlResult, err
-			}
-		}
-		instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
-
-		ctrlResult, err := r.reconcileSingleStatefulSet(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
-		if err != nil || (ctrlResult != ctrl.Result{}) {
-			return ctrlResult, err
-		}
-	}
-	// create StatefulSet(s) - end
 
 	// We reached the end of the Reconcile, update the Ready condition based on
 	// the sub conditions

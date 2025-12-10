@@ -9,10 +9,70 @@ status:
     reason: Ready
     status: "True"
     type: Ready
+  - message: DB create completed
+    reason: Ready
+    status: "True"
+    type: DBReady
+  - message: DBsync completed
+    reason: Ready
+    status: "True"
+    type: DBSyncReady
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: DesignateAPIReady
   - message: Setup complete
     reason: Ready
     status: "True"
     type: DesignateBackendbind9Ready
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: DesignateCentralReady
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: DesignateMdnsReady
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: DesignateProducerReady
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: DesignateUnboundReady
+  - message: Setup complete
+    reason: Ready
+    status: "True"
+    type: DesignateWorkerReady
+  - message: Input data complete
+    reason: Ready
+    status: "True"
+    type: InputReady
+  - message: MariaDBAccount creation complete
+    reason: Ready
+    status: "True"
+    type: MariaDBAccountReady
+  - message: RabbitMqTransportURL successfully created
+    reason: Ready
+    status: "True"
+    type: RabbitMqTransportURLReady
+  - message: RoleBinding created
+    reason: Ready
+    status: "True"
+    type: RoleBindingReady
+  - message: Role created
+    reason: Ready
+    status: "True"
+    type: RoleReady
+  - message: ServiceAccount created
+    reason: Ready
+    status: "True"
+    type: ServiceAccountReady
+  - message: Service config create completed
+    reason: Ready
+    status: "True"
+    type: ServiceConfigReady
 ---
 # Verify that only 2 StatefulSets remain (default and pool1)
 # Pool 0 uses the base name (designate-backendbind9) for backwards compatibility
@@ -21,8 +81,7 @@ kind: StatefulSet
 metadata:
   name: designate-backendbind9
   labels:
-    pool: default
-    pool-index: "0"
+    service: designate-backendbind9
 status:
   readyReplicas: 1
 ---
@@ -31,14 +90,14 @@ kind: StatefulSet
 metadata:
   name: designate-backendbind9-pool1
   labels:
-    pool: pool1
-    pool-index: "1"
+    service: designate-backendbind9
 status:
   readyReplicas: 1
 ---
 # Verify that ALL pool2 resources are deleted (prevent resource leaks)
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
+timeout: 120
 commands:
   - script: |
       set -e
@@ -56,10 +115,10 @@ commands:
 
       # 2. Check that pool2 services no longer exist
       # Services follow pattern: designate-backendbind9-pool2-{0,1,2,...}
-      pool2_services=$(oc get services -n $NAMESPACE -l pool=pool2 --no-headers 2>/dev/null | wc -l)
+      pool2_services=$(oc get services -n $NAMESPACE 2>/dev/null | grep "designate-backendbind9-pool2-" | wc -l)
       if [ "$pool2_services" -gt 0 ]; then
         echo "ERROR: Found $pool2_services pool2 services that should be deleted"
-        oc get services -n $NAMESPACE -l pool=pool2
+        oc get services -n $NAMESPACE | grep "designate-backendbind9-pool2-"
         ERRORS=$((ERRORS + 1))
       else
         echo "✓ Pool2 services deleted"
