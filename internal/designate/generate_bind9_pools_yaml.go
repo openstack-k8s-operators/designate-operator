@@ -47,15 +47,15 @@ var (
 	ErrInvalidBindReplicas = errors.New("pool has invalid bindReplicas (must be greater than 0)")
 	// ErrDefaultPoolMissing is returned when default pool is not present in multipool configuration
 	ErrDefaultPoolMissing = errors.New("default pool must be present in multipool configuration")
+	// ErrMultipoolConfigKeyMissing is returned when multipool ConfigMap doesn't have pools key
+	ErrMultipoolConfigKeyMissing = errors.New("multipool ConfigMap missing pools key")
+	// ErrPoolMissingNSRecords is returned when a pool doesn't define NS records in multipool mode
+	ErrPoolMissingNSRecords = errors.New("pool missing NS records in multipool mode")
 )
 
 const (
-	// MultipoolConfigMapName is the name of the ConfigMap containing multipool configuration
-	MultipoolConfigMapName = "designate-multipool-config"
 	// MultipoolConfigMapKey is the key in the ConfigMap containing the pools configuration
 	MultipoolConfigMapKey = "pools"
-	// DefaultPoolName is the name of the default pool (must not be deleted)
-	DefaultPoolName = "default"
 )
 
 // Pool represents a designate pool configuration
@@ -143,7 +143,7 @@ func GetMultipoolConfig(ctx context.Context, k8sClient client.Client, namespace 
 
 	poolsYaml, ok := configMap.Data[MultipoolConfigMapKey]
 	if !ok {
-		return nil, fmt.Errorf("ConfigMap %s does not contain key %s", MultipoolConfigMapName, MultipoolConfigMapKey)
+		return nil, fmt.Errorf("%w: %s/%s", ErrMultipoolConfigKeyMissing, MultipoolConfigMapName, MultipoolConfigMapKey)
 	}
 
 	var pools []PoolConfig
@@ -334,6 +334,11 @@ func generateMultiplePools(BindMap map[string]string, masterHosts []string, mult
 	bindIndex := 0
 
 	for _, poolConfig := range sortedPools {
+		// In multipool mode, each pool MUST define its own NS records
+		if len(poolConfig.NSRecords) == 0 {
+			return nil, fmt.Errorf("%w: %s", ErrPoolMissingNSRecords, poolConfig.Name)
+		}
+
 		nsRecords := poolConfig.NSRecords
 		sort.Slice(nsRecords, func(i, j int) bool {
 			if nsRecords[i].Hostname != nsRecords[j].Hostname {

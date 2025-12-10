@@ -14,10 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -25,6 +26,23 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+)
+
+var (
+	// ErrPoolsKeyMissing is returned when the ConfigMap doesn't have a 'pools' key
+	ErrPoolsKeyMissing = errors.New("ConfigMap must contain 'pools' key")
+	// ErrNoPoolsDefined is returned when no pools are defined
+	ErrNoPoolsDefined = errors.New("at least one pool must be defined")
+	// ErrDefaultPoolMissing is returned when the default pool is not present
+	ErrDefaultPoolMissing = errors.New("default pool 'default' must be present in multipool configuration")
+	// ErrEmptyPoolName is returned when a pool has an empty name
+	ErrEmptyPoolName = errors.New("pool has empty name")
+	// ErrDuplicatePoolName is returned when duplicate pool names are found
+	ErrDuplicatePoolName = errors.New("duplicate pool name")
+	// ErrInvalidBindReplicas is returned when bindReplicas is invalid
+	ErrInvalidBindReplicas = errors.New("pool has invalid bindReplicas (must be greater than 0)")
+	// ErrPoolMissingNSRecords is returned when a pool is missing NS records
+	ErrPoolMissingNSRecords = errors.New("pool does not have NS records defined (each pool must define nsRecords)")
 )
 
 // MultipoolConfigMapValidator validates the designate-multipool-config ConfigMap
@@ -50,7 +68,7 @@ type NSRecord struct {
 }
 
 // Handle validates the ConfigMap
-func (v *MultipoolConfigMapValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
+func (v *MultipoolConfigMapValidator) Handle(_ context.Context, req admission.Request) admission.Response {
 	multipoollog.Info("Validating multipool ConfigMap", "name", req.Name, "namespace", req.Namespace)
 
 	// Only validate the specific ConfigMap
@@ -79,7 +97,7 @@ func (v *MultipoolConfigMapValidator) Handle(ctx context.Context, req admission.
 func (v *MultipoolConfigMapValidator) validateConfigMap(cm *corev1.ConfigMap) error {
 	poolsYaml, ok := cm.Data["pools"]
 	if !ok {
-		return fmt.Errorf("ConfigMap must contain 'pools' key")
+		return ErrPoolsKeyMissing
 	}
 
 	var pools []PoolConfig
@@ -93,7 +111,7 @@ func (v *MultipoolConfigMapValidator) validateConfigMap(cm *corev1.ConfigMap) er
 // validatePools validates the pool configuration
 func validatePools(pools []PoolConfig) error {
 	if len(pools) == 0 {
-		return fmt.Errorf("at least one pool must be defined")
+		return ErrNoPoolsDefined
 	}
 
 	poolNames := make(map[string]bool)
@@ -102,12 +120,12 @@ func validatePools(pools []PoolConfig) error {
 	for i, pool := range pools {
 		// Validate pool name is not empty (check first before using it)
 		if pool.Name == "" {
-			return fmt.Errorf("pool at index %d has empty name", i)
+			return fmt.Errorf("%w at index %d", ErrEmptyPoolName, i)
 		}
 
 		// Check for duplicate pool names
 		if poolNames[pool.Name] {
-			return fmt.Errorf("duplicate pool name: %s", pool.Name)
+			return fmt.Errorf("%w: %s", ErrDuplicatePoolName, pool.Name)
 		}
 		poolNames[pool.Name] = true
 
@@ -116,15 +134,23 @@ func validatePools(pools []PoolConfig) error {
 			hasDefault = true
 		}
 
-		// Validate bindReplicas must be >= 0
-		if pool.BindReplicas < 0 {
-			return fmt.Errorf("pool %s has invalid bindReplicas %d (must be >= 0)", pool.Name, pool.BindReplicas)
+		// Validate bindReplicas must be > 0
+		// Note: The operator can temporarily scale to 0 during graceful pool removal,
+		// but users should not configure pools with 0 replicas (prevents pools.yaml generation errors)
+		if pool.BindReplicas <= 0 {
+			return fmt.Errorf("%w: pool %s has %d replicas", ErrInvalidBindReplicas, pool.Name, pool.BindReplicas)
+		}
+
+		// Validate NS records are provided for each pool
+		// In multipool mode, each pool MUST have its own NS records (no fallback to CR)
+		if len(pool.NSRecords) == 0 {
+			return fmt.Errorf("%w: pool %s", ErrPoolMissingNSRecords, pool.Name)
 		}
 	}
 
 	// Ensure default pool exists
 	if !hasDefault {
-		return fmt.Errorf("default pool 'default' must be present in multipool configuration")
+		return ErrDefaultPoolMissing
 	}
 
 	return nil

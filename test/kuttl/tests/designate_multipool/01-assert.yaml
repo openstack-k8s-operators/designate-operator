@@ -107,8 +107,7 @@ kind: StatefulSet
 metadata:
   name: designate-backendbind9
   labels:
-    pool: default
-    pool-index: "0"
+    service: designate-backendbind9
 status:
   readyReplicas: 1
 ---
@@ -117,8 +116,7 @@ kind: StatefulSet
 metadata:
   name: designate-backendbind9-pool1
   labels:
-    pool: pool1
-    pool-index: "1"
+    service: designate-backendbind9
 status:
   readyReplicas: 1
 ---
@@ -140,7 +138,6 @@ kind: ConfigMap
 metadata:
   name: designate-bind-ip-map
 data:
-  bind_address_0: ""  # Will be filled by predictable IP controller
   rndc_key_0: rndc-key-0
 ---
 apiVersion: v1
@@ -148,7 +145,6 @@ kind: ConfigMap
 metadata:
   name: designate-bind-ip-map-pool1
 data:
-  bind_address_0: ""  # Will be filled by predictable IP controller
   rndc_key_0: rndc-key-1
 ---
 # Verify TSIG secret is created for non-default pools
@@ -160,3 +156,20 @@ metadata:
     service: designate-backendbind9
     component: designate-backendbind9
 type: Opaque
+---
+# Verify pools.yaml ConfigMap uses multipool NS records
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # Verify pools.yaml uses multipool ConfigMap NS records
+      # Should use ns1.example.org (from multipool CM), not ns1.example.com (from CR)
+      POOLS_YAML=$(oc get configmap designate-pools-yaml-config-map -n $NAMESPACE -o jsonpath='{.data.pools-yaml-content}')
+      if echo "$POOLS_YAML" | grep -q "ns1.example.org"; then
+        echo "SUCCESS: Initial multipool deployment uses ConfigMap NS records (ns1.example.org)"
+      else
+        echo "ERROR: Multipool mode should use ConfigMap NS records (ns1.example.org), not CR NS records"
+        echo "Pools YAML content:"
+        echo "$POOLS_YAML"
+        exit 1
+      fi

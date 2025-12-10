@@ -292,3 +292,76 @@ func TestGenerateMultiplePools(t *testing.T) {
 		t.Errorf("expected RNDC key file '/etc/designate/rndc-keys/rndc-key-2', got %s", pools[1].Targets[0].Options.RNDCKeyFile)
 	}
 }
+
+func TestMultipoolRequiresNSRecordsPerPool(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+		"bind_address_1": "192.168.1.11",
+	}
+	masterHosts := []string{"192.168.1.20"}
+
+	// Test that multipool mode requires NS records for each pool
+	multipoolConfigMissingNS := &MultipoolConfig{
+		Pools: []PoolConfig{
+			{
+				Name:         "default",
+				Description:  "Default Pool",
+				BindReplicas: 1,
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns1.example.org.", Priority: 1},
+				},
+			},
+			{
+				Name:         "pool1",
+				Description:  "Pool 1",
+				BindReplicas: 1,
+				// Missing NS records - should cause error
+			},
+		},
+	}
+
+	_, err := generateMultiplePools(bindMap, masterHosts, multipoolConfigMissingNS)
+	if err == nil {
+		t.Fatal("expected error when pool is missing NS records in multipool mode, got nil")
+	}
+
+	expectedErrMsg := "pool pool1 does not have NS records defined in multipool ConfigMap"
+	if !strings.Contains(err.Error(), expectedErrMsg) {
+		t.Errorf("expected error message to contain '%s', got: %s", expectedErrMsg, err.Error())
+	}
+}
+
+func TestSinglePoolModeUsesCRNSRecords(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+		"bind_address_1": "192.168.1.11",
+	}
+	masterHosts := []string{"192.168.1.20"}
+
+	crNSRecords := []designatev1.DesignateNSRecord{
+		{Hostname: "ns-cr-single.example.org.", Priority: 1},
+		{Hostname: "ns2-cr-single.example.org.", Priority: 2},
+	}
+
+	// In single-pool mode, generateDefaultPool should use CR NS records
+	pool, err := generateDefaultPool(bindMap, masterHosts, crNSRecords)
+	if err != nil {
+		t.Fatalf("generateDefaultPool() error = %v", err)
+	}
+
+	if pool.Name != "default" {
+		t.Errorf("expected pool name 'default', got %s", pool.Name)
+	}
+
+	if len(pool.NSRecords) != 2 {
+		t.Fatalf("expected 2 NS records from CR, got %d", len(pool.NSRecords))
+	}
+
+	if pool.NSRecords[0].Hostname != "ns-cr-single.example.org." {
+		t.Errorf("expected single-pool mode to use CR NS record 'ns-cr-single.example.org.', got %s", pool.NSRecords[0].Hostname)
+	}
+
+	if pool.NSRecords[1].Hostname != "ns2-cr-single.example.org." {
+		t.Errorf("expected single-pool mode to use CR NS record 'ns2-cr-single.example.org.', got %s", pool.NSRecords[1].Hostname)
+	}
+}

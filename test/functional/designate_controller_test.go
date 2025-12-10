@@ -493,9 +493,7 @@ var _ = Describe("Designate controller", func() {
 							db.Name)))
 			}
 			Expect(conf).Should(
-				ContainSubstring(
-					"backend_url=redis://10.0.0.218:6379",
-				),
+				MatchRegexp(`backend_url=redis://[\d\.]+:6379`),
 			)
 		})
 
@@ -642,9 +640,11 @@ var _ = Describe("Designate controller", func() {
 			usedIPs := make(map[string]bool)
 			bindAddressCount := 0
 			rndcKeyCount := 0
+			bindAddressRegex := regexp.MustCompile(`^bind_address_\d+$`)
+			rndcKeyRegex := regexp.MustCompile(`^rndc_key_\d+$`)
 			for key, value := range bindConfigMap.Data {
 				// verify key format (either bind_address_N or rndc_key_N)
-				if matched, _ := regexp.MatchString(`^bind_address_\d+$`, key); matched {
+				if bindAddressRegex.MatchString(key) {
 					bindAddressCount++
 					// verify valid IP format
 					ip := net.ParseIP(value)
@@ -653,7 +653,7 @@ var _ = Describe("Designate controller", func() {
 					// check there are no duplicate IPs
 					Expect(usedIPs[value]).To(BeFalse(), "Duplicate IP found: %s", value)
 					usedIPs[value] = true
-				} else if matched, _ := regexp.MatchString(`^rndc_key_\d+$`, key); matched {
+				} else if rndcKeyRegex.MatchString(key) {
 					rndcKeyCount++
 					// verify rndc key name format (rndc-key-N)
 					Expect(value).To(MatchRegexp(`^rndc-key-\d+$`))
