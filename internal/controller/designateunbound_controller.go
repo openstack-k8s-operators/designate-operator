@@ -296,6 +296,7 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		common.ComponentSelector: designateunbound.Component,
 	}
 
+	// Create services only for entries in Override.Services to avoid creating services with empty specs
 	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
 	for i := range serviceCount {
 		svc, err := designate.CreateDNSService(

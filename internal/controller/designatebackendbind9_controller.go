@@ -13,6 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package controller implements the DesignateBackendbind9 controller.
+//
+// Core reconciliation logic for DesignateBackendbind9.
+// For multipool-specific resource management (ConfigMaps, Services, StatefulSets, TSIG),
+// see designatebackendbind9_multipool.go.
 package controller
 
 import (
@@ -38,6 +43,7 @@ import (
 
 	"github.com/go-logr/logr"
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
 	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/internal/designatebackendbind9"
@@ -250,6 +256,19 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(ctx context.Context, 
 			return nil
 		}
 
+		// reconcile all DesignateBackendbind9 CRs on multipool configmap change
+		if o.GetName() == designate.MultipoolConfigMapName {
+			Log.Info("Multipool ConfigMap changed, reconciling all DesignateBackendbind9 CRs")
+			for _, cr := range apis.Items {
+				name := client.ObjectKey{
+					Namespace: o.GetNamespace(),
+					Name:      cr.Name,
+				}
+				result = append(result, reconcile.Request{NamespacedName: name})
+			}
+			return result
+		}
+
 		label := o.GetLabels()
 		// TODO: Just trying to verify that the CM is owned by this CR's managing CR
 		if l, ok := label[labels.GetOwnerNameLabelSelector(labels.GetGroupLabel(designate.ServiceName))]; ok {
@@ -289,6 +308,7 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(ctx context.Context, 
 		For(&designatev1beta1.DesignateBackendbind9{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.Secret{}).
 		// watch the config CMs we don't own
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(configMapFn)).
@@ -401,41 +421,6 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		common.AppSelector:       instance.Name,
 		common.ComponentSelector: designatebackendbind9.Component,
 	}
-
-	// TODO(beagles): we really should create a single point of truth for what things are named or
-	// what the names will be based on.
-	serviceCount := min(int(*instance.Spec.Replicas), len(instance.Spec.Override.Services))
-	for i := range serviceCount {
-		svc, err := designate.CreateDNSService(
-			fmt.Sprintf("designate-backendbind9-%d", i),
-			instance.Namespace,
-			&instance.Spec.Override.Services[i],
-			serviceLabels,
-			53,
-		)
-
-		if err != nil {
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.CreateServiceReadyCondition,
-				condition.ErrorReason,
-				condition.SeverityWarning,
-				condition.CreateServiceReadyErrorMessage,
-				err.Error()))
-			return ctrl.Result{}, err
-		}
-
-		ctrlResult, err := svc.CreateOrPatch(ctx, helper)
-		if err != nil {
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.CreateServiceReadyCondition,
-				condition.ErrorReason,
-				condition.SeverityWarning,
-				condition.CreateServiceReadyErrorMessage,
-				err.Error()))
-			return ctrlResult, err
-		}
-	}
-	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
 	//
 	// Create ConfigMaps required as input for the Service and calculate an overall hash of hashes
 	//
@@ -580,8 +565,36 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	// normal reconcile tasks
 	//
 
+	// Handle multipool vs single-pool mode orchestration
+	ctrlResult, err = r.reconcileMultipoolMode(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
+	}
+
+	// We reached the end of the Reconcile, update the Ready condition based on
+	// the sub conditions
+	if instance.Status.Conditions.AllSubConditionIsTrue() {
+		instance.Status.Conditions.MarkTrue(
+			condition.ReadyCondition, condition.ReadyMessage)
+	}
+	Log.Info("Reconciled Service successfully")
+	return ctrl.Result{}, nil
+}
+
+func (r *DesignateBackendbind9Reconciler) reconcileSingleStatefulSet(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+	inputHash string,
+	serviceLabels map[string]string,
+	serviceAnnotations map[string]string,
+	topology *topologyv1.Topology,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
 	// Define a new StatefulSet object
-	deplDef, err := designatebackendbind9.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations, topology)
+	// Use default bind IP ConfigMap for single-pool mode
+	deplDef, err := designatebackendbind9.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations, topology, instance.Name, designate.BindPredIPConfigMap)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -590,7 +603,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		time.Duration(5)*time.Second,
 	)
 
-	ctrlResult, err = depl.CreateOrPatch(ctx, helper)
+	ctrlResult, err := depl.CreateOrPatch(ctx, helper)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.DeploymentReadyCondition,
@@ -659,18 +672,12 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 				condition.DeploymentReadyRunningMessage))
 		}
 	}
-	// create StatefulSet - end
 
-	// We reached the end of the Reconcile, update the Ready condition based on
-	// the sub conditions
-	if instance.Status.Conditions.AllSubConditionIsTrue() {
-		instance.Status.Conditions.MarkTrue(
-			condition.ReadyCondition, condition.ReadyMessage)
-	}
-	Log.Info("Reconciled Service successfully")
+	Log.Info("Reconciled single StatefulSet successfully")
 	return ctrl.Result{}, nil
 }
 
+// reconcileMultipoolServices creates pool-specific services in multipool mode
 func (r *DesignateBackendbind9Reconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
