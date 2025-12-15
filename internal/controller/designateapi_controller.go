@@ -372,6 +372,40 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 		return nil
 	}
 
+	// Application Credential secret watching function
+	acSecretFn := func(_ context.Context, o client.Object) []reconcile.Request {
+		name := o.GetName()
+		ns := o.GetNamespace()
+		result := []reconcile.Request{}
+
+		// Only handle Secret objects
+		if _, isSecret := o.(*corev1.Secret); !isSecret {
+			return nil
+		}
+
+		// Check if this is a designate AC secret by name pattern (ac-designate-secret)
+		expectedSecretName := keystonev1.GetACSecretName("designate")
+		if name == expectedSecretName {
+			// get all DesignateAPI CRs in this namespace
+			designateAPIs := &designatev1beta1.DesignateAPIList{}
+			listOpts := []client.ListOption{
+				client.InNamespace(ns),
+			}
+			if err := r.List(context.Background(), designateAPIs, listOpts...); err != nil {
+				return nil
+			}
+
+			for _, cr := range designateAPIs.Items {
+				name := client.ObjectKey{
+					Namespace: ns,
+					Name:      cr.Name,
+				}
+				result = append(result, reconcile.Request{NamespacedName: name})
+			}
+		}
+		return result
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&designatev1beta1.DesignateAPI{}).
 		Owns(&keystonev1.KeystoneService{}).
@@ -385,6 +419,8 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
+		Watches(&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(acSecretFn)).
 		Watches(&networkv1.NetworkAttachmentDefinition{},
 			handler.EnqueueRequestsFromMapFunc(nadFn)).
 		Watches(&topologyv1.Topology{},
@@ -1197,6 +1233,18 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 		return err
 	}
 	templateParameters["AdminPassword"] = string(adminPasswordSecret.Data["DesignatePassword"])
+
+	templateParameters["UseApplicationCredentials"] = false
+	// Try to get Application Credential for this service (via keystone api helper)
+	if acData, err := keystonev1.GetApplicationCredentialFromSecret(ctx, r.Client, instance.Namespace, designate.ServiceName); err != nil {
+		Log.Error(err, "Failed to get ApplicationCredential for service", "service", designate.ServiceName)
+		return err
+	} else if acData != nil {
+		templateParameters["UseApplicationCredentials"] = true
+		templateParameters["ACID"] = acData.ID
+		templateParameters["ACSecret"] = acData.Secret
+		Log.Info("Using ApplicationCredentials auth", "service", designate.ServiceName)
+	}
 
 	cms := []util.Template{
 		// Custom ConfigMap
