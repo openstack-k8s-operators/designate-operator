@@ -66,6 +66,10 @@ status:
   - message: Setup complete
     reason: Ready
     status: "True"
+    type: DesignateRabbitMqNotificationsTransportURLReady
+  - message: Setup complete
+    reason: Ready
+    status: "True"
     type: DesignateUnboundReady
   - message: Setup complete
     reason: Ready
