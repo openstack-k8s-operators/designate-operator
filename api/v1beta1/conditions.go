@@ -41,6 +41,9 @@ const (
 
 	// DesignateUnboundReadyCondition Status=True condition which indicates if the DesignateUnbound is configured and operational
 	DesignateUnboundReadyCondition condition.Type = "DesignateUnboundReady"
+
+	// DesignateRabbitMqNotificationsTransportURLReadyCondition Status=True condition which indicates if the RabbitMQ notifications transport URL is configured and operational
+	DesignateRabbitMqNotificationsTransportURLReadyCondition condition.Type = "DesignateRabbitMqNotificationsTransportURLReady"
 )
 
 // Designate Reasons used by API objects.
