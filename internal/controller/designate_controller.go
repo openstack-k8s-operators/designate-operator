@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -204,12 +205,12 @@ func (r *DesignateReconciler) validatePoolRemovals(
 	Log.Info(fmt.Sprintf("Detected pool removal: %v - checking for active zones", removedPools))
 
 	// Get pool name -> UUID mapping once for all pools
-	poolNameToID, err := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace)
+	poolNameToID, err := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace, instance)
 	if err != nil {
-		// Check if error is due to galera not being ready
-		if strings.Contains(err.Error(), "no running galera pod found") {
-			Log.Info("Galera pod not ready yet, skipping pool removal validation (will retry in 30 seconds)")
-			// Don't set error condition, just requeue - this is a temporary state during startup
+		// Check if error is due to pool list job not completing or failing
+		if errors.Is(err, designate.ErrPoolListJobNotComplete) || errors.Is(err, designate.ErrPoolListJobFailed) {
+			Log.Info("Pool list job not ready, skipping pool removal validation (will retry in 30 seconds)")
+			// Don't set error condition, just requeue - waiting for job to complete or succeed on retry
 			return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 		}
 		Log.Error(err, "Failed to get pool UUID mapping")
@@ -328,9 +329,7 @@ func (r *DesignateReconciler) validatePoolRemovals(
 // service account permissions that are needed to grant permission to the above
 // +kubebuilder:rbac:groups="security.openshift.io",resourceNames=anyuid;privileged,resources=securitycontextconstraints,verbs=use
 // +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
-// TODO(oschwart): pods/exec is a temporary workaround for querying pool info from MariaDB.
-// Replace with designate-manage approach to avoid direct database access via pod exec.
-// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
+// +kubebuilder:rbac:groups="",resources=pods/log,verbs=get
 
 // Reconcile -
 func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
@@ -517,10 +516,47 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
+		// Watch for multipool ConfigMap changes to regenerate pools.yaml
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.findDesignatesForMultipoolConfigMap)).
 		// Watch for TransportURL Secrets which belong to any TransportURLs created by Designate CRs
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(transportURLSecretFn)).
 		Complete(r)
+}
+
+// findDesignatesForMultipoolConfigMap watches the multipool ConfigMap and triggers
+// reconciliation of all Designate CRs when it changes or is deleted
+func (r *DesignateReconciler) findDesignatesForMultipoolConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
+	Log := r.GetLogger(ctx)
+
+	// Only trigger on multipool ConfigMap
+	if obj.GetName() != designate.MultipoolConfigMapName {
+		return nil
+	}
+
+	Log.Info("Multipool ConfigMap changed/deleted, reconciling all Designate CRs to regenerate pools.yaml")
+
+	// get all Designate CRs in this namespace
+	designates := &designatev1beta1.DesignateList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(obj.GetNamespace()),
+	}
+	if err := r.List(ctx, designates, listOpts...); err != nil {
+		Log.Error(err, "Unable to retrieve Designate CRs")
+		return nil
+	}
+
+	result := []reconcile.Request{}
+	for _, cr := range designates.Items {
+		name := client.ObjectKey{
+			Namespace: obj.GetNamespace(),
+			Name:      cr.Name,
+		}
+		result = append(result, reconcile.Request{NamespacedName: name})
+	}
+
+	return result
 }
 
 func (r *DesignateReconciler) reconcileDelete(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {

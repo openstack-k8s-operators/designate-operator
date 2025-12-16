@@ -35,6 +35,8 @@ import (
 var (
 	// ErrCABundleNotFound is returned when CA bundle secret is not found
 	ErrCABundleNotFound = errors.New("CA bundle secret not found")
+	// ErrKeystoneNotReady is returned when Keystone client cannot be created
+	ErrKeystoneNotReady = errors.New("keystone client not ready - password secret unavailable")
 )
 
 func getClient(
@@ -134,9 +136,15 @@ func GetOpenstackClient(
 	if err != nil {
 		return nil, err
 	}
-	o, _, err := GetAdminServiceClient(ctx, h, keystoneAPI)
+	o, ctrlResult, err := GetAdminServiceClient(ctx, h, keystoneAPI)
 	if err != nil {
 		return nil, err
+	}
+	if (ctrlResult != ctrl.Result{}) {
+		return nil, ErrKeystoneNotReady
+	}
+	if o == nil {
+		return nil, ErrKeystoneNotReady
 	}
 	return o, nil
 }

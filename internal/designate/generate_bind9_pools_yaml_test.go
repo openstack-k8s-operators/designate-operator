@@ -325,7 +325,7 @@ func TestMultipoolRequiresNSRecordsPerPool(t *testing.T) {
 		t.Fatal("expected error when pool is missing NS records in multipool mode, got nil")
 	}
 
-	expectedErrMsg := "pool pool1 does not have NS records defined in multipool ConfigMap"
+	expectedErrMsg := "pool missing NS records in multipool mode"
 	if !strings.Contains(err.Error(), expectedErrMsg) {
 		t.Errorf("expected error message to contain '%s', got: %s", expectedErrMsg, err.Error())
 	}

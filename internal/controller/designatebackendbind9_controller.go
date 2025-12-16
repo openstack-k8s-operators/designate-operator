@@ -106,6 +106,7 @@ type DesignateBackendbind9Reconciler struct {
 // the user.
 func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
 	Log := r.GetLogger(ctx)
+	Log.Info(fmt.Sprintf("==> Reconcile called for %s/%s", req.Namespace, req.Name))
 
 	// Fetch the DesignateBackendbind9 instance
 	instance := &designatev1beta1.DesignateBackendbind9{}
@@ -115,9 +116,11 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers. Return and don't requeue.
+			Log.Info(fmt.Sprintf("==> Instance %s/%s not found, skipping reconcile", req.Namespace, req.Name))
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
+		Log.Error(err, fmt.Sprintf("==> Failed to get instance %s/%s", req.Namespace, req.Name))
 		return ctrl.Result{}, err
 	}
 
@@ -146,6 +149,7 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 	// Always patch the instance status when exiting this function so we can
 	// persist any changes.
 	defer func() {
+		Log.Info("==> Defer: Starting status patch")
 		// Don't update the status, if Reconciler Panics
 		if rc := recover(); rc != nil {
 			Log.Info(fmt.Sprintf("Panic during reconcile %v\n", rc))
@@ -157,11 +161,14 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 			instance.Status.Conditions.Set(
 				instance.Status.Conditions.Mirror(condition.ReadyCondition))
 		}
+		Log.Info("==> Defer: Calling PatchInstance")
 		err := helper.PatchInstance(ctx, instance)
 		if err != nil {
+			Log.Error(err, "==> Defer: PatchInstance failed")
 			_err = err
 			return
 		}
+		Log.Info("==> Defer: Status patch completed successfully")
 	}()
 
 	//
@@ -180,6 +187,7 @@ func (r *DesignateBackendbind9Reconciler) Reconcile(ctx context.Context, req ctr
 
 	// If we're not deleting this and the service object doesn't have our finalizer, add it.
 	if instance.DeletionTimestamp.IsZero() && controllerutil.AddFinalizer(instance, helper.GetFinalizer()) {
+		Log.Info("==> Added finalizer, returning early to allow status update")
 		return ctrl.Result{}, nil
 	}
 
@@ -258,13 +266,17 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(ctx context.Context, 
 
 		// reconcile all DesignateBackendbind9 CRs on multipool configmap change
 		if o.GetName() == designate.MultipoolConfigMapName {
-			Log.Info("Multipool ConfigMap changed, reconciling all DesignateBackendbind9 CRs")
+			Log.Info(fmt.Sprintf("Multipool ConfigMap changed, found %d DesignateBackendbind9 CRs to reconcile", len(apis.Items)))
 			for _, cr := range apis.Items {
 				name := client.ObjectKey{
 					Namespace: o.GetNamespace(),
 					Name:      cr.Name,
 				}
+				Log.Info(fmt.Sprintf("Enqueuing reconcile request for DesignateBackendbind9: %s/%s", name.Namespace, name.Name))
 				result = append(result, reconcile.Request{NamespacedName: name})
+			}
+			if len(result) == 0 {
+				Log.Info("No DesignateBackendbind9 CRs found in namespace - no reconciliation will occur")
 			}
 			return result
 		}

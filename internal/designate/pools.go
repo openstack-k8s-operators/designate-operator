@@ -19,22 +19,35 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"regexp"
 	"strings"
+	"time"
 
+	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/job"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/remotecommand"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	// PoolListJobTimeout is the maximum time to wait for pool list job completion
+	PoolListJobTimeout = 60 * time.Second
+)
+
 var (
-	// ErrGaleraNotReady is returned when galera pods are not ready
-	ErrGaleraNotReady = errors.New("galera not ready: no galera pods found")
-	// ErrNoPoolsFound is returned when no pools are found in the database
-	ErrNoPoolsFound = errors.New("no pools found in database")
+	// ErrNoPoolsFound is returned when no pools are found
+	ErrNoPoolsFound = errors.New("no pools found")
+	// ErrParsePoolOutput is returned when pool output cannot be parsed
+	ErrParsePoolOutput = errors.New("failed to parse pool output")
+	// ErrPoolListJobNotComplete is returned when the pool list job hasn't finished
+	ErrPoolListJobNotComplete = errors.New("pool list job not complete yet")
+	// ErrPoolListJobFailed is returned when the pool list job execution fails
+	ErrPoolListJobFailed = errors.New("failed to execute pool list job")
+	// ErrNoPodFoundForJob is returned when no pod is found for a job
+	ErrNoPodFoundForJob = errors.New("no pod found for job")
 )
 
 // PoolInfo holds pool database information
@@ -43,13 +56,45 @@ type PoolInfo struct {
 	Name string
 }
 
-// GetPoolNameToIDMap retrieves all pools from database and returns a map of name->ID
+// ParsePoolListOutput parses the output of 'designate-manage pool update --dry-run'
+// Expected format: "Update Pool: <Pool id:'794ccc2c-d751-44fe-b57f-8894c9f5c842' name:'default'>"
+func ParsePoolListOutput(output string) ([]PoolInfo, error) {
+	// Regular expression to match: id:'<uuid>' name:'<name>'
+	re := regexp.MustCompile(`id:'([^']+)'\s+name:'([^']+)'`)
+
+	var pools []PoolInfo
+	scanner := bufio.NewScanner(strings.NewReader(output))
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		matches := re.FindStringSubmatch(line)
+		if len(matches) == 3 {
+			pools = append(pools, PoolInfo{
+				ID:   matches[1],
+				Name: matches[2],
+			})
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrParsePoolOutput, err)
+	}
+
+	if len(pools) == 0 {
+		return nil, ErrNoPoolsFound
+	}
+
+	return pools, nil
+}
+
+// GetPoolNameToIDMap retrieves all pools using designate-manage and returns a map of name->ID
 func GetPoolNameToIDMap(
 	ctx context.Context,
 	h *helper.Helper,
 	namespace string,
+	instance *designatev1beta1.Designate,
 ) (map[string]string, error) {
-	pools, err := ListPoolsFromDatabase(ctx, h, namespace)
+	pools, err := ListPoolsFromJob(ctx, h, namespace, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -62,133 +107,96 @@ func GetPoolNameToIDMap(
 	return poolMap, nil
 }
 
-// ListPoolsFromDatabase queries the Designate database directly for pool information
-// Using galera this way is a bad practice, but it was implmeneted by Claude and worked.
-// TODO(oschwart): replace it with a designate-manage approach
-func ListPoolsFromDatabase(
+// ListPoolsFromJob retrieves pool information by running designate-manage pool update --dry-run as a Kubernetes Job
+// This replaces the old galera-based approach with a proper job-based solution
+func ListPoolsFromJob(
 	ctx context.Context,
 	h *helper.Helper,
 	namespace string,
+	instance *designatev1beta1.Designate,
 ) ([]PoolInfo, error) {
-	// Find a galera pod
-	galeraCmd := "SELECT id, name FROM pools ORDER BY name"
+	// Create job definition following the same pattern as PoolUpdateJob
+	labels := map[string]string{"app": "designate", "job-type": "pool-list"}
+	annotations := map[string]string{}
+	jobDef := PoolListJob(instance, labels, annotations)
 
-	output, err := execDatabaseQuery(ctx, h, namespace, galeraCmd)
+	// Create and execute the job using lib-common job helper
+	poolListJob := job.NewJob(
+		jobDef,
+		"pool-list", // jobType
+		false,       // preserve - don't preserve this transient job
+		PoolListJobTimeout,
+		"", // hash - not using hash for this operation
+	)
+
+	// Execute the job
+	ctrlResult, err := poolListJob.DoJob(ctx, h)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query pools from database: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrPoolListJobFailed, err)
+	}
+	if (ctrlResult != ctrl.Result{}) {
+		return nil, ErrPoolListJobNotComplete
 	}
 
-	// Parse output (tab-separated: id\tname)
-	var pools []PoolInfo
-	scanner := bufio.NewScanner(strings.NewReader(output))
-	// Skip header line (id\tname) - we don't need to check the result
-	scanner.Scan()
-	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.Split(line, "\t")
-		if len(parts) >= 2 {
-			pools = append(pools, PoolInfo{
-				ID:   parts[0],
-				Name: parts[1],
-			})
-		}
+	// Get the pod created by the job to retrieve logs
+	podList := &corev1.PodList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels(map[string]string{"job-name": jobDef.Name}),
+	}
+	err = h.GetClient().List(ctx, podList, listOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods for job %s: %w", jobDef.Name, err)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, err
+	if len(podList.Items) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrNoPodFoundForJob, jobDef.Name)
 	}
 
-	if len(pools) == 0 {
-		return nil, ErrNoPoolsFound
+	// Get logs from the pod
+	pod := podList.Items[0]
+	containerName := jobDef.Spec.Template.Spec.Containers[0].Name
+	logs, err := getPodLogs(ctx, h, namespace, pod.Name, containerName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get logs from pod %s: %w", pod.Name, err)
+	}
+
+	// Parse the output
+	pools, err := ParsePoolListOutput(logs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse pool output: %w", err)
 	}
 
 	return pools, nil
 }
 
-// execDatabaseQuery executes a SQL query on the designate database via galera pod
-func execDatabaseQuery(
-	ctx context.Context,
-	h *helper.Helper,
-	namespace string,
-	query string,
-) (string, error) {
-	// Find a running galera pod
-	podList := &corev1.PodList{}
-	err := h.GetClient().List(ctx, podList, &client.ListOptions{
-		Namespace: namespace,
-		LabelSelector: labels.SelectorFromSet(map[string]string{
-			"galera/name": "openstack",
-		}),
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to list galera pods: %w", err)
-	}
-
-	var galeraPodName string
-	for _, pod := range podList.Items {
-		if pod.Status.Phase == corev1.PodRunning {
-			galeraPodName = pod.Name
-			break
-		}
-	}
-
-	if galeraPodName == "" {
-		return "", ErrGaleraNotReady
-	}
-
-	// Execute mysql command
-	command := []string{
-		"mysql", "-u", "root", "-D", "designate", "-e", query,
-	}
-
-	return execCommandInPodWithOutput(ctx, h, namespace, galeraPodName, "galera", command)
-}
-
-// execCommandInPodWithOutput executes a command in a pod and returns the output
-func execCommandInPodWithOutput(
+// getPodLogs retrieves logs from a pod container
+func getPodLogs(
 	ctx context.Context,
 	h *helper.Helper,
 	namespace string,
 	podName string,
 	containerName string,
-	command []string,
 ) (string, error) {
-	// Get the Kubernetes clientset
-	kclient := h.GetKClient()
-
-	// Create exec request
-	req := kclient.CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(podName).
-		Namespace(namespace).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: containerName,
-			Command:   command,
-			Stdout:    true,
-			Stderr:    true,
-		}, scheme.ParameterCodec)
-
-	// Get config - works both in-cluster and locally (via kubeconfig)
-	config, err := ctrl.GetConfig()
-	if err != nil {
-		return "", fmt.Errorf("failed to get cluster config: %w", err)
-	}
-
-	exec, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
-	if err != nil {
-		return "", fmt.Errorf("failed to create executor: %w", err)
-	}
-
-	// Capture output
-	var stdout, stderr strings.Builder
-	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-		Stdout: &stdout,
-		Stderr: &stderr,
+	req := h.GetKClient().CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: containerName,
 	})
+
+	stream, err := req.Stream(ctx)
 	if err != nil {
-		return "", fmt.Errorf("command execution failed: %w, stderr: %s", err, stderr.String())
+		return "", fmt.Errorf("failed to get log stream for pod %s: %w", podName, err)
+	}
+	defer func() {
+		if closeErr := stream.Close(); closeErr != nil {
+			err = fmt.Errorf("failed to close log stream: %w", closeErr)
+		}
+	}()
+
+	buf := new(strings.Builder)
+	_, err = io.Copy(buf, stream)
+	if err != nil {
+		return "", fmt.Errorf("failed to read logs from pod %s: %w", podName, err)
 	}
 
-	return stdout.String(), nil
+	return buf.String(), nil
 }

@@ -58,6 +58,8 @@ var (
 	ErrPoolsYamlMissing = errors.New("pools.yaml not found in ConfigMap")
 	// ErrPoolNotFoundInConfig is returned when a pool is not found in pools.yaml
 	ErrPoolNotFoundInConfig = errors.New("pool not found in pools.yaml")
+	// ErrNoDesignateCRFound is returned when no Designate CR is found in the namespace
+	ErrNoDesignateCRFound = errors.New("no Designate CR found in namespace")
 )
 
 func extractPoolNameFromStatefulSetName(stsName, instanceName string) string {
@@ -683,32 +685,7 @@ func (r *DesignateBackendbind9Reconciler) cleanupOrphanedStatefulSets(
 			Log.Error(err, fmt.Sprintf("Failed to delete StatefulSet %s", sts.Name))
 			return ctrl.Result{}, err
 		}
-
-		// Delete PVCs associated with this StatefulSet
-		// StatefulSet PVCs follow the pattern: {volumeClaimTemplate.name}-{statefulset.name}-{ordinal}
-		// For designate-backendbind9, the volume claim template name is "designate-bind"
-		// So PVCs are named: designate-bind-designate-backendbind9-pool2-0, designate-bind-designate-backendbind9-pool2-1, etc.
-		pvcList := &corev1.PersistentVolumeClaimList{}
-		err = helper.GetClient().List(ctx, pvcList, client.InNamespace(instance.Namespace))
-		if err != nil {
-			Log.Error(err, "Failed to list PVCs for cleanup")
-			return ctrl.Result{}, err
-		}
-
-		for _, pvc := range pvcList.Items {
-			// Check if PVC belongs to this StatefulSet by matching the name pattern
-			// PVC naming: {volumeClaimTemplate}-{statefulsetName}-{ordinal}
-			if strings.Contains(pvc.Name, sts.Name) {
-				Log.Info(fmt.Sprintf("Deleting orphaned PVC %s for removed pool %s", pvc.Name, poolName))
-				err = helper.GetClient().Delete(ctx, &pvc)
-				if err != nil && !k8s_errors.IsNotFound(err) {
-					Log.Error(err, fmt.Sprintf("Failed to delete PVC %s", pvc.Name))
-					return ctrl.Result{}, err
-				}
-			}
-		}
-
-		// Requeue to continue cleanup if there are more orphaned StatefulSets
+		Log.Info(fmt.Sprintf("StatefulSet %s deleted successfully", sts.Name))
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -800,15 +777,20 @@ func (r *DesignateBackendbind9Reconciler) reconcileTSIGSecrets(
 
 	mdnsIPs, err := r.getMdnsIPsForTSIG(ctx, helper, instance.Namespace)
 	if err != nil {
+		// Check if mdns ConfigMap doesn't exist yet (Designate controller hasn't created it)
+		if k8s_errors.IsNotFound(err) {
+			Log.Info("mdns-ip-map ConfigMap not found yet, will requeue in 30 seconds")
+			return ctrl.Result{RequeueAfter: time.Second * 30}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
 	// Get or create shared TSIG key for all non-default pools
 	tsigKey, err := r.ensureSharedTSIGKey(ctx, helper, instance.Namespace)
 	if err != nil {
-		// Check if error is due to galera not being ready
-		if strings.Contains(err.Error(), "galera not ready") {
-			Log.Info("Galera not ready for TSIG key retrieval, will requeue in 30 seconds")
+		// Check if error is due to services not being ready
+		if strings.Contains(err.Error(), "not ready") || strings.Contains(err.Error(), "no running") {
+			Log.Info("Required services not ready for TSIG key retrieval, will requeue in 30 seconds")
 			return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 		}
 		return ctrl.Result{}, err
@@ -1004,6 +986,38 @@ func generateTSIGSecret() (string, error) {
 	return base64.StdEncoding.EncodeToString(bytes), nil
 }
 
+// getDesignateCR retrieves the parent Designate CR using owner reference
+func (r *DesignateBackendbind9Reconciler) getDesignateCR(
+	ctx context.Context,
+	helper *helper.Helper,
+	instance *designatev1beta1.DesignateBackendbind9,
+) (*designatev1beta1.Designate, error) {
+	// Find the Designate owner reference
+	var designateName string
+	for _, ownerRef := range instance.GetOwnerReferences() {
+		if ownerRef.Kind == "Designate" {
+			designateName = ownerRef.Name
+			break
+		}
+	}
+
+	if designateName == "" {
+		return nil, ErrNoDesignateCRFound
+	}
+
+	// Get the Designate CR by name
+	designate := &designatev1beta1.Designate{}
+	err := helper.GetClient().Get(ctx, types.NamespacedName{
+		Name:      designateName,
+		Namespace: instance.Namespace,
+	}, designate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Designate CR %s: %w", designateName, err)
+	}
+
+	return designate, nil
+}
+
 // checkPoolHasZones checks if a pool has any active DNS zones using gophercloud
 func (r *DesignateBackendbind9Reconciler) checkPoolHasZones(
 	ctx context.Context,
@@ -1020,24 +1034,25 @@ func (r *DesignateBackendbind9Reconciler) checkPoolHasZones(
 		return false, nil
 	}
 
-	// Get pool UUID from pool name using database query
-	poolNameToID, err := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace)
+	// Get the parent Designate CR - needed for pool list job
+	designateInstance, err := r.getDesignateCR(ctx, helper, instance)
 	if err != nil {
-		// TODO(oschwart): Replace galera-based pool queries with designate-manage approach
-		// Current implementation uses direct database queries which can fail if galera is not ready
-		// or during transient database issues. This should be replaced with designate-manage commands
-		// that provide better isolation and error handling.
+		Log.Info(fmt.Sprintf("Could not get Designate CR for pool validation, allowing removal to proceed: %v", err))
+		return false, nil
+	}
 
-		// Check if error is due to galera not being ready
-		if errors.Is(err, designate.ErrGaleraNotReady) || strings.Contains(err.Error(), "galera not ready") {
-			Log.Info("Galera pod not ready yet, cannot check zones for pool removal - allowing removal to proceed")
+	// Get pool UUID from pool name
+	poolNameToID, err := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace, designateInstance)
+	if err != nil {
+		// Check if error is due to pool list job failing
+		if errors.Is(err, designate.ErrPoolListJobNotComplete) || errors.Is(err, designate.ErrPoolListJobFailed) {
+			Log.Info("Pool list job not ready/failed, cannot check zones for pool removal - allowing removal to proceed")
 			// Assume no zones and allow cleanup to proceed for now
 			// The pool removal will be safe because the multipool ConfigMap has already been updated
 			return false, nil
 		}
-		// For other database errors (network, query failures), log but allow cleanup
-		// This is a temporary workaround until we migrate to designate-manage
-		Log.Info(fmt.Sprintf("Failed to query database for pool %s, allowing removal to proceed: %v", poolName, err))
+		// For other errors, log but allow cleanup
+		Log.Info(fmt.Sprintf("Failed to query pools for pool %s, allowing removal to proceed: %v", poolName, err))
 		return false, nil
 	}
 
@@ -1052,14 +1067,12 @@ func (r *DesignateBackendbind9Reconciler) checkPoolHasZones(
 	// Get OpenStack client
 	osclient, err := designate.GetOpenstackClient(ctx, instance.Namespace, helper)
 	if err != nil {
-		Log.Error(err, "Failed to get OpenStack client for zone check")
 		return false, fmt.Errorf("failed to get OpenStack client: %w", err)
 	}
 
 	// Check if pool has zones
 	hasZones, err := designate.HasZonesInPool(ctx, osclient, poolUUID)
 	if err != nil {
-		Log.Error(err, fmt.Sprintf("Failed to check zones for pool %s (UUID: %s)", poolName, poolUUID))
 		return false, fmt.Errorf("failed to check zones for pool %s: %w", poolName, err)
 	}
 
@@ -1123,6 +1136,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolMode(
 	topology *topologyv1.Topology,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
+	Log.Info("==> reconcileMultipoolMode called")
 
 	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)
 	if err != nil {
@@ -1131,9 +1145,11 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolMode(
 	}
 
 	if multipoolConfig != nil {
+		Log.Info(fmt.Sprintf("==> Multipool config found with %d pools, entering multipool mode", len(multipoolConfig.Pools)))
 		return r.reconcileMultipoolResources(ctx, instance, helper, multipoolConfig, inputHash, serviceLabels, serviceAnnotations, topology)
 	}
 
+	Log.Info("==> No multipool config found, entering single-pool mode / cleanup")
 	return r.cleanupMultipoolResources(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
 }
 
@@ -1223,6 +1239,7 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 	topology *topologyv1.Topology,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
+	Log.Info("==> cleanupMultipoolResources: Starting cleanup for single-pool migration")
 
 	// Delete any multipool services if they exist (migration from multipool to single / default pool)
 	svcList := &corev1.ServiceList{}
@@ -1232,10 +1249,11 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 	}
 	err := helper.GetClient().List(ctx, svcList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
 	if err == nil {
+		Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Found %d services to check for cleanup", len(svcList.Items)))
 		for _, svc := range svcList.Items {
 			// Delete pool-specific services (names contain "-pool")
 			if strings.Contains(svc.Name, "-pool") {
-				Log.Info(fmt.Sprintf("Deleting multipool service %s for single pool migration", svc.Name))
+				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Deleting multipool service %s", svc.Name))
 				err = helper.GetClient().Delete(ctx, &svc)
 				if err != nil && !k8s_errors.IsNotFound(err) {
 					Log.Error(err, fmt.Sprintf("Failed to delete multipool service %s", svc.Name))
@@ -1244,6 +1262,7 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 			}
 		}
 	} else if !k8s_errors.IsNotFound(err) {
+		Log.Error(err, "==> cleanupMultipoolResources: Failed to list services")
 		return ctrl.Result{}, err
 	}
 
@@ -1252,18 +1271,23 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 	stsList := &appsv1.StatefulSetList{}
 	err = helper.GetClient().List(ctx, stsList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
 	if err == nil {
+		Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Found %d StatefulSets to check for cleanup", len(stsList.Items)))
 		for _, sts := range stsList.Items {
+			Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Examining StatefulSet %s", sts.Name))
 			// Identify pool StatefulSets by name pattern
 			// Pool StatefulSets: instance.Name (pool0), instance.Name-pool1, instance.Name-pool2, etc.
 			// Only delete numbered pool StatefulSets (pool1+), keep pool0 (instance.Name) for single-pool mode reuse
 			if strings.Contains(sts.Name, designate.PoolStatefulSetSuffix) && sts.Name != instance.Name {
+				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: StatefulSet %s is a numbered pool, starting cleanup", sts.Name))
 				poolName := extractPoolNameFromStatefulSetName(sts.Name, instance.Name)
+				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Extracted pool name: %s", poolName))
 
 				// Check if this pool has active zones before deletion
 				if poolName != "" {
+					Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Checking if pool %s has active zones", poolName))
 					hasZones, zoneCheckErr := r.checkPoolHasZones(ctx, helper, instance, poolName)
 					if zoneCheckErr != nil {
-						Log.Error(zoneCheckErr, fmt.Sprintf("Failed to check zones for pool %s during migration", poolName))
+						Log.Error(zoneCheckErr, fmt.Sprintf("==> cleanupMultipoolResources: Failed to check zones for pool %s", poolName))
 						instance.Status.Conditions.Set(condition.FalseCondition(
 							condition.DeploymentReadyCondition,
 							condition.ErrorReason,
@@ -1276,7 +1300,7 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 					if hasZones {
 						// Pool has active zones, cannot remove
 						errMsg := fmt.Sprintf("Cannot remove pool: pool %s has active DNS zones. Please delete zones first. Will automatically retry in 1 minute", poolName)
-						Log.Info(errMsg)
+						Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: %s", errMsg))
 						instance.Status.Conditions.Set(condition.FalseCondition(
 							condition.DeploymentReadyCondition,
 							condition.ErrorReason,
@@ -1285,12 +1309,13 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 							errMsg))
 						return ctrl.Result{RequeueAfter: time.Minute}, nil
 					}
+					Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Pool %s has no active zones, proceeding with deletion", poolName))
 				}
 
 				// No zones, proceed with graceful removal
 				// First, scale to 0 if not already at 0
 				if *sts.Spec.Replicas > 0 {
-					Log.Info(fmt.Sprintf("Scaling down StatefulSet %s to 0 replicas before deletion (single pool migration)", sts.Name))
+					Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Scaling down StatefulSet %s from %d to 0 replicas", sts.Name, *sts.Spec.Replicas))
 					sts.Spec.Replicas = new(int32)
 					err = helper.GetClient().Update(ctx, &sts)
 					if err != nil {
@@ -1298,48 +1323,33 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 						return ctrl.Result{}, err
 					}
 					// Requeue to allow scale-down to complete
+					Log.Info("==> cleanupMultipoolResources: Requeuing to allow scale-down to complete (10s)")
 					return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 				}
 
 				// Wait until all pods are terminated
 				if sts.Status.Replicas > 0 || sts.Status.ReadyReplicas > 0 {
-					Log.Info(fmt.Sprintf("Waiting for StatefulSet %s pods to terminate (replicas: %d, ready: %d)",
+					Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Waiting for StatefulSet %s pods to terminate (replicas: %d, ready: %d)",
 						sts.Name, sts.Status.Replicas, sts.Status.ReadyReplicas))
 					return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 				}
 
 				// All pods are terminated, safe to delete StatefulSet
-				Log.Info(fmt.Sprintf("Deleting numbered pool StatefulSet %s for single pool migration", sts.Name))
+				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Deleting StatefulSet %s (all pods terminated)", sts.Name))
 				err = helper.GetClient().Delete(ctx, &sts)
 				if err != nil && !k8s_errors.IsNotFound(err) {
 					Log.Error(err, fmt.Sprintf("Failed to delete multipool StatefulSet %s", sts.Name))
 					return ctrl.Result{}, err
 				}
 
-				// Delete PVCs associated with this StatefulSet
-				pvcList := &corev1.PersistentVolumeClaimList{}
-				err = helper.GetClient().List(ctx, pvcList, client.InNamespace(instance.Namespace))
-				if err != nil {
-					Log.Error(err, "Failed to list PVCs for cleanup during single pool migration")
-					return ctrl.Result{}, err
-				}
-
-				for _, pvc := range pvcList.Items {
-					if strings.Contains(pvc.Name, sts.Name) {
-						Log.Info(fmt.Sprintf("Deleting orphaned PVC %s for single pool migration", pvc.Name))
-						err = helper.GetClient().Delete(ctx, &pvc)
-						if err != nil && !k8s_errors.IsNotFound(err) {
-							Log.Error(err, fmt.Sprintf("Failed to delete PVC %s", pvc.Name))
-							return ctrl.Result{}, err
-						}
-					}
-				}
-
 				// Requeue to continue cleanup if there are more orphaned StatefulSets
+				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Successfully deleted StatefulSet %s, requeuing for next pool", sts.Name))
 				return ctrl.Result{Requeue: true}, nil
 			}
+			Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Skipping StatefulSet %s (doesn't match pool pattern or is pool0)", sts.Name))
 		}
 	} else if !k8s_errors.IsNotFound(err) {
+		Log.Error(err, "==> cleanupMultipoolResources: Failed to list StatefulSets")
 		return ctrl.Result{}, err
 	}
 
@@ -1421,10 +1431,12 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 	}
 	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
 
+	Log.Info("==> cleanupMultipoolResources: All multipool resources cleaned up, proceeding to reconcile single StatefulSet")
 	ctrlResult, err := r.reconcileSingleStatefulSet(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
 	if err != nil || (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, err
 	}
 
+	Log.Info("==> cleanupMultipoolResources: Successfully completed single-pool migration")
 	return ctrl.Result{}, nil
 }

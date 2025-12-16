@@ -22,9 +22,9 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - pods/exec
+  - pods/log
   verbs:
-  - create
+  - get
 - apiGroups:
   - ""
   resources:
