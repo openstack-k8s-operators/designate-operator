@@ -24,6 +24,7 @@ package v1beta1
 import (
 	"fmt"
 
+	rabbitmqv1 "github.com/openstack-k8s-operators/infra-operator/apis/rabbitmq/v1beta1"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -69,6 +70,7 @@ func (r *Designate) Default() {
 
 // Default  set defaults for this Designate spec
 func (spec *DesignateSpec) Default() {
+	spec.DesignateSpecBase.Default()
 	if spec.DesignateAPI.ContainerImage == "" {
 		spec.DesignateAPI.ContainerImage = designateDefaults.APIContainerImageURL
 	}
@@ -98,8 +100,13 @@ func (spec *DesignateSpec) Default() {
 	}
 }
 
+func (spec *DesignateSpecBase) Default() {
+	// Set default RabbitMQ configuration and migrate from RabbitMqClusterName if needed
+	rabbitmqv1.DefaultRabbitMqConfig(&spec.MessagingBus, spec.RabbitMqClusterName)
+}
+
 func (spec *DesignateSpecCore) Default() {
-	// validations go here for the ControlPlane
+	spec.DesignateSpecBase.Default()
 }
 
 var _ webhook.Validator = &Designate{}
@@ -182,7 +189,14 @@ func (r *Designate) ValidateUpdate(old runtime.Object) (admission.Warnings, erro
 func (r *DesignateSpec) ValidateUpdate(old DesignateSpec, basePath *field.Path, namespace string) field.ErrorList {
 	var allErrs field.ErrorList
 
-	allErrs = r.ValidateDesignateTopology(basePath, namespace)
+	// Reject changes to deprecated RabbitMqClusterName field - users should use the new messagingBus.cluster field instead
+	if r.RabbitMqClusterName != old.RabbitMqClusterName {
+		allErrs = append(allErrs, field.Forbidden(
+			basePath.Child("rabbitMqClusterName"),
+			"rabbitMqClusterName is deprecated and cannot be changed. Please use messagingBus.cluster instead"))
+	}
+
+	allErrs = append(allErrs, r.ValidateDesignateTopology(basePath, namespace)...)
 	// validate the service override key is valid
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
 		basePath.Child("designateAPI").Child("override").Child("service"),
@@ -194,7 +208,14 @@ func (r *DesignateSpec) ValidateUpdate(old DesignateSpec, basePath *field.Path, 
 func (r *DesignateSpecCore) ValidateUpdate(old DesignateSpecCore, basePath *field.Path, namespace string) field.ErrorList {
 	var allErrs field.ErrorList
 
-	allErrs = r.ValidateDesignateTopology(basePath, namespace)
+	// Reject changes to deprecated RabbitMqClusterName field - users should use the new messagingBus.cluster field instead
+	if r.RabbitMqClusterName != old.RabbitMqClusterName {
+		allErrs = append(allErrs, field.Forbidden(
+			basePath.Child("rabbitMqClusterName"),
+			"rabbitMqClusterName is deprecated and cannot be changed. Please use messagingBus.cluster instead"))
+	}
+
+	allErrs = append(allErrs, r.ValidateDesignateTopology(basePath, namespace)...)
 	// validate the service override key is valid
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
 		basePath.Child("designateAPI").Child("override").Child("service"),
