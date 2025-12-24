@@ -328,6 +328,12 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "Designate")
 			os.Exit(1)
 		}
+
+		// Register ConfigMap webhook for multipool validation
+		mgr.GetWebhookServer().Register("/validate-v1-configmap", &webhook.Admission{
+			Handler: &controller.MultipoolConfigMapValidator{},
+		})
+
 		checker = mgr.GetWebhookServer().StartedChecker()
 	}
 	// +kubebuilder:scaffold:builder

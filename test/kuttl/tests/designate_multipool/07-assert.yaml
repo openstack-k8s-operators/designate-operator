@@ -1,0 +1,64 @@
+# Verify pool0 StatefulSet exists (reuses single-pool name for backwards compatibility)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9
+  labels:
+    service: designate-backendbind9
+status:
+  readyReplicas: 1
+---
+# Verify pool1 StatefulSet exists
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool1
+  labels:
+    service: designate-backendbind9
+status:
+  readyReplicas: 1
+---
+# Verify single-pool StatefulSet was preserved and reused as pool0
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # Verify the single-pool StatefulSet (designate-backendbind9) still exists and is running
+      if ! oc get statefulset designate-backendbind9 -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Single-pool StatefulSet should be preserved during multipool migration"
+        exit 1
+      fi
+      # Verify pool1 StatefulSet exists
+      if ! oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Pool1 StatefulSet should exist after multipool migration"
+        exit 1
+      fi
+      echo "SUCCESS: Migrated back to multipool mode (pool0 reused single-pool StatefulSet)"
+  - script: |
+      # Verify pools.yaml uses multipool ConfigMap NS records (not CR NS records)
+      # In multipool mode, should use ns1.example.org (from multipool CM), not ns1.example.com (from CR)
+      POOLS_YAML=$(oc get configmap designate-pools-yaml-config-map -n $NAMESPACE -o jsonpath='{.data.pools-yaml-content}')
+      if echo "$POOLS_YAML" | grep -q "ns1.example.org"; then
+        echo "SUCCESS: Multipool mode uses ConfigMap NS records (ns1.example.org)"
+      else
+        echo "ERROR: Multipool mode should use ConfigMap NS records (ns1.example.org), not CR NS records"
+        echo "Pools YAML content:"
+        echo "$POOLS_YAML"
+        exit 1
+      fi
+      # Verify pool1 has its own NS records (ns2.example.org)
+      if echo "$POOLS_YAML" | grep -q "ns2.example.org"; then
+        echo "SUCCESS: Pool1 uses its own NS records (ns2.example.org)"
+      else
+        echo "ERROR: Pool1 should use its own NS records from multipool ConfigMap"
+        echo "Pools YAML content:"
+        echo "$POOLS_YAML"
+        exit 1
+      fi
+---
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+status:
+  designateBackendbind9ReadyCount: 2
