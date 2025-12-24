@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -72,7 +73,7 @@ func (v *MultipoolConfigMapValidator) Handle(_ context.Context, req admission.Re
 	multipoollog.Info("Validating multipool ConfigMap", "name", req.Name, "namespace", req.Namespace)
 
 	// Only validate the specific ConfigMap
-	if req.Name != "designate-multipool-config" {
+	if req.Name != designate.MultipoolConfigMapName {
 		return admission.Allowed("not the multipool config ConfigMap")
 	}
 
@@ -137,6 +138,7 @@ func validatePools(pools []PoolConfig) error {
 		// Validate bindReplicas must be > 0
 		// Note: The operator can temporarily scale to 0 during graceful pool removal,
 		// but users should not configure pools with 0 replicas (prevents pools.yaml generation errors)
+		// TODO oschwart: we might want to change that when we implement byob
 		if pool.BindReplicas <= 0 {
 			return fmt.Errorf("%w: pool %s has %d replicas", ErrInvalidBindReplicas, pool.Name, pool.BindReplicas)
 		}

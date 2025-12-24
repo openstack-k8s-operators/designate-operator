@@ -56,6 +56,8 @@ var (
 const (
 	// MultipoolConfigMapKey is the key in the ConfigMap containing the pools configuration
 	MultipoolConfigMapKey = "pools"
+	// bindAddressKeyTemplate is the template for bind address keys in ConfigMaps
+	bindAddressKeyTemplate = "bind_address_%d"
 )
 
 // Pool represents a designate pool configuration
@@ -111,7 +113,6 @@ type CatalogZone struct {
 }
 
 // PoolConfig defines configuration for a single pool from the multipool ConfigMap
-// This is an internal type for parsing the ConfigMap, not part of the CRD API
 type PoolConfig struct {
 	Name         string                          `yaml:"name"`
 	Description  string                          `yaml:"description,omitempty"`
@@ -259,48 +260,63 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 	return buf.String(), poolHash, nil
 }
 
-func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsRecords []designatev1.DesignateNSRecord) (Pool, error) {
+// sortNSRecords sorts NS records by hostname and then by priority
+func sortNSRecords(nsRecords []designatev1.DesignateNSRecord) {
 	sort.Slice(nsRecords, func(i, j int) bool {
 		if nsRecords[i].Hostname != nsRecords[j].Hostname {
 			return nsRecords[i].Hostname < nsRecords[j].Hostname
 		}
 		return nsRecords[i].Priority < nsRecords[j].Priority
 	})
+}
+
+// createMasters creates a list of Master structs from master host addresses
+func createMasters(masterHosts []string) []Master {
+	masters := make([]Master, len(masterHosts))
+	for j, masterHost := range masterHosts {
+		masters[j] = Master{
+			Host: masterHost,
+			Port: 5354,
+		}
+	}
+	return masters
+}
+
+// createTargetAndNameserver creates Target and Nameserver structs for a bind instance
+func createTargetAndNameserver(bindIP string, globalIndex int, masters []Master, description string) (Target, Nameserver) {
+	nameserver := Nameserver{
+		Host: bindIP,
+		Port: 53,
+	}
+	target := Target{
+		Type:        "bind9",
+		Description: description,
+		Masters:     masters,
+		Options: Options{
+			Host:        bindIP,
+			Port:        53,
+			RNDCHost:    bindIP,
+			RNDCPort:    953,
+			RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, globalIndex),
+		},
+	}
+	return target, nameserver
+}
+
+func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsRecords []designatev1.DesignateNSRecord) (Pool, error) {
+	sortNSRecords(nsRecords)
 
 	bindIPs := make([]string, len(BindMap))
-	keyTmpl := "bind_address_%d"
 	for i := 0; i < len(BindMap); i++ {
-		bindIPs[i] = BindMap[fmt.Sprintf(keyTmpl, i)]
+		bindIPs[i] = BindMap[fmt.Sprintf(bindAddressKeyTemplate, i)]
 	}
 
+	masters := createMasters(masterHosts)
 	targets := make([]Target, len(bindIPs))
 	nameservers := make([]Nameserver, len(bindIPs))
 	for i := range bindIPs {
-		masters := make([]Master, len(masterHosts))
-		for j, masterHost := range masterHosts {
-			masters[j] = Master{
-				Host: masterHost,
-				Port: 5354,
-			}
-		}
-		bindIP := bindIPs[i]
-
-		nameservers[i] = Nameserver{
-			Host: bindIP,
-			Port: 53,
-		}
-		targets[i] = Target{
-			Type:        "bind9",
-			Description: fmt.Sprintf("BIND9 Server %d (%s)", i, bindIP),
-			Masters:     masters,
-			Options: Options{
-				Host:        bindIP,
-				Port:        53,
-				RNDCHost:    bindIP,
-				RNDCPort:    953,
-				RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, i),
-			},
-		}
+		description := fmt.Sprintf("BIND9 Server %d (%s)", i, bindIPs[i])
+		targets[i], nameservers[i] = createTargetAndNameserver(bindIPs[i], i, masters, description)
 	}
 
 	// Catalog zone is an optional section
@@ -340,48 +356,21 @@ func generateMultiplePools(BindMap map[string]string, masterHosts []string, mult
 		}
 
 		nsRecords := poolConfig.NSRecords
-		sort.Slice(nsRecords, func(i, j int) bool {
-			if nsRecords[i].Hostname != nsRecords[j].Hostname {
-				return nsRecords[i].Hostname < nsRecords[j].Hostname
-			}
-			return nsRecords[i].Priority < nsRecords[j].Priority
-		})
+		sortNSRecords(nsRecords)
 
 		poolBindIPs := make([]string, poolConfig.BindReplicas)
 		for i := int32(0); i < poolConfig.BindReplicas; i++ {
-			keyTmpl := "bind_address_%d"
-			poolBindIPs[i] = BindMap[fmt.Sprintf(keyTmpl, bindIndex)]
+			poolBindIPs[i] = BindMap[fmt.Sprintf(bindAddressKeyTemplate, bindIndex)]
 			bindIndex++
 		}
 
+		masters := createMasters(masterHosts)
 		targets := make([]Target, poolConfig.BindReplicas)
 		nameservers := make([]Nameserver, poolConfig.BindReplicas)
 		for i := int32(0); i < poolConfig.BindReplicas; i++ {
-			masters := make([]Master, len(masterHosts))
-			for j, masterHost := range masterHosts {
-				masters[j] = Master{
-					Host: masterHost,
-					Port: 5354,
-				}
-			}
-			bindIP := poolBindIPs[i]
-
-			nameservers[i] = Nameserver{
-				Host: bindIP,
-				Port: 53,
-			}
-			targets[i] = Target{
-				Type:        "bind9",
-				Description: fmt.Sprintf("BIND9 Server for pool %s (%s)", poolConfig.Name, bindIP),
-				Masters:     masters,
-				Options: Options{
-					Host:        bindIP,
-					Port:        53,
-					RNDCHost:    bindIP,
-					RNDCPort:    953,
-					RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, bindIndex-int(poolConfig.BindReplicas)+int(i)),
-				},
-			}
+			globalIndex := bindIndex - int(poolConfig.BindReplicas) + int(i)
+			description := fmt.Sprintf("BIND9 Server for pool %s (%s)", poolConfig.Name, poolBindIPs[i])
+			targets[i], nameservers[i] = createTargetAndNameserver(poolBindIPs[i], globalIndex, masters, description)
 		}
 
 		attributes := poolConfig.Attributes

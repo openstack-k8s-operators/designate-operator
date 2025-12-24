@@ -81,11 +81,15 @@ func extractPoolNameFromStatefulSetName(stsName, instanceName string) string {
 
 // reconcileBindConfigMaps manages all bind IP ConfigMaps lifecycle:
 // - designate-bind-ip-map: represents the default pool (pool 0)
+//
 //   - In single-pool mode: contains all binds (since there's only one pool)
+//
 //   - In multipool mode: contains only pool 0 binds + RNDC key mappings
 //
-// - designate-bind-ip-map-pool1, pool2, etc.: Additional pools in multipool mode
-// - Note: We do not create designate-bind-ip-map-pool0 because designate-bind-ip-map is pool0
+//   - designate-bind-ip-map-pool1, pool2, etc.: Additional pools in multipool mode
+//
+//   - Note: We do not create designate-bind-ip-map-pool0 because designate-bind-ip-map is pool0,
+//     for backwards compatibility
 func (r *DesignateReconciler) reconcileBindConfigMaps(
 	ctx context.Context,
 	instance *designatev1beta1.Designate,
@@ -1077,12 +1081,7 @@ func (r *DesignateBackendbind9Reconciler) checkPoolHasZones(
 	}
 
 	if hasZones {
-		count, countErr := designate.CountZonesInPool(ctx, osclient, poolUUID)
-		if countErr == nil {
-			Log.Info(fmt.Sprintf("Pool %s has %d active zones, cannot remove", poolName, count))
-		} else {
-			Log.Info(fmt.Sprintf("Pool %s has active zones, cannot remove", poolName))
-		}
+		Log.Info(fmt.Sprintf("Pool %s has active zones, cannot remove", poolName))
 	} else {
 		Log.Info(fmt.Sprintf("Pool %s has no active zones, safe to remove", poolName))
 	}
@@ -1125,8 +1124,9 @@ func (r *DesignateBackendbind9Reconciler) verifyPoolInConfig(
 	return fmt.Errorf("%w: %s", ErrPoolNotFoundInConfig, poolName)
 }
 
-// reconcileMultipoolMode orchestrates multipool vs single-pool mode handling
-func (r *DesignateBackendbind9Reconciler) reconcileMultipoolMode(
+// reconcileByPoolMode checks multipool configuration and reconciles resources
+// based on whether the deployment is in multipool or single-pool mode
+func (r *DesignateBackendbind9Reconciler) reconcileByPoolMode(
 	ctx context.Context,
 	instance *designatev1beta1.DesignateBackendbind9,
 	helper *helper.Helper,
@@ -1136,7 +1136,6 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolMode(
 	topology *topologyv1.Topology,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
-	Log.Info("==> reconcileMultipoolMode called")
 
 	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)
 	if err != nil {
@@ -1145,11 +1144,11 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolMode(
 	}
 
 	if multipoolConfig != nil {
-		Log.Info(fmt.Sprintf("==> Multipool config found with %d pools, entering multipool mode", len(multipoolConfig.Pools)))
+		Log.Info(fmt.Sprintf("Multipool config found with %d pools, entering multipool mode", len(multipoolConfig.Pools)))
 		return r.reconcileMultipoolResources(ctx, instance, helper, multipoolConfig, inputHash, serviceLabels, serviceAnnotations, topology)
 	}
 
-	Log.Info("==> No multipool config found, entering single-pool mode / cleanup")
+	Log.Info("No multipool config found, entering single-pool mode / cleanup")
 	return r.cleanupMultipoolResources(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
 }
 
@@ -1228,6 +1227,41 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolResources(
 	return ctrl.Result{}, nil
 }
 
+// cleanupMultipoolServices deletes pool-specific services during migration to single-pool mode
+func (r *DesignateBackendbind9Reconciler) cleanupMultipoolServices(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+) error {
+	Log := r.GetLogger(ctx)
+
+	svcList := &corev1.ServiceList{}
+	labelSelector := map[string]string{
+		"service":   "designate-backendbind9",
+		"component": "designate-backendbind9",
+	}
+	err := helper.GetClient().List(ctx, svcList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		Log.Error(err, "Failed to list services")
+		return err
+	}
+
+	if err == nil {
+		Log.Info(fmt.Sprintf("Found %d services to check for cleanup", len(svcList.Items)))
+		for _, svc := range svcList.Items {
+			// Delete pool-specific services (names contain "-pool")
+			if strings.Contains(svc.Name, "-pool") {
+				Log.Info(fmt.Sprintf("Deleting multipool service %s", svc.Name))
+				if err := helper.GetClient().Delete(ctx, &svc); err != nil && !k8s_errors.IsNotFound(err) {
+					Log.Error(err, fmt.Sprintf("Failed to delete multipool service %s", svc.Name))
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // cleanupMultipoolResources handles cleanup during migration from multipool to single-pool mode
 func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 	ctx context.Context,
@@ -1239,55 +1273,78 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 	topology *topologyv1.Topology,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
-	Log.Info("==> cleanupMultipoolResources: Starting cleanup for single-pool migration")
+	Log.Info("Starting cleanup for single-pool migration")
 
-	// Delete any multipool services if they exist (migration from multipool to single / default pool)
-	svcList := &corev1.ServiceList{}
+	// Delete any multipool services if they exist
+	if err := r.cleanupMultipoolServices(ctx, instance, helper); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Delete numbered pool StatefulSets if they exist
+	ctrlResult, err := r.cleanupNumberedPoolStatefulSets(ctx, instance, helper)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
+	}
+
+	// Delete TSIG secrets for multipool mode
+	if err := r.cleanupMultipoolTSIGSecrets(ctx, instance, helper); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Create single-pool services
+	if err := r.createSinglePoolServices(ctx, instance, helper, serviceLabels); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Reconcile single StatefulSet
+	Log.Info("All multipool resources cleaned up, proceeding to reconcile single StatefulSet")
+	ctrlResult, err = r.reconcileSingleStatefulSet(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
+	}
+
+	Log.Info("Successfully completed single-pool migration")
+	return ctrl.Result{}, nil
+}
+
+// cleanupNumberedPoolStatefulSets deletes numbered pool StatefulSets (pool1, pool2, etc.) during single-pool migration
+// Pool0 (instance.Name) is preserved for reuse in single-pool mode
+func (r *DesignateBackendbind9Reconciler) cleanupNumberedPoolStatefulSets(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
+	stsList := &appsv1.StatefulSetList{}
 	labelSelector := map[string]string{
 		"service":   "designate-backendbind9",
 		"component": "designate-backendbind9",
 	}
-	err := helper.GetClient().List(ctx, svcList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
-	if err == nil {
-		Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Found %d services to check for cleanup", len(svcList.Items)))
-		for _, svc := range svcList.Items {
-			// Delete pool-specific services (names contain "-pool")
-			if strings.Contains(svc.Name, "-pool") {
-				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Deleting multipool service %s", svc.Name))
-				err = helper.GetClient().Delete(ctx, &svc)
-				if err != nil && !k8s_errors.IsNotFound(err) {
-					Log.Error(err, fmt.Sprintf("Failed to delete multipool service %s", svc.Name))
-					return ctrl.Result{}, err
-				}
-			}
-		}
-	} else if !k8s_errors.IsNotFound(err) {
-		Log.Error(err, "==> cleanupMultipoolResources: Failed to list services")
+	err := helper.GetClient().List(ctx, stsList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
+	if err != nil && !k8s_errors.IsNotFound(err) {
+		Log.Error(err, "Failed to list StatefulSets")
 		return ctrl.Result{}, err
 	}
 
-	// Delete numbered pool StatefulSets if they exist (pool1, pool2, etc.)
-	// Pool0 (instance.Name) will be reused for single-pool mode
-	stsList := &appsv1.StatefulSetList{}
-	err = helper.GetClient().List(ctx, stsList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
 	if err == nil {
-		Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Found %d StatefulSets to check for cleanup", len(stsList.Items)))
+		Log.Info(fmt.Sprintf("Found %d StatefulSets to check for cleanup", len(stsList.Items)))
 		for _, sts := range stsList.Items {
-			Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Examining StatefulSet %s", sts.Name))
+			Log.Info(fmt.Sprintf("Examining StatefulSet %s", sts.Name))
 			// Identify pool StatefulSets by name pattern
 			// Pool StatefulSets: instance.Name (pool0), instance.Name-pool1, instance.Name-pool2, etc.
 			// Only delete numbered pool StatefulSets (pool1+), keep pool0 (instance.Name) for single-pool mode reuse
 			if strings.Contains(sts.Name, designate.PoolStatefulSetSuffix) && sts.Name != instance.Name {
-				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: StatefulSet %s is a numbered pool, starting cleanup", sts.Name))
+				Log.Info(fmt.Sprintf("StatefulSet %s is a numbered pool, starting cleanup", sts.Name))
 				poolName := extractPoolNameFromStatefulSetName(sts.Name, instance.Name)
-				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Extracted pool name: %s", poolName))
+				Log.Info(fmt.Sprintf("Extracted pool name: %s", poolName))
 
 				// Check if this pool has active zones before deletion
 				if poolName != "" {
-					Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Checking if pool %s has active zones", poolName))
+					Log.Info(fmt.Sprintf("Checking if pool %s has active zones", poolName))
 					hasZones, zoneCheckErr := r.checkPoolHasZones(ctx, helper, instance, poolName)
 					if zoneCheckErr != nil {
-						Log.Error(zoneCheckErr, fmt.Sprintf("==> cleanupMultipoolResources: Failed to check zones for pool %s", poolName))
+						Log.Error(zoneCheckErr, fmt.Sprintf("Failed to check zones for pool %s", poolName))
 						instance.Status.Conditions.Set(condition.FalseCondition(
 							condition.DeploymentReadyCondition,
 							condition.ErrorReason,
@@ -1300,7 +1357,7 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 					if hasZones {
 						// Pool has active zones, cannot remove
 						errMsg := fmt.Sprintf("Cannot remove pool: pool %s has active DNS zones. Please delete zones first. Will automatically retry in 1 minute", poolName)
-						Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: %s", errMsg))
+						Log.Info(errMsg)
 						instance.Status.Conditions.Set(condition.FalseCondition(
 							condition.DeploymentReadyCondition,
 							condition.ErrorReason,
@@ -1309,58 +1366,61 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 							errMsg))
 						return ctrl.Result{RequeueAfter: time.Minute}, nil
 					}
-					Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Pool %s has no active zones, proceeding with deletion", poolName))
+					Log.Info(fmt.Sprintf("Pool %s has no active zones, proceeding with deletion", poolName))
 				}
 
 				// No zones, proceed with graceful removal
 				// First, scale to 0 if not already at 0
 				if *sts.Spec.Replicas > 0 {
-					Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Scaling down StatefulSet %s from %d to 0 replicas", sts.Name, *sts.Spec.Replicas))
+					Log.Info(fmt.Sprintf("Scaling down StatefulSet %s from %d to 0 replicas", sts.Name, *sts.Spec.Replicas))
 					sts.Spec.Replicas = new(int32)
-					err = helper.GetClient().Update(ctx, &sts)
-					if err != nil {
+					if err := helper.GetClient().Update(ctx, &sts); err != nil {
 						Log.Error(err, fmt.Sprintf("Failed to scale down StatefulSet %s", sts.Name))
 						return ctrl.Result{}, err
 					}
 					// Requeue to allow scale-down to complete
-					Log.Info("==> cleanupMultipoolResources: Requeuing to allow scale-down to complete (10s)")
+					Log.Info("Requeuing to allow scale-down to complete (10s)")
 					return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 				}
 
 				// Wait until all pods are terminated
 				if sts.Status.Replicas > 0 || sts.Status.ReadyReplicas > 0 {
-					Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Waiting for StatefulSet %s pods to terminate (replicas: %d, ready: %d)",
+					Log.Info(fmt.Sprintf("Waiting for StatefulSet %s pods to terminate (replicas: %d, ready: %d)",
 						sts.Name, sts.Status.Replicas, sts.Status.ReadyReplicas))
 					return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 				}
 
 				// All pods are terminated, safe to delete StatefulSet
-				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Deleting StatefulSet %s (all pods terminated)", sts.Name))
-				err = helper.GetClient().Delete(ctx, &sts)
-				if err != nil && !k8s_errors.IsNotFound(err) {
+				Log.Info(fmt.Sprintf("Deleting StatefulSet %s (all pods terminated)", sts.Name))
+				if err := helper.GetClient().Delete(ctx, &sts); err != nil && !k8s_errors.IsNotFound(err) {
 					Log.Error(err, fmt.Sprintf("Failed to delete multipool StatefulSet %s", sts.Name))
 					return ctrl.Result{}, err
 				}
 
 				// Requeue to continue cleanup if there are more orphaned StatefulSets
-				Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Successfully deleted StatefulSet %s, requeuing for next pool", sts.Name))
+				Log.Info(fmt.Sprintf("Successfully deleted StatefulSet %s, requeuing for next pool", sts.Name))
 				return ctrl.Result{Requeue: true}, nil
 			}
-			Log.Info(fmt.Sprintf("==> cleanupMultipoolResources: Skipping StatefulSet %s (doesn't match pool pattern or is pool0)", sts.Name))
+			Log.Info(fmt.Sprintf("Skipping StatefulSet %s (doesn't match pool pattern or is pool0)", sts.Name))
 		}
-	} else if !k8s_errors.IsNotFound(err) {
-		Log.Error(err, "==> cleanupMultipoolResources: Failed to list StatefulSets")
-		return ctrl.Result{}, err
 	}
+	return ctrl.Result{}, nil
+}
 
-	// Delete TSIG secret from multipool mode (only exists in multipool, not single-pool)
-	// TSIG secrets have labels, so we can filter by them
+// cleanupMultipoolTSIGSecrets deletes TSIG secrets used in multipool mode during single-pool migration
+func (r *DesignateBackendbind9Reconciler) cleanupMultipoolTSIGSecrets(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+) error {
+	Log := r.GetLogger(ctx)
+
 	secretList := &corev1.SecretList{}
-	labelSelector = map[string]string{
+	labelSelector := map[string]string{
 		"service":   "designate-backendbind9",
 		"component": "designate-backendbind9",
 	}
-	err = helper.GetClient().List(ctx, secretList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
+	err := helper.GetClient().List(ctx, secretList, client.InNamespace(instance.Namespace), client.MatchingLabels(labelSelector))
 	if err == nil {
 		for _, secret := range secretList.Items {
 			// Delete TSIG secrets (names end with "-tsig")
@@ -1383,18 +1443,25 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 				}
 
 				// Delete Kubernetes secret
-				err = helper.GetClient().Delete(ctx, &secret)
-				if err != nil && !k8s_errors.IsNotFound(err) {
+				if err := helper.GetClient().Delete(ctx, &secret); err != nil && !k8s_errors.IsNotFound(err) {
 					Log.Error(err, fmt.Sprintf("Failed to delete TSIG secret %s", secret.Name))
-					return ctrl.Result{}, err
+					return err
 				}
 			}
 		}
 	} else if !k8s_errors.IsNotFound(err) {
-		return ctrl.Result{}, err
+		return err
 	}
+	return nil
+}
 
-	// Create single-pool services for all replicas
+// createSinglePoolServices creates services for single-pool mode
+func (r *DesignateBackendbind9Reconciler) createSinglePoolServices(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+	helper *helper.Helper,
+	serviceLabels map[string]string,
+) error {
 	for i := 0; i < int(*instance.Spec.Replicas); i++ {
 		var overrideSpec service.OverrideSpec
 		if i < len(instance.Spec.Override.Services) {
@@ -1415,28 +1482,19 @@ func (r *DesignateBackendbind9Reconciler) cleanupMultipoolResources(
 				condition.SeverityWarning,
 				condition.CreateServiceReadyErrorMessage,
 				err.Error()))
-			return ctrl.Result{}, err
+			return err
 		}
 
-		ctrlResult, err := svc.CreateOrPatch(ctx, helper)
-		if err != nil {
+		if _, err := svc.CreateOrPatch(ctx, helper); err != nil {
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.CreateServiceReadyCondition,
 				condition.ErrorReason,
 				condition.SeverityWarning,
 				condition.CreateServiceReadyErrorMessage,
 				err.Error()))
-			return ctrlResult, err
+			return err
 		}
 	}
 	instance.Status.Conditions.MarkTrue(condition.CreateServiceReadyCondition, condition.CreateServiceReadyMessage)
-
-	Log.Info("==> cleanupMultipoolResources: All multipool resources cleaned up, proceeding to reconcile single StatefulSet")
-	ctrlResult, err := r.reconcileSingleStatefulSet(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
-	if err != nil || (ctrlResult != ctrl.Result{}) {
-		return ctrlResult, err
-	}
-
-	Log.Info("==> cleanupMultipoolResources: Successfully completed single-pool migration")
-	return ctrl.Result{}, nil
+	return nil
 }

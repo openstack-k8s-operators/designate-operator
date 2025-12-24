@@ -43,7 +43,6 @@ import (
 
 	"github.com/go-logr/logr"
 	networkv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
-
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
 	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/internal/designatebackendbind9"
@@ -578,7 +577,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 	//
 
 	// Handle multipool vs single-pool mode orchestration
-	ctrlResult, err = r.reconcileMultipoolMode(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
+	ctrlResult, err = r.reconcileByPoolMode(ctx, instance, helper, inputHash, serviceLabels, serviceAnnotations, topology)
 	if err != nil || (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, err
 	}
@@ -689,7 +688,6 @@ func (r *DesignateBackendbind9Reconciler) reconcileSingleStatefulSet(
 	return ctrl.Result{}, nil
 }
 
-// reconcileMultipoolServices creates pool-specific services in multipool mode
 func (r *DesignateBackendbind9Reconciler) reconcileUpdate(ctx context.Context, instance *designatev1beta1.DesignateBackendbind9) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 	Log.Info(fmt.Sprintf("Reconciling Service '%s' update", instance.Name))
