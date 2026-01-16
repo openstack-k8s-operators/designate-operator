@@ -605,6 +605,7 @@ var _ = Describe("Designate controller", func() {
 				Name:      spec["designateNetworkAttachment"].(string),
 				Namespace: namespace,
 			}))
+
 			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
 			th.SimulateJobSuccess(designateDBSyncName)
 
@@ -612,7 +613,10 @@ var _ = Describe("Designate controller", func() {
 			createAndSimulateMdns(designateMdnsName)
 		})
 
-		It("should have Unknown and false Conditions initialized for Designate services conditions initially", func() {
+		It("should have Unknown or False Conditions initialized for Designate services conditions initially", func() {
+			// With actual controllers running, conditions may transition from Unknown to False
+			// quickly if dependencies aren't ready yet. Both Unknown and False are acceptable
+			// initial states.
 			for _, cond := range []condition.Type{
 				designatev1.DesignateMdnsReadyCondition,
 				designatev1.DesignateUnboundReadyCondition,
@@ -622,12 +626,14 @@ var _ = Describe("Designate controller", func() {
 				designatev1.DesignateProducerReadyCondition,
 				designatev1.DesignateBackendbind9ReadyCondition,
 			} {
-				th.ExpectCondition(
-					designateName,
-					ConditionGetterFunc(DesignateConditionGetter),
-					cond,
-					corev1.ConditionUnknown,
-				)
+				Eventually(func(g Gomega) {
+					instance := GetDesignate(designateName)
+					c := instance.Status.Conditions.Get(cond)
+					g.Expect(c).NotTo(BeNil(), "condition %s should exist", cond)
+					// Condition should be Unknown or False initially (not True)
+					g.Expect(c.Status).To(Or(Equal(corev1.ConditionUnknown), Equal(corev1.ConditionFalse)),
+						"condition %s should be Unknown or False initially, got: %s", cond, c.Status)
+				}, timeout, interval).Should(Succeed())
 			}
 		})
 
@@ -889,7 +895,8 @@ var _ = Describe("Designate controller", func() {
 					Name:      expectedTopology.Name,
 					Namespace: expectedTopology.Namespace,
 				})
-				g.Expect(tp.GetFinalizers()).To(HaveLen(4))
+				// API, Central, Producer, Worker, Mdns + Unbound = 6 finalizers
+				g.Expect(tp.GetFinalizers()).To(HaveLen(6))
 				finalizers := tp.GetFinalizers()
 
 				designateAPI := GetDesignateAPI(designateAPIName)
