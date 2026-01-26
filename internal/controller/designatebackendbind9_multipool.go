@@ -537,6 +537,38 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
 			condition.DeploymentReadyRunningMessage))
 	}
 
+	// Handle pod labeling for predictable IPs only when all deployments are ready
+	// In multipool mode, each pool has its own ConfigMap with remapped IP indexes
+	if allDeploymentsReady {
+		for poolIdx, pool := range multipoolConfig.Pools {
+			// Determine ConfigMap name for this pool
+			var poolConfigMapName string
+			if poolIdx == 0 {
+				poolConfigMapName = designate.BindPredIPConfigMap
+			} else {
+				poolConfigMapName = fmt.Sprintf("%s-pool%d", designate.BindPredIPConfigMap, poolIdx)
+			}
+
+			// Determine StatefulSet name for this pool
+			var poolStatefulSetName string
+			if poolIdx == 0 {
+				poolStatefulSetName = instance.Name
+			} else {
+				poolStatefulSetName = fmt.Sprintf("%s-pool%d", instance.Name, poolIdx)
+			}
+
+			config := designate.PodLabelingConfig{
+				ConfigMapName: poolConfigMapName,
+				IPKeyPrefix:   "bind_address_",
+			}
+			err = designate.HandlePodLabeling(ctx, helper, poolStatefulSetName, instance.Namespace, config)
+			if err != nil {
+				Log.Error(err, fmt.Sprintf("Failed to handle pod labeling for pool %s", pool.Name))
+				// Don't return error as this is not critical for the main reconcile loop
+			}
+		}
+	}
+
 	Log.Info(fmt.Sprintf("Reconciled multipool StatefulSets successfully, total ready: %d", totalReadyCount))
 
 	if requeueNeeded {
