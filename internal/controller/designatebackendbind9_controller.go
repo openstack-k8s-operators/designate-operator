@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -315,12 +316,34 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(ctx context.Context, 
 		return err
 	}
 
+	// Predicate to only reconcile on pod readiness changes or deletions
+	// This avoids excessive reconciliations during pod startup
+	podReadyPredicate := predicate.Funcs{
+		CreateFunc: func(_ event.CreateEvent) bool {
+			return false // Don't reconcile on pod creation
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// Only reconcile if pod readiness changed
+			oldPod, oldOk := e.ObjectOld.(*corev1.Pod)
+			newPod, newOk := e.ObjectNew.(*corev1.Pod)
+			if !oldOk || !newOk {
+				return false
+			}
+			oldReady := isPodReady(oldPod)
+			newReady := isPodReady(newPod)
+			return oldReady != newReady
+		},
+		DeleteFunc: func(_ event.DeleteEvent) bool {
+			return true // Reconcile on pod deletion
+		},
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&designatev1beta1.DesignateBackendbind9{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Secret{}).
-		Owns(&corev1.Pod{}).
+		Owns(&corev1.Pod{}, builder.WithPredicates(podReadyPredicate)).
 		// watch the config CMs we don't own
 		Watches(&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(configMapFn)).
@@ -328,6 +351,16 @@ func (r *DesignateBackendbind9Reconciler) SetupWithManager(ctx context.Context, 
 			handler.EnqueueRequestsFromMapFunc(r.findObjectsForSrc),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
+}
+
+// isPodReady checks if a pod is in ready state
+func isPodReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
 }
 
 func (r *DesignateBackendbind9Reconciler) findObjectsForSrc(ctx context.Context, src client.Object) []reconcile.Request {
@@ -615,7 +648,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileSingleStatefulSet(
 		time.Duration(5)*time.Second,
 	)
 
-	ctrlResult, err = depl.CreateOrPatch(ctx, helper)
+	ctrlResult, err := depl.CreateOrPatch(ctx, helper)
 	statefulSetUpdated := (ctrlResult != ctrl.Result{})
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(

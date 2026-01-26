@@ -58,6 +58,13 @@ const (
 	MultipoolConfigMapKey = "pools"
 	// bindAddressKeyTemplate is the template for bind address keys in ConfigMaps
 	bindAddressKeyTemplate = "bind_address_%d"
+
+	// MdnsMasterPort is the port used by mDNS masters
+	MdnsMasterPort = 5354
+	// DNSPort is the standard DNS port used by BIND9 nameservers and targets
+	DNSPort = 53
+	// RNDCPort is the port used by RNDC for BIND9 control operations
+	RNDCPort = 953
 )
 
 // Pool represents a designate pool configuration
@@ -276,7 +283,7 @@ func createMasters(masterHosts []string) []Master {
 	for j, masterHost := range masterHosts {
 		masters[j] = Master{
 			Host: masterHost,
-			Port: 5354,
+			Port: MdnsMasterPort,
 		}
 	}
 	return masters
@@ -286,7 +293,7 @@ func createMasters(masterHosts []string) []Master {
 func createTargetAndNameserver(bindIP string, globalIndex int, masters []Master, description string) (Target, Nameserver) {
 	nameserver := Nameserver{
 		Host: bindIP,
-		Port: 53,
+		Port: DNSPort,
 	}
 	target := Target{
 		Type:        "bind9",
@@ -294,9 +301,9 @@ func createTargetAndNameserver(bindIP string, globalIndex int, masters []Master,
 		Masters:     masters,
 		Options: Options{
 			Host:        bindIP,
-			Port:        53,
+			Port:        DNSPort,
 			RNDCHost:    bindIP,
-			RNDCPort:    953,
+			RNDCPort:    RNDCPort,
 			RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, globalIndex),
 		},
 	}
@@ -358,6 +365,10 @@ func generateMultiplePools(BindMap map[string]string, masterHosts []string, mult
 		nsRecords := poolConfig.NSRecords
 		sortNSRecords(nsRecords)
 
+		// Extract this pool's bind IPs from the global BindMap.
+		// Each pool has its own set of replicas with unique IPs allocated from the global IP pool.
+		// The bindIndex tracks our position in the global IP allocation across all pools.
+		// Example: Pool0 gets IPs 0-1, Pool1 gets IPs 2-3, etc.
 		poolBindIPs := make([]string, poolConfig.BindReplicas)
 		for i := int32(0); i < poolConfig.BindReplicas; i++ {
 			poolBindIPs[i] = BindMap[fmt.Sprintf(bindAddressKeyTemplate, bindIndex)]
