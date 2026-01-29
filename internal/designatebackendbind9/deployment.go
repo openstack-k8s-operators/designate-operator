@@ -172,16 +172,7 @@ func StatefulSet(
 			corev1.LabelHostname,
 		)
 	}
-	// If possible two pods of the same service should not run on the same worker node. If this is not possible they
-	// will be scheduled on the same node. Where the bind servers are stateful, it's best to have them all available
-	// even if they are on the same host.
-	statefulSet.Spec.Template.Spec.Affinity = affinity.DistributePods(
-		common.AppSelector,
-		[]string{
-			serviceName,
-		},
-		corev1.LabelHostname,
-	)
+
 	// TODO: bind's init container doesn't need most of this stuff. It doesn't use rabbitmq, redis or access the
 	// database. Should clean this up!
 	envVars = map[string]env.Setter{}
