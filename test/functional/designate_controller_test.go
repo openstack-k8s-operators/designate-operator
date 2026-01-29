@@ -1172,8 +1172,6 @@ var _ = Describe("Designate controller", func() {
 		var notificationsTransportURLSecretName types.NamespacedName
 
 		BeforeEach(func() {
-			// Null out deprecated field before setting new messagingBus field
-			spec["rabbitMqClusterName"] = ""
 			spec["messagingBus"] = map[string]any{
 				"cluster": "rpc-rabbitmq",
 				"user":    "rpc-user",
@@ -1333,8 +1331,6 @@ var _ = Describe("Designate controller", func() {
 		var notificationsTransportURLSecretName types.NamespacedName
 
 		BeforeEach(func() {
-			// Null out deprecated field before setting new messagingBus field
-			spec["rabbitMqClusterName"] = ""
 			spec["messagingBus"] = map[string]any{
 				"cluster": "rpc-rabbitmq",
 				"user":    "rpc-user",

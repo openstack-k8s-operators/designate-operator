@@ -140,11 +140,11 @@ type DesignateSpecBase struct {
 	// DatabaseAccount - name of MariaDBAccount which will be used to connect.
 	DatabaseAccount string `json:"databaseAccount"`
 
-	// +kubebuilder:validation:Required
-	// +kubebuilder:default=rabbitmq
+	// +kubebuilder:validation:Optional
 	// RabbitMQ instance name
 	// Needed to request a transportURL that is created and used in Designate
-	RabbitMqClusterName string `json:"rabbitMqClusterName" deprecated:"messagingBus.cluster"`
+	// Deprecated: Use MessagingBus.Cluster instead
+	RabbitMqClusterName string `json:"rabbitMqClusterName,omitempty"`
 
 	// +kubebuilder:validation:Optional
 	// MessagingBus configuration (cluster, username, and vhost)

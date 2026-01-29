@@ -24,7 +24,6 @@ package v1beta1
 import (
 	"fmt"
 
-	rabbitmqv1 "github.com/openstack-k8s-operators/infra-operator/apis/rabbitmq/v1beta1"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	common_webhook "github.com/openstack-k8s-operators/lib-common/modules/common/webhook"
@@ -102,10 +101,10 @@ func (spec *DesignateSpec) Default() {
 }
 
 func (spec *DesignateSpecBase) Default() {
-	// Set default RabbitMQ configuration and migrate from RabbitMqClusterName if needed
-	// Only migrate from deprecated field if the new field is not already set
+	// Default MessagingBus.Cluster if not set
+	// Migration from deprecated fields is handled by openstack-operator
 	if spec.MessagingBus.Cluster == "" {
-		rabbitmqv1.DefaultRabbitMqConfig(&spec.MessagingBus, spec.RabbitMqClusterName)
+		spec.MessagingBus.Cluster = "rabbitmq"
 	}
 }
 

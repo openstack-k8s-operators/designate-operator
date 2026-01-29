@@ -2163,10 +2163,10 @@ spec:
                   e.g. to check logs
                 type: boolean
               rabbitMqClusterName:
-                default: rabbitmq
                 description: |-
                   RabbitMQ instance name
                   Needed to request a transportURL that is created and used in Designate
+                  Deprecated: Use MessagingBus.Cluster instead
                 type: string
               redisServiceName:
                 default: designate-redis
@@ -2268,7 +2268,6 @@ spec:
             - designateMdns
             - designateProducer
             - designateWorker
-            - rabbitMqClusterName
             - secret
             type: object
           status:
