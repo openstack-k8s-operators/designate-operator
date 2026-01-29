@@ -1,0 +1,68 @@
+# Verify that StatefulSets mount the correct per-pool ConfigMaps and TSIG secrets
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      set -e
+
+      # Verify pool0 StatefulSet mounts the default ConfigMap (no TSIG)
+      # Pool 0 uses the base name (designate-backendbind9) for backwards compatibility
+      echo "Checking pool0 volume mounts..."
+      pool0_volumes=$(oc get statefulset designate-backendbind9 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[*].name}')
+
+      # Pool0 should mount designate-bind-ips volume (references designate-bind-ip-map ConfigMap)
+      if ! echo "$pool0_volumes" | grep -q "designate-bind-ips"; then
+        echo "ERROR: Pool0 does not mount designate-bind-ips volume"
+        exit 1
+      fi
+
+      # Pool0 should NOT mount TSIG secret (only non-default pools use TSIG)
+      if echo "$pool0_volumes" | grep -q "designatebackendbind9-tsig"; then
+        echo "ERROR: Pool0 should not mount TSIG secret (default pool doesn't use TSIG)"
+        exit 1
+      fi
+
+      echo "✓ Pool0 volume mounts are correct (has designate-bind-ips, no TSIG)"
+
+      # Verify pool1 StatefulSet mounts pool-specific ConfigMap AND TSIG secret
+      echo "Checking pool1 volume mounts..."
+      pool1_volumes=$(oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[*].name}')
+      pool1_configmap=$(oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[?(@.name=="designate-bind-ips")].configMap.name}')
+
+      # Pool1 should mount pool-specific ConfigMap via designate-bind-ips volume
+      if [ "$pool1_configmap" != "designate-bind-ip-map-pool1" ]; then
+        echo "ERROR: Pool1 does not mount correct ConfigMap. Expected: designate-bind-ip-map-pool1, Got: $pool1_configmap"
+        exit 1
+      fi
+
+      # Pool1 should mount TSIG secret (non-default pools require TSIG authentication)
+      if ! echo "$pool1_volumes" | grep -q "designatebackendbind9-tsig"; then
+        echo "ERROR: Pool1 should mount TSIG secret for mdns authentication"
+        exit 1
+      fi
+
+      # Verify TSIG secret is mounted from correct secret name
+      pool1_tsig_secret=$(oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[?(@.name=="designatebackendbind9-tsig")].secret.secretName}')
+      if [ "$pool1_tsig_secret" != "designate-backendbind9-tsig" ]; then
+        echo "ERROR: Pool1 TSIG volume does not reference correct secret. Expected: designate-backendbind9-tsig, Got: $pool1_tsig_secret"
+        exit 1
+      fi
+
+      echo "✓ Pool1 volume mounts are correct (has designate-bind-ip-map-pool1 + TSIG secret)"
+
+      # Verify TSIG secret volume is mounted at correct path in INIT container
+      # (TSIG is only mounted in init container, which copies it to merged config)
+      echo "Checking pool1 TSIG mount path in init container..."
+      pool1_tsig_mount_path=$(oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE -o jsonpath='{.spec.template.spec.initContainers[0].volumeMounts[?(@.name=="designatebackendbind9-tsig")].mountPath}')
+
+      if [ "$pool1_tsig_mount_path" != "/var/lib/tsig/tsigkeys.conf" ]; then
+        echo "ERROR: TSIG secret mounted at wrong path in init container. Expected: /var/lib/tsig/tsigkeys.conf, Got: $pool1_tsig_mount_path"
+        exit 1
+      fi
+
+      echo "✓ Pool1 TSIG secret is mounted at correct path in init container (/var/lib/tsig/tsigkeys.conf)"
+
+      echo "SUCCESS: All volume mounts are correctly configured"
+      echo "  - Pool0 (default): Uses designate-bind-ips volume -> designate-bind-ip-map ConfigMap, no TSIG"
+      echo "  - Pool1: Uses designate-bind-ips volume -> designate-bind-ip-map-pool1 ConfigMap + TSIG secret"
+      exit 0

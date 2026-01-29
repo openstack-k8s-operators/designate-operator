@@ -1,0 +1,57 @@
+# Verify single StatefulSet exists
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9
+spec:
+  replicas: 1
+status:
+  readyReplicas: 1
+---
+# Verify pool StatefulSets, services, ConfigMaps, and TSIG secrets were deleted
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - script: |
+      # Check that numbered pool StatefulSets no longer exist
+      # Note: pool0 (designate-backendbind9) is preserved and reused for single-pool mode
+      if oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Numbered pool StatefulSets (pool1, pool2, etc.) should be deleted"
+        exit 1
+      fi
+      # Check that multipool services no longer exist
+      # Pool0 services (designate-backendbind9-N) become single-pool services (same name)
+      if oc get service designate-backendbind9-pool1-0 -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Multipool services should be deleted"
+        exit 1
+      fi
+      # Check that numbered pool ConfigMaps no longer exist
+      if oc get configmap designate-bind-ip-map-pool1 -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Numbered pool ConfigMaps should be deleted"
+        exit 1
+      fi
+      # Check that TSIG secret no longer exists
+      if oc get secret designate-backendbind9-tsig -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: TSIG secret should be deleted in single-pool mode"
+        exit 1
+      fi
+      echo "SUCCESS: Migrated to single pool mode with all resources cleaned up"
+  - script: |
+      # Verify pools.yaml uses CR NS records (not multipool ConfigMap NS records)
+      # In single-pool mode, should use ns1.example.com (from CR), not ns1.example.org (from multipool CM)
+      POOLS_YAML=$(oc get configmap designate-pools-yaml-config-map -n $NAMESPACE -o jsonpath='{.data.pools-yaml-content}')
+      if echo "$POOLS_YAML" | grep -q "ns1.example.com"; then
+        echo "SUCCESS: Single-pool mode uses CR NS records (ns1.example.com)"
+      else
+        echo "ERROR: Single-pool mode should use CR NS records (ns1.example.com), not multipool ConfigMap NS records"
+        echo "Pools YAML content:"
+        echo "$POOLS_YAML"
+        exit 1
+      fi
+---
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+status:
+  designateBackendbind9ReadyCount: 1
