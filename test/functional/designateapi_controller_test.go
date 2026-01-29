@@ -202,6 +202,15 @@ var _ = Describe("DesignateAPI controller", func() {
 			Expect(conf).Should(
 				ContainSubstring(fmt.Sprintf(
 					"\npassword=%s\n", string(ospSecret.Data["DesignatePassword"]))))
+
+			// Verify region_name is set in [keystone_authtoken] section
+			keystoneAPI := keystone.GetKeystoneAPI(keystoneAPIName)
+			// GetRegion() returns Status.Region, so check that
+			Expect(keystoneAPI.Status.Region).ToNot(BeEmpty(), "KeystoneAPI should have a region set in status")
+			// The region_name should appear in the [keystone_authtoken] section
+			Expect(conf).Should(
+				ContainSubstring(fmt.Sprintf(
+					"region_name=%s", keystoneAPI.Status.Region)))
 		})
 
 		It("should create a Secret with customServiceConfig input", func() {

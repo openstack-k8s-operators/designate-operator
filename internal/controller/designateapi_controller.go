@@ -1154,10 +1154,17 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 
 	customData[common.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
 
+	// Get region from KeystoneAPI, defaulting to "regionOne" if empty
+	region := keystoneAPI.GetRegion()
+	if region == "" {
+		region = "regionOne"
+	}
+
 	templateParameters := map[string]any{
 		"KeystoneInternalURL": keystoneInternalURL,
 		"KeystonePublicURL":   keystonePublicURL,
 		"TimeOut":             instance.Spec.APITimeout,
+		"Region":              region,
 	}
 
 	// create httpd  vhost template parameters

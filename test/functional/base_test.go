@@ -166,6 +166,7 @@ func SimulateKeystoneReady(
 		g.Expect(k8sClient.Update(ctx, ks)).To(Succeed())
 		ks.Status.APIEndpoints[string(endpoint.EndpointInternal)] = internalEndpointURL
 		ks.Status.APIEndpoints[string(endpoint.EndpointPublic)] = publicEndpointURL
+		ks.Status.Region = "RegionOne"
 		g.Expect(k8sClient.Status().Update(ctx, ks)).To(Succeed())
 	}, timeout, interval).Should(Succeed())
 }
