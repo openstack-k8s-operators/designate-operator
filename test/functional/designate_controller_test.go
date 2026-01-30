@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
+	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -41,6 +42,7 @@ import (
 	"github.com/openstack-k8s-operators/designate-operator/internal/designatecentral"
 	"github.com/openstack-k8s-operators/designate-operator/internal/designateproducer"
 	"github.com/openstack-k8s-operators/designate-operator/internal/designateunbound"
+	rabbitmqv1 "github.com/openstack-k8s-operators/infra-operator/apis/rabbitmq/v1beta1"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	. "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -1120,6 +1122,297 @@ var _ = Describe("Designate controller", func() {
 				g.Expect(conf).Should(ContainSubstring("rabbit_quorum_queue=true"))
 				g.Expect(conf).Should(ContainSubstring("rabbit_transient_quorum_queue=true"))
 				g.Expect(conf).Should(ContainSubstring("amqp_durable_queues=true"))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	// RabbitMQ user and vhost support
+	When("Designate is created with custom RabbitMQ user and vhost", func() {
+		BeforeEach(func() {
+			spec["messagingBus"] = map[string]any{
+				"user":  "custom-user",
+				"vhost": "custom-vhost",
+			}
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+		})
+
+		It("should set custom RabbitMQ user and vhost in TransportURL", func() {
+			Eventually(func(g Gomega) {
+				transportURL := infra.GetTransportURL(transportURLName)
+				g.Expect(transportURL.Spec.Username).To(Equal("custom-user"))
+				g.Expect(transportURL.Spec.Vhost).To(Equal("custom-vhost"))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	When("Designate is created without custom RabbitMQ user and vhost", func() {
+		BeforeEach(func() {
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+		})
+
+		It("should use default RabbitMQ configuration", func() {
+			Eventually(func(g Gomega) {
+				transportURL := infra.GetTransportURL(transportURLName)
+				// When not specified, Username and Vhost should be empty or default
+				// The actual default values are set by the infra-operator
+				g.Expect(transportURL.Spec.RabbitmqClusterName).To(Equal("rabbitmq"))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	// Notifications bus support
+	When("Designate is created with separate notifications bus", func() {
+		var notificationsTransportURLName types.NamespacedName
+		var notificationsTransportURLSecretName types.NamespacedName
+
+		BeforeEach(func() {
+			spec["messagingBus"] = map[string]any{
+				"cluster": "rpc-rabbitmq",
+				"user":    "rpc-user",
+				"vhost":   "rpc-vhost",
+			}
+			spec["notificationsBus"] = map[string]any{
+				"cluster": "notifications-rabbitmq",
+				"user":    "notifications-user",
+				"vhost":   "notifications-vhost",
+			}
+			notificationsTransportURLName = types.NamespacedName{
+				Namespace: namespace,
+				Name:      name + "-designate-notifications-transport",
+			}
+			notificationsTransportURLSecretName = types.NamespacedName{
+				Namespace: namespace,
+				Name:      "rabbitmq-notifications-secret",
+			}
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURL(notificationsTransportURLName))
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(notificationsTransportURLSecretName))
+			infra.SimulateTransportURLReady(notificationsTransportURLName)
+			createAndSimulateDB(spec)
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+		})
+
+		It("should create separate TransportURLs for messaging and notifications", func() {
+			Eventually(func(g Gomega) {
+				// Check messaging bus TransportURL
+				transportURL := infra.GetTransportURL(transportURLName)
+				g.Expect(transportURL.Spec.RabbitmqClusterName).To(Equal("rpc-rabbitmq"))
+				g.Expect(transportURL.Spec.Username).To(Equal("rpc-user"))
+				g.Expect(transportURL.Spec.Vhost).To(Equal("rpc-vhost"))
+
+				// Check notifications bus TransportURL
+				notificationsTransportURL := infra.GetTransportURL(notificationsTransportURLName)
+				g.Expect(notificationsTransportURL.Spec.RabbitmqClusterName).To(Equal("notifications-rabbitmq"))
+				g.Expect(notificationsTransportURL.Spec.Username).To(Equal("notifications-user"))
+				g.Expect(notificationsTransportURL.Spec.Vhost).To(Equal("notifications-vhost"))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("should set NotificationsTransportURLSecret in status", func() {
+			Eventually(func(g Gomega) {
+				designate := GetDesignate(designateName)
+				g.Expect(designate.Status.TransportURLSecret).ToNot(BeEmpty())
+				g.Expect(designate.Status.NotificationsTransportURLSecret).ToNot(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("should mark notifications transport URL ready condition as true", func() {
+			th.ExpectCondition(
+				designateName,
+				ConditionGetterFunc(DesignateConditionGetter),
+				designatev1.DesignateRabbitMqNotificationsTransportURLReadyCondition,
+				corev1.ConditionTrue,
+			)
+		})
+
+		It("should configure notifications with driver=messagingv2 in designate.conf", func() {
+			configData := th.GetSecret(
+				types.NamespacedName{
+					Namespace: designateName.Namespace,
+					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
+			Expect(configData).ShouldNot(BeNil())
+			conf := string(configData.Data["designate.conf"])
+
+			Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
+			Expect(conf).Should(ContainSubstring("driver=messagingv2"))
+		})
+
+		It("should configure separate transport_url for notifications in designate.conf", func() {
+			Eventually(func(g Gomega) {
+				configData := th.GetSecret(
+					types.NamespacedName{
+						Namespace: designateName.Namespace,
+						Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
+				g.Expect(configData).ShouldNot(BeNil())
+				conf := string(configData.Data["designate.conf"])
+
+				// Should have notifications transport_url in oslo_messaging_notifications section
+				g.Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
+				// Find the section and verify transport_url is set
+				g.Expect(conf).Should(MatchRegexp(`(?s)\[oslo_messaging_notifications\].*?transport_url=`))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	When("Designate is created without notifications bus", func() {
+		BeforeEach(func() {
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			createAndSimulateDB(spec)
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+		})
+
+		It("should not create notifications TransportURL", func() {
+			Consistently(func(g Gomega) {
+				notificationsTransportURLName := types.NamespacedName{
+					Namespace: namespace,
+					Name:      name + "-designate-notifications-transport",
+				}
+				err := k8sClient.Get(ctx, notificationsTransportURLName, &rabbitmqv1.TransportURL{})
+				g.Expect(k8s_errors.IsNotFound(err)).To(BeTrue())
+			}, "5s", interval).Should(Succeed())
+		})
+
+		It("should mark notifications transport URL ready condition as true (optional)", func() {
+			th.ExpectCondition(
+				designateName,
+				ConditionGetterFunc(DesignateConditionGetter),
+				designatev1.DesignateRabbitMqNotificationsTransportURLReadyCondition,
+				corev1.ConditionTrue,
+			)
+		})
+
+		It("should have empty NotificationsTransportURLSecret in status", func() {
+			Eventually(func(g Gomega) {
+				designate := GetDesignate(designateName)
+				g.Expect(designate.Status.NotificationsTransportURLSecret).To(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("should configure driver=messagingv2 but no separate transport_url in designate.conf", func() {
+			configData := th.GetSecret(
+				types.NamespacedName{
+					Namespace: designateName.Namespace,
+					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
+			Expect(configData).ShouldNot(BeNil())
+			conf := string(configData.Data["designate.conf"])
+
+			// Should still have driver=messagingv2
+			Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
+			Expect(conf).Should(ContainSubstring("driver=messagingv2"))
+			// Should NOT have transport_url in oslo_messaging_notifications section
+			Expect(conf).ShouldNot(MatchRegexp(`(?s)\[oslo_messaging_notifications\].*?transport_url=`))
+		})
+	})
+
+	When("Designate starts with notifications enabled and then disables them", func() {
+		var notificationsTransportURLName types.NamespacedName
+		var notificationsTransportURLSecretName types.NamespacedName
+
+		BeforeEach(func() {
+			spec["messagingBus"] = map[string]any{
+				"cluster": "rpc-rabbitmq",
+				"user":    "rpc-user",
+				"vhost":   "rpc-vhost",
+			}
+			spec["notificationsBus"] = map[string]any{
+				"cluster": "notifications-rabbitmq",
+				"user":    "notifications-user",
+				"vhost":   "notifications-vhost",
+			}
+			notificationsTransportURLName = types.NamespacedName{
+				Namespace: namespace,
+				Name:      name + "-designate-notifications-transport",
+			}
+			notificationsTransportURLSecretName = types.NamespacedName{
+				Namespace: namespace,
+				Name:      "rabbitmq-notifications-secret",
+			}
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURL(notificationsTransportURLName))
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(notificationsTransportURLSecretName))
+			infra.SimulateTransportURLReady(notificationsTransportURLName)
+			createAndSimulateDB(spec)
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+		})
+
+		It("should initially have notifications enabled", func() {
+			Eventually(func(g Gomega) {
+				designate := GetDesignate(designateName)
+				g.Expect(designate.Status.NotificationsTransportURLSecret).ToNot(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				configData := th.GetSecret(
+					types.NamespacedName{
+						Namespace: designateName.Namespace,
+						Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
+				g.Expect(configData).ShouldNot(BeNil())
+				conf := string(configData.Data["designate.conf"])
+				g.Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
+				g.Expect(conf).Should(MatchRegexp(`(?s)\[oslo_messaging_notifications\].*?transport_url=`))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("should disable notifications when notificationsBus is removed", func() {
+			// Verify notifications are initially enabled
+			designate := GetDesignate(designateName)
+			Expect(designate.Status.NotificationsTransportURLSecret).ToNot(BeEmpty())
+
+			// Update the Designate spec to remove notificationsBus
+			Eventually(func(g Gomega) {
+				designate := GetDesignate(designateName)
+				designate.Spec.NotificationsBus = nil
+				g.Expect(k8sClient.Update(ctx, designate)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			// Wait for notifications to be disabled
+			Eventually(func(g Gomega) {
+				designate := GetDesignate(designateName)
+				g.Expect(designate.Status.NotificationsTransportURLSecret).To(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+
+			// Verify the config no longer has transport_url in oslo_messaging_notifications
+			Eventually(func(g Gomega) {
+				configData := th.GetSecret(
+					types.NamespacedName{
+						Namespace: designateName.Namespace,
+						Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
+				g.Expect(configData).ShouldNot(BeNil())
+				conf := string(configData.Data["designate.conf"])
+				// Should still have the section but no transport_url
+				g.Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
+				g.Expect(conf).Should(ContainSubstring("driver=messagingv2"))
+				g.Expect(conf).ShouldNot(MatchRegexp(`(?s)\[oslo_messaging_notifications\].*?transport_url=`))
 			}, timeout, interval).Should(Succeed())
 		})
 	})

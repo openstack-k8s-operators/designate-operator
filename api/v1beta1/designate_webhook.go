@@ -26,6 +26,7 @@ import (
 
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
+	common_webhook "github.com/openstack-k8s-operators/lib-common/modules/common/webhook"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -69,6 +70,7 @@ func (r *Designate) Default() {
 
 // Default  set defaults for this Designate spec
 func (spec *DesignateSpec) Default() {
+	spec.DesignateSpecBase.Default()
 	if spec.DesignateAPI.ContainerImage == "" {
 		spec.DesignateAPI.ContainerImage = designateDefaults.APIContainerImageURL
 	}
@@ -98,8 +100,61 @@ func (spec *DesignateSpec) Default() {
 	}
 }
 
+func (spec *DesignateSpecBase) Default() {
+	// Default MessagingBus.Cluster if not set
+	// Migration from deprecated fields is handled by openstack-operator
+	if spec.MessagingBus.Cluster == "" {
+		spec.MessagingBus.Cluster = "rabbitmq"
+	}
+}
+
 func (spec *DesignateSpecCore) Default() {
-	// validations go here for the ControlPlane
+	spec.DesignateSpecBase.Default()
+}
+
+// getDeprecatedFields returns the centralized list of deprecated fields for DesignateSpecBase
+func (spec *DesignateSpecBase) getDeprecatedFields(old *DesignateSpecBase) []common_webhook.DeprecatedFieldUpdate {
+	deprecatedFields := []common_webhook.DeprecatedFieldUpdate{
+		{
+			DeprecatedFieldName: "rabbitMqClusterName",
+			NewFieldPath:        []string{"messagingBus", "cluster"},
+			NewDeprecatedValue:  &spec.RabbitMqClusterName,
+			NewValue:            &spec.MessagingBus.Cluster,
+		},
+	}
+
+	// If old spec is provided (UPDATE operation), add old values
+	if old != nil {
+		deprecatedFields[0].OldDeprecatedValue = &old.RabbitMqClusterName
+	}
+
+	return deprecatedFields
+}
+
+// validateDeprecatedFieldsCreate validates deprecated fields during CREATE operations
+func (spec *DesignateSpecBase) validateDeprecatedFieldsCreate(basePath *field.Path) ([]string, field.ErrorList) {
+	// Get deprecated fields list (without old values for CREATE)
+	deprecatedFieldsUpdate := spec.getDeprecatedFields(nil)
+
+	// Convert to DeprecatedField list for CREATE validation
+	deprecatedFields := make([]common_webhook.DeprecatedField, len(deprecatedFieldsUpdate))
+	for i, df := range deprecatedFieldsUpdate {
+		deprecatedFields[i] = common_webhook.DeprecatedField{
+			DeprecatedFieldName: df.DeprecatedFieldName,
+			NewFieldPath:        df.NewFieldPath,
+			DeprecatedValue:     df.NewDeprecatedValue,
+			NewValue:            df.NewValue,
+		}
+	}
+
+	return common_webhook.ValidateDeprecatedFieldsCreate(deprecatedFields, basePath), nil
+}
+
+// validateDeprecatedFieldsUpdate validates deprecated fields during UPDATE operations
+func (spec *DesignateSpecBase) validateDeprecatedFieldsUpdate(old DesignateSpecBase, basePath *field.Path) ([]string, field.ErrorList) {
+	// Get deprecated fields list with old values
+	deprecatedFields := spec.getDeprecatedFields(&old)
+	return common_webhook.ValidateDeprecatedFieldsUpdate(deprecatedFields, basePath)
 }
 
 var _ webhook.Validator = &Designate{}
@@ -109,10 +164,12 @@ func (r *Designate) ValidateCreate() (admission.Warnings, error) {
 	designatelog.Info("validate create", "name", r.Name)
 
 	var allErrs field.ErrorList
+	var allWarns admission.Warnings
 	basePath := field.NewPath("spec")
 
-	if err := r.Spec.ValidateCreate(basePath, r.Namespace); err != nil {
-		allErrs = append(allErrs, err...)
+	if warns, errs := r.Spec.ValidateCreate(basePath, r.Namespace); errs != nil {
+		allErrs = append(allErrs, errs...)
+		allWarns = append(allWarns, warns...)
 	}
 
 	if len(allErrs) != 0 {
@@ -121,35 +178,47 @@ func (r *Designate) ValidateCreate() (admission.Warnings, error) {
 			r.Name, allErrs)
 	}
 
-	return nil, nil
+	return allWarns, nil
 }
 
 // ValidateCreate - Exported function wrapping non-exported validate functions,
 // this function can be called externally to validate an designate spec.
-func (r *DesignateSpec) ValidateCreate(basePath *field.Path, namespace string) field.ErrorList {
+func (r *DesignateSpec) ValidateCreate(basePath *field.Path, namespace string) ([]string, field.ErrorList) {
 	var allErrs field.ErrorList
+	var allWarns []string
 
-	allErrs = r.ValidateDesignateTopology(basePath, namespace)
+	// Validate deprecated fields using shared helper
+	warns, errs := r.DesignateSpecBase.validateDeprecatedFieldsCreate(basePath)
+	allWarns = append(allWarns, warns...)
+	allErrs = append(allErrs, errs...)
+
+	allErrs = append(allErrs, r.ValidateDesignateTopology(basePath, namespace)...)
 
 	// validate the service override key is valid
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
 		basePath.Child("designateAPI").Child("override").Child("service"),
 		r.DesignateAPI.Override.Service)...)
 
-	return allErrs
+	return allWarns, allErrs
 }
 
-func (r *DesignateSpecCore) ValidateCreate(basePath *field.Path, namespace string) field.ErrorList {
+func (r *DesignateSpecCore) ValidateCreate(basePath *field.Path, namespace string) ([]string, field.ErrorList) {
 	var allErrs field.ErrorList
+	var allWarns []string
 
-	allErrs = r.ValidateDesignateTopology(basePath, namespace)
+	// Validate deprecated fields using shared helper
+	warns, errs := r.DesignateSpecBase.validateDeprecatedFieldsCreate(basePath)
+	allWarns = append(allWarns, warns...)
+	allErrs = append(allErrs, errs...)
+
+	allErrs = append(allErrs, r.ValidateDesignateTopology(basePath, namespace)...)
 
 	// validate the service override key is valid
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
 		basePath.Child("designateAPI").Child("override").Child("service"),
 		r.DesignateAPI.Override.Service)...)
 
-	return allErrs
+	return allWarns, allErrs
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
@@ -162,10 +231,12 @@ func (r *Designate) ValidateUpdate(old runtime.Object) (admission.Warnings, erro
 	}
 
 	var allErrs field.ErrorList
+	var allWarns admission.Warnings
 	basePath := field.NewPath("spec")
 
-	if err := r.Spec.ValidateUpdate(oldDesignate.Spec, basePath, r.Namespace); err != nil {
-		allErrs = append(allErrs, err...)
+	if warns, errs := r.Spec.ValidateUpdate(oldDesignate.Spec, basePath, r.Namespace); errs != nil {
+		allErrs = append(allErrs, errs...)
+		allWarns = append(allWarns, warns...)
 	}
 
 	if len(allErrs) != 0 {
@@ -174,33 +245,45 @@ func (r *Designate) ValidateUpdate(old runtime.Object) (admission.Warnings, erro
 			r.Name, allErrs)
 	}
 
-	return nil, nil
+	return allWarns, nil
 }
 
 // ValidateUpdate - Exported function wrapping non-exported validate functions,
 // this function can be called externally to validate an designate spec.
-func (r *DesignateSpec) ValidateUpdate(old DesignateSpec, basePath *field.Path, namespace string) field.ErrorList {
+func (r *DesignateSpec) ValidateUpdate(old DesignateSpec, basePath *field.Path, namespace string) ([]string, field.ErrorList) {
 	var allErrs field.ErrorList
+	var allWarns []string
 
-	allErrs = r.ValidateDesignateTopology(basePath, namespace)
+	// Validate deprecated fields using shared helper
+	warns, errs := r.DesignateSpecBase.validateDeprecatedFieldsUpdate(old.DesignateSpecBase, basePath)
+	allWarns = append(allWarns, warns...)
+	allErrs = append(allErrs, errs...)
+
+	allErrs = append(allErrs, r.ValidateDesignateTopology(basePath, namespace)...)
 	// validate the service override key is valid
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
 		basePath.Child("designateAPI").Child("override").Child("service"),
 		r.DesignateAPI.Override.Service)...)
 
-	return allErrs
+	return allWarns, allErrs
 }
 
-func (r *DesignateSpecCore) ValidateUpdate(old DesignateSpecCore, basePath *field.Path, namespace string) field.ErrorList {
+func (r *DesignateSpecCore) ValidateUpdate(old DesignateSpecCore, basePath *field.Path, namespace string) ([]string, field.ErrorList) {
 	var allErrs field.ErrorList
+	var allWarns []string
 
-	allErrs = r.ValidateDesignateTopology(basePath, namespace)
+	// Validate deprecated fields using shared helper
+	warns, errs := r.DesignateSpecBase.validateDeprecatedFieldsUpdate(old.DesignateSpecBase, basePath)
+	allWarns = append(allWarns, warns...)
+	allErrs = append(allErrs, errs...)
+
+	allErrs = append(allErrs, r.ValidateDesignateTopology(basePath, namespace)...)
 	// validate the service override key is valid
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
 		basePath.Child("designateAPI").Child("override").Child("service"),
 		r.DesignateAPI.Override.Service)...)
 
-	return allErrs
+	return allWarns, allErrs
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
