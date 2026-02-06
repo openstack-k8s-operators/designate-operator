@@ -11,7 +11,8 @@ spec:
     debug = true
   databaseInstance: openstack
   databaseAccount: designate
-  rabbitMqClusterName: rabbitmq
+  messagingBus:
+    cluster: rabbitmq
   designateAPI:
     replicas: 1
   designateCentral:
