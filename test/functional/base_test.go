@@ -49,7 +49,7 @@ const (
 	InternalCertSecretName = "internal-tls-certs" // #nosec G101
 	CABundleSecretName     = "combined-ca-bundle" // #nosec G101
 
-	timeout  = time.Second * 5
+	timeout  = time.Second * 45
 	interval = timeout / 100
 )
 
