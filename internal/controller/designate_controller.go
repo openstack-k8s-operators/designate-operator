@@ -366,20 +366,22 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		condition.UnknownCondition(condition.ReadyCondition, condition.InitReason, condition.ReadyInitMessage),
 		condition.UnknownCondition(condition.DBReadyCondition, condition.InitReason, condition.DBReadyInitMessage),
 		condition.UnknownCondition(condition.DBSyncReadyCondition, condition.InitReason, condition.DBSyncReadyInitMessage),
-		condition.UnknownCondition(condition.RabbitMqTransportURLReadyCondition, condition.InitReason, condition.RabbitMqTransportURLReadyInitMessage),
-		condition.UnknownCondition(condition.InputReadyCondition, condition.InitReason, condition.InputReadyInitMessage),
-		condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateAPIReadyCondition, condition.InitReason, designatev1beta1.DesignateAPIReadyInitMessage),
-		condition.UnknownCondition(designatev1beta1.DesignateCentralReadyCondition, condition.InitReason, designatev1beta1.DesignateCentralReadyInitMessage),
-		condition.UnknownCondition(designatev1beta1.DesignateWorkerReadyCondition, condition.InitReason, designatev1beta1.DesignateWorkerReadyInitMessage),
-		condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
-		condition.UnknownCondition(designatev1beta1.DesignateUnboundReadyCondition, condition.InitReason, designatev1beta1.DesignateUnboundReadyInitMessage),
-		condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
 		condition.UnknownCondition(designatev1beta1.DesignateBackendbind9ReadyCondition, condition.InitReason, designatev1beta1.DesignateBackendbind9ReadyInitMessage),
+		condition.UnknownCondition(designatev1beta1.DesignateCentralReadyCondition, condition.InitReason, designatev1beta1.DesignateCentralReadyInitMessage),
+		condition.UnknownCondition(designatev1beta1.DesignateMdnsReadyCondition, condition.InitReason, designatev1beta1.DesignateMdnsReadyInitMessage),
+		condition.UnknownCondition(designatev1beta1.DesignateProducerReadyCondition, condition.InitReason, designatev1beta1.DesignateProducerReadyInitMessage),
+		condition.UnknownCondition(designatev1beta1.DesignateUnboundReadyCondition, condition.InitReason, designatev1beta1.DesignateUnboundReadyInitMessage),
+		condition.UnknownCondition(designatev1beta1.DesignateWorkerReadyCondition, condition.InitReason, designatev1beta1.DesignateWorkerReadyInitMessage),
+		condition.UnknownCondition(condition.InputReadyCondition, condition.InitReason, condition.InputReadyInitMessage),
+		condition.UnknownCondition(mariadbv1.MariaDBAccountReadyCondition, condition.InitReason, mariadbv1.MariaDBAccountReadyInitMessage),
+		condition.UnknownCondition(condition.RabbitMqTransportURLReadyCondition, condition.InitReason, condition.RabbitMqTransportURLReadyInitMessage),
+		condition.UnknownCondition(designatev1beta1.DesignateRabbitMqNotificationsTransportURLReadyCondition, condition.InitReason, condition.RabbitMqTransportURLReadyInitMessage),
 		// service account, role, rolebinding conditions
-		condition.UnknownCondition(condition.ServiceAccountReadyCondition, condition.InitReason, condition.ServiceAccountReadyInitMessage),
-		condition.UnknownCondition(condition.RoleReadyCondition, condition.InitReason, condition.RoleReadyInitMessage),
 		condition.UnknownCondition(condition.RoleBindingReadyCondition, condition.InitReason, condition.RoleBindingReadyInitMessage),
+		condition.UnknownCondition(condition.RoleReadyCondition, condition.InitReason, condition.RoleReadyInitMessage),
+		condition.UnknownCondition(condition.ServiceAccountReadyCondition, condition.InitReason, condition.ServiceAccountReadyInitMessage),
+		condition.UnknownCondition(condition.ServiceConfigReadyCondition, condition.InitReason, condition.ServiceConfigReadyInitMessage),
 	)
 	instance.Status.Conditions.Init(&cl)
 	instance.Status.ObservedGeneration = instance.Generation
@@ -409,6 +411,7 @@ const (
 	tlsAPIInternalField     = ".spec.tls.api.internal.secretName"
 	tlsAPIPublicField       = ".spec.tls.api.public.secretName"
 	topologyField           = ".spec.topologyRef.Name"
+	authAppCredSecretField  = ".spec.auth.applicationCredentialSecret" // #nosec G101
 )
 
 // SetupWithManager sets up the controller with the Manager.
@@ -814,6 +817,50 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		condition.RabbitMqTransportURLReadyMessage)
 
 	// end transportURL
+
+	//
+	// create RabbitMQ notifications transportURL CR if NotificationsBus is configured
+	//
+	if instance.Spec.NotificationsBus != nil {
+		notificationsTransportURL, op, err := r.notificationsTransportURLCreateOrUpdate(ctx, instance)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				designatev1beta1.DesignateRabbitMqNotificationsTransportURLReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.RabbitMqTransportURLReadyErrorMessage,
+				err.Error()))
+			return ctrl.Result{}, err
+		}
+
+		if op != controllerutil.OperationResultNone {
+			Log.Info(fmt.Sprintf("Notifications TransportURL %s successfully reconciled - operation: %s", notificationsTransportURL.Name, string(op)))
+		}
+
+		instance.Status.NotificationsTransportURLSecret = notificationsTransportURL.Status.SecretName
+
+		if instance.Status.NotificationsTransportURLSecret == "" {
+			Log.Info(fmt.Sprintf("Waiting for Notifications TransportURL %s secret to be created", notificationsTransportURL.Name))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+		}
+
+		instance.Status.Conditions.MarkTrue(
+			designatev1beta1.DesignateRabbitMqNotificationsTransportURLReadyCondition,
+			condition.RabbitMqTransportURLReadyMessage)
+	} else {
+		// NotificationsBus not configured, mark condition as True (optional feature)
+		instance.Status.Conditions.MarkTrue(
+			designatev1beta1.DesignateRabbitMqNotificationsTransportURLReadyCondition,
+			condition.ReadyMessage)
+		instance.Status.NotificationsTransportURLSecret = ""
+	}
+	// end notifications transportURL
+
 	hostIPs, err := getRedisServiceIPs(ctx, instance, helper)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -1609,6 +1656,30 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	templateParameters["TransportURL"] = string(transportURLSecret.Data["transport_url"])
 	templateParameters["QuorumQueues"] = string(transportURLSecret.Data["quorumqueues"]) == "true"
 
+	// Add notifications transport URL if configured
+	if instance.Status.NotificationsTransportURLSecret != "" {
+		notificationsTransportURLSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Status.NotificationsTransportURLSecret, instance.Namespace)
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				Log.Info(fmt.Sprintf("Notifications TransportURL secret %s not found", instance.Status.NotificationsTransportURLSecret))
+				instance.Status.Conditions.Set(condition.FalseCondition(
+					condition.InputReadyCondition,
+					condition.ErrorReason,
+					condition.SeverityWarning,
+					condition.InputReadyWaitingMessage))
+				return nil
+			}
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.InputReadyErrorMessage,
+				err.Error()))
+			return err
+		}
+		templateParameters["NotificationsTransportURL"] = string(notificationsTransportURLSecret.Data["transport_url"])
+	}
+
 	adminPasswordSecret, _, err := oko_secret.GetSecret(ctx, h, instance.Spec.Secret, instance.Namespace)
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
@@ -1766,10 +1837,57 @@ func (r *DesignateReconciler) transportURLCreateOrUpdate(
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, transportURL, func() error {
-		transportURL.Spec.RabbitmqClusterName = instance.Spec.RabbitMqClusterName
+		// Use MessagingBus if configured, otherwise fall back to RabbitMqClusterName for backward compatibility
+		if instance.Spec.MessagingBus.Cluster != "" {
+			transportURL.Spec.RabbitmqClusterName = instance.Spec.MessagingBus.Cluster
+		} else {
+			transportURL.Spec.RabbitmqClusterName = instance.Spec.RabbitMqClusterName
+		}
 
-		err := controllerutil.SetControllerReference(instance, transportURL, r.Scheme)
-		return err
+		// Always set Username and Vhost to allow clearing/resetting them
+		// The infra-operator TransportURL controller handles empty values:
+		// - Empty Username: uses default cluster admin credentials
+		// - Empty Vhost: defaults to "/" vhost
+		transportURL.Spec.Username = instance.Spec.MessagingBus.User
+		transportURL.Spec.Vhost = instance.Spec.MessagingBus.Vhost
+		return controllerutil.SetControllerReference(instance, transportURL, r.Scheme)
+	})
+
+	return transportURL, op, err
+}
+
+func (r *DesignateReconciler) notificationsTransportURLCreateOrUpdate(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+) (*rabbitmqv1.TransportURL, controllerutil.OperationResult, error) {
+	transportURL := &rabbitmqv1.TransportURL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-designate-notifications-transport", instance.Name),
+			Namespace: instance.Namespace,
+		},
+	}
+
+	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, transportURL, func() error {
+		// Handle nil NotificationsBus gracefully - use empty/default values
+		if instance.Spec.NotificationsBus != nil {
+			// Use NotificationsBus configuration
+			if instance.Spec.NotificationsBus.Cluster != "" {
+				transportURL.Spec.RabbitmqClusterName = instance.Spec.NotificationsBus.Cluster
+			}
+
+			// Always set Username and Vhost to allow clearing/resetting them
+			// The infra-operator TransportURL controller handles empty values:
+			// - Empty Username: uses default cluster admin credentials
+			// - Empty Vhost: defaults to "/" vhost
+			transportURL.Spec.Username = instance.Spec.NotificationsBus.User
+			transportURL.Spec.Vhost = instance.Spec.NotificationsBus.Vhost
+		} else {
+			// If NotificationsBus is nil, clear the transportURL fields
+			transportURL.Spec.RabbitmqClusterName = ""
+			transportURL.Spec.Username = ""
+			transportURL.Spec.Vhost = ""
+		}
+		return controllerutil.SetControllerReference(instance, transportURL, r.Scheme)
 	})
 
 	return transportURL, op, err

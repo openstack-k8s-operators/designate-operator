@@ -292,6 +292,18 @@ func (r *DesignateAPIReconciler) SetupWithManager(ctx context.Context, mgr ctrl.
 		return err
 	}
 
+	// index authAppCredSecretField
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &designatev1beta1.DesignateAPI{}, authAppCredSecretField, func(rawObj client.Object) []string {
+		// Extract the application credential secret name from the spec, if one is provided
+		cr := rawObj.(*designatev1beta1.DesignateAPI)
+		if cr.Spec.Auth.ApplicationCredentialSecret == "" {
+			return nil
+		}
+		return []string{cr.Spec.Auth.ApplicationCredentialSecret}
+	}); err != nil {
+		return err
+	}
+
 	svcSecretFn := func(ctx context.Context, o client.Object) []reconcile.Request {
 		var namespace = o.GetNamespace()
 		var secretName = o.GetName()
@@ -407,6 +419,7 @@ func (r *DesignateAPIReconciler) findObjectsForSrc(ctx context.Context, src clie
 		tlsAPIInternalField,
 		tlsAPIPublicField,
 		topologyField,
+		authAppCredSecretField,
 	}
 
 	for _, field := range allWatchFields {
@@ -1154,10 +1167,17 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 
 	customData[common.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
 
+	// Get region from KeystoneAPI, defaulting to "regionOne" if empty
+	region := keystoneAPI.GetRegion()
+	if region == "" {
+		region = "regionOne"
+	}
+
 	templateParameters := map[string]any{
 		"KeystoneInternalURL": keystoneInternalURL,
 		"KeystonePublicURL":   keystonePublicURL,
 		"TimeOut":             instance.Spec.APITimeout,
+		"Region":              region,
 	}
 
 	// create httpd  vhost template parameters
@@ -1197,6 +1217,30 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 		return err
 	}
 	templateParameters["AdminPassword"] = string(adminPasswordSecret.Data["DesignatePassword"])
+
+	templateParameters["UseApplicationCredentials"] = false
+	// Try to get Application Credential from the secret specified in the CR
+	if instance.Spec.Auth.ApplicationCredentialSecret != "" {
+		acSecretObj, _, err := oko_secret.GetSecret(ctx, h, instance.Spec.Auth.ApplicationCredentialSecret, instance.Namespace)
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				Log.Info("ApplicationCredential secret not found, waiting", "secret", instance.Spec.Auth.ApplicationCredentialSecret)
+				return fmt.Errorf("%w: %s", ErrACSecretNotFound, instance.Spec.Auth.ApplicationCredentialSecret)
+			}
+			Log.Error(err, "Failed to get ApplicationCredential secret", "secret", instance.Spec.Auth.ApplicationCredentialSecret)
+			return err
+		}
+		acID, okID := acSecretObj.Data[keystonev1.ACIDSecretKey]
+		acSecretData, okSecret := acSecretObj.Data[keystonev1.ACSecretSecretKey]
+		if !okID || len(acID) == 0 || !okSecret || len(acSecretData) == 0 {
+			Log.Info("ApplicationCredential secret missing required keys", "secret", instance.Spec.Auth.ApplicationCredentialSecret)
+			return fmt.Errorf("%w: %s", ErrACSecretMissingKeys, instance.Spec.Auth.ApplicationCredentialSecret)
+		}
+		templateParameters["UseApplicationCredentials"] = true
+		templateParameters["ACID"] = string(acID)
+		templateParameters["ACSecret"] = string(acSecretData)
+		Log.Info("Using ApplicationCredentials auth", "secret", instance.Spec.Auth.ApplicationCredentialSecret)
+	}
 
 	cms := []util.Template{
 		// Custom ConfigMap

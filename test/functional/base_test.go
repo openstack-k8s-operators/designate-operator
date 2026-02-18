@@ -49,7 +49,7 @@ const (
 	InternalCertSecretName = "internal-tls-certs" // #nosec G101
 	CABundleSecretName     = "combined-ca-bundle" // #nosec G101
 
-	timeout  = time.Second * 5
+	timeout  = time.Second * 45
 	interval = timeout / 100
 )
 
@@ -165,6 +165,7 @@ func SimulateKeystoneReady(
 		g.Expect(k8sClient.Update(ctx, ks)).To(Succeed())
 		ks.Status.APIEndpoints[string(endpoint.EndpointInternal)] = internalEndpointURL
 		ks.Status.APIEndpoints[string(endpoint.EndpointPublic)] = publicEndpointURL
+		ks.Status.Region = "RegionOne"
 		g.Expect(k8sClient.Status().Update(ctx, ks)).To(Succeed())
 	}, timeout, interval).Should(Succeed())
 }

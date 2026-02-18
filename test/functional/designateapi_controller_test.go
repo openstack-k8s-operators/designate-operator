@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2" //revive:disable:dot-imports
 	. "github.com/onsi/gomega"    //revive:disable:dot-imports
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +30,7 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	//revive:disable-next-line:dot-imports
 	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
+	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
 	. "github.com/openstack-k8s-operators/lib-common/modules/common/test/helpers"
 
 	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
@@ -202,6 +204,15 @@ var _ = Describe("DesignateAPI controller", func() {
 			Expect(conf).Should(
 				ContainSubstring(fmt.Sprintf(
 					"\npassword=%s\n", string(ospSecret.Data["DesignatePassword"]))))
+
+			// Verify region_name is set in [keystone_authtoken] section
+			keystoneAPI := keystone.GetKeystoneAPI(keystoneAPIName)
+			// GetRegion() returns Status.Region, so check that
+			Expect(keystoneAPI.Status.Region).ToNot(BeEmpty(), "KeystoneAPI should have a region set in status")
+			// The region_name should appear in the [keystone_authtoken] section
+			Expect(conf).Should(
+				ContainSubstring(fmt.Sprintf(
+					"region_name=%s", keystoneAPI.Status.Region)))
 		})
 
 		It("should create a Secret with customServiceConfig input", func() {
@@ -231,6 +242,120 @@ var _ = Describe("DesignateAPI controller", func() {
 				conf := string(confSecret.Data["designate.conf"])
 				g.Expect(string(conf)).Should(
 					ContainSubstring("auth_url=%s", newInternalEndpoint))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	When("An ApplicationCredential is created for Designate", func() {
+		var (
+			acName                string
+			acSecretName          string
+			servicePasswordSecret string
+			passwordSelector      string
+			keystoneAPIName       types.NamespacedName
+		)
+		BeforeEach(func() {
+			servicePasswordSecret = SecretName
+			passwordSelector = "DesignatePassword"
+
+			keystoneAPIName = keystone.CreateKeystoneAPI(namespace)
+			DeferCleanup(keystone.DeleteKeystoneAPI, keystoneAPIName)
+			keystoneInternalEndpoint := fmt.Sprintf("http://keystone-for-%s-internal", designateAPIName.Name)
+			keystonePublicEndpoint := fmt.Sprintf("http://keystone-for-%s-public", designateAPIName.Name)
+			SimulateKeystoneReady(keystoneAPIName, keystonePublicEndpoint, keystoneInternalEndpoint)
+
+			DeferCleanup(k8sClient.Delete, ctx, CreateDesignateSecret(namespace))
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(transportURLSecretName))
+
+			acName = fmt.Sprintf("ac-%s", designate.ServiceName)
+			acSecretName = acName + "-secret"
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      acSecretName,
+					Namespace: namespace,
+				},
+				Data: map[string][]byte{
+					keystonev1.ACIDSecretKey:     []byte("test-ac-id"),
+					keystonev1.ACSecretSecretKey: []byte("test-ac-secret"),
+				},
+			}
+			DeferCleanup(k8sClient.Delete, ctx, secret)
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			spec := GetDefaultDesignateAPISpec()
+			spec["secret"] = servicePasswordSecret
+			spec["transportURLSecret"] = RabbitmqSecretName
+			// Set auth.applicationCredentialSecret in the spec
+			spec["auth"] = map[string]any{
+				"applicationCredentialSecret": acSecretName,
+			}
+			DeferCleanup(th.DeleteInstance,
+				CreateDesignateAPI(designateAPIName, spec))
+
+			mariaDBDatabaseName := mariadb.CreateMariaDBDatabase(namespace, designate.DatabaseCRName, mariadbv1.MariaDBDatabaseSpec{})
+			mariaDBDatabase := mariadb.GetMariaDBDatabase(mariaDBDatabaseName)
+			DeferCleanup(k8sClient.Delete, ctx, mariaDBDatabase)
+
+			designateAPI := GetDesignateAPI(designateAPIName)
+			apiMariaDBAccount, apiMariaDBSecret := mariadb.CreateMariaDBAccountAndSecret(
+				types.NamespacedName{
+					Namespace: namespace,
+					Name:      designateAPI.Spec.DatabaseAccount,
+				}, mariadbv1.MariaDBAccountSpec{})
+			DeferCleanup(k8sClient.Delete, ctx, apiMariaDBAccount)
+			DeferCleanup(k8sClient.Delete, ctx, apiMariaDBSecret)
+
+			ac := &keystonev1.KeystoneApplicationCredential{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace,
+					Name:      acName,
+				},
+				Spec: keystonev1.KeystoneApplicationCredentialSpec{
+					UserName:         designate.ServiceName,
+					Secret:           servicePasswordSecret,
+					PasswordSelector: passwordSelector,
+					Roles:            []string{"admin", "member"},
+					AccessRules:      []keystonev1.ACRule{{Service: "identity", Method: "POST", Path: "/auth/tokens"}},
+					ExpirationDays:   30,
+					GracePeriodDays:  5,
+				},
+			}
+			DeferCleanup(k8sClient.Delete, ctx, ac)
+			Expect(k8sClient.Create(ctx, ac)).To(Succeed())
+
+			fetched := &keystonev1.KeystoneApplicationCredential{}
+			key := types.NamespacedName{Namespace: ac.Namespace, Name: ac.Name}
+			Expect(k8sClient.Get(ctx, key, fetched)).To(Succeed())
+
+			fetched.Status.SecretName = acSecretName
+			now := metav1.Now()
+			readyCond := condition.Condition{
+				Type:               condition.ReadyCondition,
+				Status:             corev1.ConditionTrue,
+				Reason:             condition.ReadyReason,
+				Message:            condition.ReadyMessage,
+				LastTransitionTime: now,
+			}
+			fetched.Status.Conditions = condition.Conditions{readyCond}
+			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
+		})
+
+		It("should render ApplicationCredential auth in designate.conf", func() {
+			Eventually(func(g Gomega) {
+				cfgSecret := th.GetSecret(types.NamespacedName{
+					Namespace: namespace,
+					Name:      fmt.Sprintf("%s-config-data", designateAPIName.Name),
+				})
+				g.Expect(cfgSecret).NotTo(BeNil())
+
+				conf := string(cfgSecret.Data["designate.conf"])
+
+				g.Expect(conf).To(ContainSubstring(
+					"application_credential_id=test-ac-id"),
+				)
+				g.Expect(conf).To(ContainSubstring(
+					"application_credential_secret=test-ac-secret"),
+				)
 			}, timeout, interval).Should(Succeed())
 		})
 	})

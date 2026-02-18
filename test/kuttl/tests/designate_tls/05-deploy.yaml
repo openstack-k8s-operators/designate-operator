@@ -6,7 +6,8 @@ spec:
   databaseInstance: openstack
   databaseAccount: designate
   serviceUser: designate
-  rabbitMqClusterName: rabbitmq
+  messagingBus:
+    cluster: rabbitmq
   secret: osp-secret
   preserveJobs: false
   customServiceConfig: |
