@@ -1,0 +1,29 @@
+# Verify pool0 still has 1 replica
+# Pool 0 uses the base name (designate-backendbind9) for backwards compatibility
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9
+  labels:
+    service: designate-backendbind9
+status:
+  readyReplicas: 1
+---
+# Verify pool1 scaled up to 3 replicas
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool1
+  labels:
+    service: designate-backendbind9
+spec:
+  replicas: 3
+status:
+  readyReplicas: 3
+---
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+status:
+  designateBackendbind9ReadyCount: 4

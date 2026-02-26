@@ -133,8 +133,7 @@ func createAndSimulateRedis(name types.NamespacedName) {
 					Port: 6379,
 				},
 			},
-			ClusterIP: "10.0.0.218",
-			Type:      "ClusterIP",
+			Type: "ClusterIP",
 		},
 	}
 	Expect(k8sClient.Create(ctx, svc)).Should(Succeed())

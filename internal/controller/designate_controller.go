@@ -18,8 +18,10 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -133,6 +135,123 @@ type DesignateReconciler struct {
 	Scheme  *runtime.Scheme
 }
 
+// validatePoolRemovals checks if any pools have been removed from the multipool config
+// and validates that removed pools don't have active DNS zones before allowing the removal
+func (r *DesignateReconciler) validatePoolRemovals(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+	helper *helper.Helper,
+	currentConfig *designate.MultipoolConfig,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
+	// Get the previous pool list from status.Hash
+	previousPoolsStr, exists := instance.Status.Hash["multipool-pools"]
+	if !exists {
+		// First time seeing multipool config, no removals to validate
+		return ctrl.Result{}, nil
+	}
+
+	// Parse previous pool list (stored as comma-separated names)
+	var previousPools []string
+	if previousPoolsStr != "" {
+		previousPools = strings.Split(previousPoolsStr, ",")
+	}
+
+	// Find removed pools (in previous but not in current)
+	currentPoolSet := make(map[string]bool)
+	if currentConfig != nil {
+		for _, pool := range currentConfig.Pools {
+			currentPoolSet[pool.Name] = true
+		}
+	}
+
+	var removedPools []string
+	for _, pool := range previousPools {
+		if !currentPoolSet[pool] {
+			removedPools = append(removedPools, pool)
+		}
+	}
+
+	if len(removedPools) == 0 {
+		// No pools removed, validation passed
+		return ctrl.Result{}, nil
+	}
+
+	Log.Info(fmt.Sprintf("Detected pool removal: %v - checking for active zones", removedPools))
+
+	// Get pool name -> UUID mapping
+	poolNameToID, err := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace, instance)
+	if err != nil {
+		if errors.Is(err, designate.ErrPoolListJobNotComplete) || errors.Is(err, designate.ErrPoolListJobFailed) {
+			Log.Info("Pool list job not ready, skipping pool removal validation (will retry in 30 seconds)")
+			// Don't set error condition, just requeue - waiting for job to complete or succeed on retry
+			// TODO oschwart: We might want to make it requeue with exponential backoff
+			return ctrl.Result{RequeueAfter: time.Second * 30}, nil
+		}
+		Log.Error(err, "Failed to get pool UUID mapping")
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			fmt.Sprintf("Cannot validate pool removal: failed to get pool UUID mapping: %v", err)))
+		return ctrl.Result{RequeueAfter: time.Minute}, err
+	}
+
+	// Get OpenStack client for zone checking
+	osclient, err := designate.GetOpenstackClient(ctx, instance.Namespace, helper)
+	if err != nil {
+		Log.Error(err, "Failed to get OpenStack client for pool removal validation")
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			fmt.Sprintf("Cannot validate pool removal: failed to get OpenStack client: %v", err)))
+		// TODO oschwart: We might want to make it requeue with exponential backoff
+		return ctrl.Result{RequeueAfter: time.Minute}, err
+	}
+
+	for _, poolName := range removedPools {
+		poolUUID, exists := poolNameToID[poolName]
+		if !exists {
+			Log.Info(fmt.Sprintf("Pool %s not found in Designate database, allowing removal", poolName))
+			continue
+		}
+
+		hasZones, err := designate.HasZonesInPool(ctx, osclient, poolUUID)
+		if err != nil {
+			Log.Error(err, fmt.Sprintf("Failed to check zones for pool %s (UUID: %s)", poolName, poolUUID))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.InputReadyErrorMessage,
+				fmt.Sprintf("Cannot validate pool removal: failed to check zones for pool %s: %v", poolName, err)))
+			return ctrl.Result{RequeueAfter: time.Minute}, err
+		}
+
+		if hasZones {
+			errMsg := fmt.Sprintf("Cannot remove pool %s from multipool configuration: pool has active DNS zones. Please delete all zones from this pool first. Will automatically retry in 1 minute", poolName)
+			Log.Info(errMsg)
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.InputReadyErrorMessage,
+				errMsg))
+			// TODO oschwart: We might want to make it requeue with exponential backoff
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
+		}
+
+		Log.Info(fmt.Sprintf("Pool %s has no active zones, removal allowed", poolName))
+	}
+
+	Log.Info(fmt.Sprintf("All removed pools (%v) validated successfully - no active zones found", removedPools))
+	return ctrl.Result{}, nil
+}
+
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=designate.openstack.org,resources=designates/finalizers,verbs=update;patch
@@ -176,6 +295,7 @@ type DesignateReconciler struct {
 // service account permissions that are needed to grant permission to the above
 // +kubebuilder:rbac:groups="security.openshift.io",resourceNames=anyuid;privileged,resources=securitycontextconstraints,verbs=use
 // +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
+// +kubebuilder:rbac:groups="",resources=pods/log,verbs=get
 
 // Reconcile -
 func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
@@ -365,10 +485,47 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
+		// Watch for multipool ConfigMap changes to regenerate pools.yaml
+		Watches(&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.findDesignatesForMultipoolConfigMap)).
 		// Watch for TransportURL Secrets which belong to any TransportURLs created by Designate CRs
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(transportURLSecretFn)).
 		Complete(r)
+}
+
+// findDesignatesForMultipoolConfigMap watches the multipool ConfigMap and triggers
+// reconciliation of all Designate CRs when it changes or is deleted
+func (r *DesignateReconciler) findDesignatesForMultipoolConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
+	Log := r.GetLogger(ctx)
+
+	// Only trigger on multipool ConfigMap
+	if obj.GetName() != designate.MultipoolConfigMapName {
+		return nil
+	}
+
+	Log.Info("Multipool ConfigMap changed/deleted, reconciling all Designate CRs to regenerate pools.yaml")
+
+	// get all Designate CRs in this namespace
+	designates := &designatev1beta1.DesignateList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(obj.GetNamespace()),
+	}
+	if err := r.List(ctx, designates, listOpts...); err != nil {
+		Log.Error(err, "Unable to retrieve Designate CRs")
+		return nil
+	}
+
+	result := []reconcile.Request{}
+	for _, cr := range designates.Items {
+		name := client.ObjectKey{
+			Namespace: obj.GetNamespace(),
+			Name:      cr.Name,
+		}
+		result = append(result, reconcile.Request{NamespacedName: name})
+	}
+
+	return result
 }
 
 func (r *DesignateReconciler) reconcileDelete(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {
@@ -795,6 +952,29 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	Log.Info("Deployment API task reconciled")
 
+	// Get multipool configuration once for use in bind IP allocation and pools.yaml generation
+	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)
+	if err != nil {
+		Log.Error(err, "Failed to get multipool configuration")
+		return ctrl.Result{}, err
+	}
+
+	// Validate pool removals - check if any removed pools have active zones
+	ctrlResult, err = r.validatePoolRemovals(ctx, instance, helper, multipoolConfig)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
+	}
+
+	// Store current pool list in status hash for next reconciliation (only if changed)
+	var currentPoolNames []string
+	if multipoolConfig != nil {
+		for _, pool := range multipoolConfig.Pools {
+			currentPoolNames = append(currentPoolNames, pool.Name)
+		}
+	}
+	newPoolList := strings.Join(currentPoolNames, ",")
+	instance.Status.Hash["multipool-pools"] = newPoolList
+
 	// Handle Mdns predictable IPs configmap
 	nad, err := nad.GetNADWithName(ctx, helper, instance.Spec.DesignateNetworkAttachment, instance.Namespace)
 	if err != nil {
@@ -873,9 +1053,16 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	// Unlike mDNS, we can have 0 binds when byob is used.
 	// NOTE(beagles) Really it might make more sense to have BYOB be an explicit flag and not assume that a 0
 	// value is a byob case. Something to think about.
-	bindReplicaCount := int(*instance.Spec.DesignateBackendbind9.Replicas)
 	var bindNames []string
-	for i := range bindReplicaCount {
+	totalBinds := 0
+	if multipoolConfig != nil {
+		for _, pool := range multipoolConfig.Pools {
+			totalBinds += int(pool.BindReplicas)
+		}
+	} else {
+		totalBinds = int(*instance.Spec.DesignateBackendbind9.Replicas)
+	}
+	for i := range totalBinds {
 		bindNames = append(bindNames, fmt.Sprintf("bind_address_%d", i))
 	}
 
@@ -884,20 +1071,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
-	Log.Info("Before creating bind configmap")
-
-	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), bindConfigMap, func() error {
-		bindConfigMap.Labels = util.MergeStringMaps(bindConfigMap.Labels, bindLabels)
-		bindConfigMap.Data = updatedBindMap
-		return controllerutil.SetControllerReference(instance, bindConfigMap, helper.GetScheme())
-	})
-
-	if err != nil {
-		Log.Info("Unable to create config map for bind ips...")
-		return ctrl.Result{}, err
+	// Reconcile all bind IP ConfigMaps (main ConfigMap + per-pool ConfigMaps in multipool mode)
+	ctrlResult, err = r.reconcileBindConfigMaps(ctx, instance, helper, multipoolConfig, updatedBindMap, bindLabels)
+	if err != nil || (ctrlResult != ctrl.Result{}) {
+		return ctrlResult, err
 	}
 
-	Log.Info("Bind configmap was created successfully")
 	if len(nsRecords) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
 		Log.Info("NS records data found")
 		poolsYamlConfigMap := &corev1.ConfigMap{
@@ -909,7 +1088,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Data: make(map[string]string),
 		}
 
-		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, nsRecords)
+		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(updatedBindMap, mdnsConfigMap.Data, nsRecords, multipoolConfig)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -1353,11 +1532,25 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	Log := r.GetLogger(ctx)
 
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), map[string]string{})
-	replicas := int(*instance.Spec.DesignateBackendbind9.Replicas)
+
+	var replicas int
+	multipoolConfig, err := designate.GetMultipoolConfig(ctx, h.GetClient(), instance.Namespace)
+	if err != nil {
+		Log.Error(err, "Failed to get multipool configuration")
+		return err
+	}
+
+	if multipoolConfig != nil {
+		for _, pool := range multipoolConfig.Pools {
+			replicas += int(pool.BindReplicas)
+		}
+	} else {
+		replicas = int(*instance.Spec.DesignateBackendbind9.Replicas)
+	}
 
 	// Get the secret first by providing the same name and namespace
 	secret := &corev1.Secret{}
-	err := h.GetClient().Get(ctx, types.NamespacedName{
+	err = h.GetClient().Get(ctx, types.NamespacedName{
 		Name:      designate.DesignateBindKeySecret,
 		Namespace: instance.Namespace,
 	}, secret)

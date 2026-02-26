@@ -29,16 +29,17 @@ const (
 	logVolume          = "designatebackendbind9-log-volume"
 	rndcKeys           = "designatebackendbind9-keys"
 	bindIPs            = "designate-bind-ips"
+	tsigKeys           = "designatebackendbind9-tsig"
 )
 
 // NOTE(beagles): I vacillated on using designate.GetVolumes() here and appending the extra entries and may still. There
 // is a lot going on here that is different than the components configuration so I found it a little easier to lay it
 // out in its own space, and look to refactor where necessary.
 
-func getServicePodVolumes(baseConfigMapName string) []corev1.Volume {
+func getServicePodVolumes(baseConfigMapName string, bindIPConfigMapName string, tsigSecretName string) []corev1.Volume {
 	var scriptMode int32 = 0755
 	var configMode int32 = 0640
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: scriptVolume,
 			VolumeSource: corev1.VolumeSource{
@@ -93,20 +94,36 @@ func getServicePodVolumes(baseConfigMapName string) []corev1.Volume {
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					DefaultMode: &configMode,
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: designate.BindPredIPConfigMap,
+						Name: bindIPConfigMapName,
 					},
 				},
 			},
 		},
 	}
+
+	// Add TSIG volume if tsigSecretName is provided
+	if tsigSecretName != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: tsigKeys,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: &configMode,
+					SecretName:  tsigSecretName,
+					Optional:    func(b bool) *bool { return &b }(true),
+				},
+			},
+		})
+	}
+
+	return volumes
 }
 
 // TODO(beagles): we follow the old TripleO/kolla naming of these mounts, but do they really make sense here?
 
 // getInitVolumesMounts - the init container will use the scripts mounted in the scriptVolume and create completed named
 // configuration from the files in configVolume. The modified files will be stored in the mergedConfigVolume
-func getInitVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+func getInitVolumeMounts(includeTSIG bool) []corev1.VolumeMount {
+	mounts := []corev1.VolumeMount{
 		{
 			Name:      configVolume,
 			MountPath: "/var/lib/config-data/default",
@@ -132,7 +149,23 @@ func getInitVolumeMounts() []corev1.VolumeMount {
 			MountPath: "/var/lib/config-data/keys",
 			ReadOnly:  true,
 		},
+		{
+			Name:      bindIPs,
+			MountPath: "/var/lib/predictableips",
+			ReadOnly:  true,
+		},
 	}
+
+	if includeTSIG {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      tsigKeys,
+			MountPath: "/var/lib/tsig/tsigkeys.conf",
+			SubPath:   "tsigkeys.conf",
+			ReadOnly:  true,
+		})
+	}
+
+	return mounts
 }
 
 func getPredIPVolumeMounts() []corev1.VolumeMount {
@@ -150,6 +183,8 @@ func getPredIPVolumeMounts() []corev1.VolumeMount {
 }
 
 func getServicePodVolumeMounts(persistentData string) []corev1.VolumeMount {
+	// Note: TSIG secret volume is defined in getServicePodVolumes(), but only the init container
+	// mounts the actual file via getInitVolumeMounts(). Init container copies it to merged config.
 	return []corev1.VolumeMount{
 		{
 			Name:      mergedConfigVolume,
