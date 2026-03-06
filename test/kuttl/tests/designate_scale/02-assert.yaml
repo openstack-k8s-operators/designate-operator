@@ -104,3 +104,4 @@ commands:
   - script: |
       ../../common/validate-predictable-ips.sh 3
       ../../common/validate-pools-yaml.sh 3
+      ../../common/validate-pool-update-job.sh

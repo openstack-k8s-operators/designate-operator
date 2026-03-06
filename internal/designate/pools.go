@@ -118,6 +118,7 @@ func ListPoolsFromJob(
 	// Create job definition following the same pattern as PoolUpdateJob
 	labels := map[string]string{"app": "designate", "job-type": "pool-list"}
 	annotations := map[string]string{}
+
 	jobDef := PoolListJob(instance, labels, annotations)
 
 	// Create and execute the job using lib-common job helper

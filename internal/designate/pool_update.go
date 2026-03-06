@@ -83,24 +83,22 @@ func PoolUpdateJob(
 		},
 	)
 
+	envVars := []corev1.EnvVar{}
 	if instance.Spec.DesignateAPI.TLS.CaBundleSecretName != "" {
-		volumes = append(volumes, corev1.Volume{
-			Name: "rabbitmq-certs",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "cert-rabbitmq-svc",
-				},
-			},
+		volumes = append(volumes, instance.Spec.DesignateAPI.TLS.CreateVolume())
+		volumeMounts = append(volumeMounts, instance.Spec.DesignateAPI.TLS.CreateVolumeMounts(nil)...)
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "SSL_CERT_FILE",
+			Value: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
 		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "rabbitmq-certs",
-			MountPath: "/etc/pki/rabbitmq",
-			ReadOnly:  true,
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "SSL_CERT_DIR",
+			Value: "/etc/pki/ca-trust/extracted/pem",
 		})
 	}
 
 	jobName := fmt.Sprintf("%s-pool-update-%d", ServiceName, time.Now().Unix())
-	cmdLine := fmt.Sprintf("/usr/bin/designate-manage --config-file %s --config-file %s pool update --file  /tmp/designate-pools/%s",
+	cmdLine := fmt.Sprintf("/usr/bin/designate-manage --config-file %s --config-file %s pool update --file /tmp/designate-pools/%s",
 		"/var/lib/config-data/default/designate.conf",
 		"/etc/designate/designate.conf",
 		DesignatePoolsYamlPath,
@@ -124,12 +122,7 @@ func PoolUpdateJob(
 						{
 							Name:  jobName,
 							Image: instance.Spec.DesignateCentral.ContainerImage,
-							Env: []corev1.EnvVar{
-								{
-									Name:  "SSL_CERT_FILE",
-									Value: "/etc/pki/rabbitmq/ca.crt",
-								},
-							},
+							Env:   envVars,
 							Command: []string{
 								"/bin/bash",
 								"-c",
@@ -210,19 +203,17 @@ func PoolListJob(
 		},
 	)
 
+	envVars := []corev1.EnvVar{}
 	if instance.Spec.DesignateAPI.TLS.CaBundleSecretName != "" {
-		volumes = append(volumes, corev1.Volume{
-			Name: "rabbitmq-certs",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "cert-rabbitmq-svc",
-				},
-			},
+		volumes = append(volumes, instance.Spec.DesignateAPI.TLS.CreateVolume())
+		volumeMounts = append(volumeMounts, instance.Spec.DesignateAPI.TLS.CreateVolumeMounts(nil)...)
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "SSL_CERT_FILE",
+			Value: "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
 		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "rabbitmq-certs",
-			MountPath: "/etc/pki/rabbitmq",
-			ReadOnly:  true,
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "SSL_CERT_DIR",
+			Value: "/etc/pki/ca-trust/extracted/pem",
 		})
 	}
 
@@ -255,12 +246,7 @@ func PoolListJob(
 						{
 							Name:  jobName,
 							Image: instance.Spec.DesignateCentral.ContainerImage,
-							Env: []corev1.EnvVar{
-								{
-									Name:  "SSL_CERT_FILE",
-									Value: "/etc/pki/rabbitmq/ca.crt",
-								},
-							},
+							Env:   envVars,
 							Command: []string{
 								"/bin/bash",
 								"-c",

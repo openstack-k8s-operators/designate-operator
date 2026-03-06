@@ -2381,6 +2381,9 @@ spec:
                 items:
                   type: string
                 type: array
+              redisTLS:
+                description: RedisTLS - whether the Redis instance has TLS enabled
+                type: string
               transportURLSecret:
                 description: TransportURLSecret - Secret containing RabbitMQ transportURL
                 type: string

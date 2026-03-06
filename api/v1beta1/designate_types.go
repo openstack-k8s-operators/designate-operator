@@ -283,6 +283,9 @@ type DesignateStatus struct {
 
 	// List of Redis Host IP addresses
 	RedisHostIPs []string `json:"redisHostIPs,omitempty"`
+
+	// RedisTLS - whether the Redis instance has TLS enabled
+	RedisTLS string `json:"redisTLS,omitempty"`
 }
 
 // +kubebuilder:object:root=true
