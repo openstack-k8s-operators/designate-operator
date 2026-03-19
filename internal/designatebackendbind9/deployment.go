@@ -24,7 +24,9 @@ import (
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/backup"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 
 	// labels "github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	appsv1 "k8s.io/api/apps/v1"
@@ -149,7 +151,11 @@ func StatefulSet(
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      instance.Name + PVCSuffix,
 				Namespace: instance.Namespace,
-				Labels:    labels,
+				Labels: util.MergeMaps(
+					labels,
+					backup.GetBackupLabels(backup.CategoryControlPlane),
+					backup.GetRestoreLabels(backup.RestoreOrder00, backup.CategoryControlPlane),
+				),
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{

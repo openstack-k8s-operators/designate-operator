@@ -3,9 +3,9 @@ module github.com/openstack-k8s-operators/designate-operator/api
 go 1.24.4
 
 require (
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260316100655-863ae03d41af
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260320125710-3a5f82ff0f18
-	github.com/openstack-k8s-operators/lib-common/modules/storage v0.6.1-0.20260320125710-3a5f82ff0f18
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260408075848-a2ebc6b245c3
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260410120633-3e1007da0cbd
+	github.com/openstack-k8s-operators/lib-common/modules/storage v0.6.1-0.20260410120633-3e1007da0cbd
 	k8s.io/api v0.31.14
 	k8s.io/apimachinery v0.31.14
 	k8s.io/client-go v0.31.14 // indirect
@@ -43,7 +43,6 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
-	github.com/rabbitmq/cluster-operator/v2 v2.16.0 // indirect
 	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect

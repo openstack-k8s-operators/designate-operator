@@ -12,11 +12,11 @@ require (
 	github.com/onsi/gomega v1.39.1
 	github.com/openshift/api v3.9.0+incompatible
 	github.com/openstack-k8s-operators/designate-operator/api v0.1.1-0.20240807132522-6c2eca7c6bbb
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260316100655-863ae03d41af
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260408075848-a2ebc6b245c3
 	github.com/openstack-k8s-operators/keystone-operator/api v0.6.1-0.20260314080138-b41734470581
-	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260320125710-3a5f82ff0f18
-	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.6.1-0.20260320125710-3a5f82ff0f18
-	github.com/openstack-k8s-operators/lib-common/modules/test v0.6.1-0.20260320125710-3a5f82ff0f18
+	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260410120633-3e1007da0cbd
+	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.6.1-0.20260410120633-3e1007da0cbd
+	github.com/openstack-k8s-operators/lib-common/modules/test v0.6.1-0.20260410120633-3e1007da0cbd
 	github.com/openstack-k8s-operators/mariadb-operator/api v0.6.1-0.20260314091348-5c473d964727
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.31.14
@@ -67,13 +67,12 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/openstack-k8s-operators/lib-common/modules/storage v0.6.1-0.20260320125710-3a5f82ff0f18 // indirect
+	github.com/openstack-k8s-operators/lib-common/modules/storage v0.6.1-0.20260410120633-3e1007da0cbd // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
-	github.com/rabbitmq/cluster-operator/v2 v2.16.0 // indirect
 	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
