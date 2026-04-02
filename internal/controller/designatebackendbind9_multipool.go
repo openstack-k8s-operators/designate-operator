@@ -26,6 +26,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -206,8 +208,8 @@ func (r *DesignateReconciler) reconcileSinglePoolBindConfigMap(
 	// In single-pool mode, all binds go into the default ConfigMap with RNDC key mappings
 	// Create the ConfigMap data with both IPs and RNDC keys
 	singlePoolMap := make(map[string]string)
-	for key, value := range updatedBindMap {
-		singlePoolMap[key] = value
+	for _, key := range slices.Sorted(maps.Keys(updatedBindMap)) {
+		singlePoolMap[key] = updatedBindMap[key]
 	}
 
 	// Add RNDC key mappings (in single-pool, pod index maps directly to RNDC key)
@@ -855,9 +857,9 @@ func (r *DesignateBackendbind9Reconciler) getMdnsIPsForTSIG(
 
 	// Extract IPs from ConfigMap data (mdns_address_0, mdns_address_1, etc.)
 	var mdnsIPs []string
-	for key, ip := range mdnsIPMap.Data {
-		if strings.HasPrefix(key, "mdns_address_") && ip != "" {
-			mdnsIPs = append(mdnsIPs, ip)
+	for _, key := range slices.Sorted(maps.Keys(mdnsIPMap.Data)) {
+		if strings.HasPrefix(key, "mdns_address_") && mdnsIPMap.Data[key] != "" {
+			mdnsIPs = append(mdnsIPs, mdnsIPMap.Data[key])
 		}
 	}
 	sort.Strings(mdnsIPs) // Sort for consistent ordering

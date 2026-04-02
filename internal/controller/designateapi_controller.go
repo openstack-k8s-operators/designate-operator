@@ -20,6 +20,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -564,7 +566,8 @@ func (r *DesignateAPIReconciler) reconcileInit(
 
 	apiEndpoints := make(map[string]string)
 
-	for endpointType, data := range designateEndpoints {
+	for _, endpointType := range slices.Sorted(maps.Keys(designateEndpoints)) {
+		data := designateEndpoints[endpointType]
 		endpointTypeStr := string(endpointType)
 		endpointName := designate.ServiceName + "-" + endpointTypeStr
 		svcOverride := instance.Spec.Override.Service[endpointType]
