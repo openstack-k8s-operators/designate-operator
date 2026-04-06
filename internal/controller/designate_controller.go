@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -1018,11 +1020,11 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	allocatedIPs := make(map[string]bool)
-	for _, predIP := range bindConfigMap.Data {
-		allocatedIPs[predIP] = true
+	for _, key := range slices.Sorted(maps.Keys(bindConfigMap.Data)) {
+		allocatedIPs[bindConfigMap.Data[key]] = true
 	}
-	for _, predIP := range mdnsConfigMap.Data {
-		allocatedIPs[predIP] = true
+	for _, key := range slices.Sorted(maps.Keys(mdnsConfigMap.Data)) {
+		allocatedIPs[mdnsConfigMap.Data[key]] = true
 	}
 
 	// Handle Mdns predictable IPs configmap
@@ -1413,7 +1415,8 @@ func (r *DesignateReconciler) getNSRecords(ctx context.Context, helper *helper.H
 	}
 
 	var allNSRecords []designatev1beta1.DesignateNSRecord
-	for _, data := range nsRecordsConfigMap.Data {
+	for _, key := range slices.Sorted(maps.Keys(nsRecordsConfigMap.Data)) {
+		data := nsRecordsConfigMap.Data[key]
 		var nsRecords []designatev1beta1.DesignateNSRecord
 		err := yaml.Unmarshal([]byte(data), &nsRecords)
 		if err != nil {
