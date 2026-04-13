@@ -49,6 +49,7 @@ import (
 	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/internal/designatebackendbind9"
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/backup"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/configmap"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
@@ -92,6 +93,7 @@ type DesignateBackendbind9Reconciler struct {
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designatebackendbind9s/finalizers,verbs=update;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;create;update;patch;delete;watch
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create;update;patch;delete;watch
@@ -616,6 +618,11 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		return ctrlResult, err
 	}
 
+	// Ensure backup/restore labels on existing PVCs (for upgrades)
+	if err := r.reconcilePVCLabels(ctx, instance); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// We reached the end of the Reconcile, update the Ready condition based on
 	// the sub conditions
 	if instance.Status.Conditions.AllSubConditionIsTrue() {
@@ -960,4 +967,33 @@ func (r *DesignateBackendbind9Reconciler) hasSecretChanged(
 	}
 	_, updated := util.SetHash(instance.Status.Hash, hashKey, hashValue)
 	return updated, nil
+}
+
+// reconcilePVCLabels ensures backup/restore labels are set on existing PVCs
+// for upgrades where VolumeClaimTemplate labels were not set at creation time.
+func (r *DesignateBackendbind9Reconciler) reconcilePVCLabels(
+	ctx context.Context,
+	instance *designatev1beta1.DesignateBackendbind9,
+) error {
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(instance.Namespace),
+		client.MatchingLabels{
+			common.AppSelector:       instance.Name,
+			common.ComponentSelector: designatebackendbind9.Component,
+		},
+	}
+	if err := r.List(ctx, pvcList, listOpts...); err != nil {
+		return fmt.Errorf("listing PVCs for %s: %w", instance.Name, err)
+	}
+	for i := range pvcList.Items {
+		if _, err := backup.EnsureBackupLabels(ctx, r.Client, &pvcList.Items[i],
+			util.MergeMaps(
+				backup.GetBackupLabels(backup.CategoryControlPlane),
+				backup.GetRestoreLabels(backup.RestoreOrder00, backup.CategoryControlPlane),
+			)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
