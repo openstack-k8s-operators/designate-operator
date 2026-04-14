@@ -15,12 +15,45 @@
 # under the License.
 set -ex
 
-# expect that the common.sh is in the same dir as the calling script
-#
-SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 SVC_CFG_MERGED=/var/lib/config-data/merged/designate.conf
 
-IPADDR=$(/usr/local/bin/container-scripts/setipalias.py)
-if [ $? -eq 0 ] && [ -n "$IPADDR" ]; then
-    crudini --set $SVC_CFG_MERGED 'service:mdns' 'listen' "${IPADDR}:5354"
+# format_listen_addr addr port
+#   Returns a host:port string suitable for Designate's listen config.
+#   Bare IPv6 addresses are wrapped in brackets (e.g. fd00::1 -> [fd00::1]:5354)
+#   to comply with RFC 3986. Already-bracketed addresses and IPv4 addresses are
+#   passed through unchanged.
+format_listen_addr() {
+    local addr=$1
+    local port=$2
+    if [[ "$addr" == \[*\] ]]; then
+        echo "${addr}:${port}"
+    elif [[ "$addr" == *:*:* ]]; then
+        echo "[${addr}]:${port}"
+    else
+        echo "${addr}:${port}"
+    fi
+}
+
+IPADDR=$(/usr/local/bin/container-scripts/setipalias.py) || true
+LISTEN_VALUE=""
+SEPARATOR=""
+if [ -n "$IPADDR" ]; then
+    LISTEN_VALUE=$(format_listen_addr "$IPADDR" 5354)
+    SEPARATOR=","
+else
+    echo "No predictable IP found"
+fi
+
+POD_IP=$(grep "$HOSTNAME" /etc/hosts | awk '{print $1}' | head -1)
+if [ -n "$POD_IP" ]; then
+    LISTEN_VALUE="${LISTEN_VALUE}${SEPARATOR}$(format_listen_addr "$POD_IP" 5354)"
+else
+    echo "No POD_IP found"
+fi
+
+if [ -n "$LISTEN_VALUE" ]; then
+    echo "Setting listen value to ${LISTEN_VALUE}"
+    crudini --set "$SVC_CFG_MERGED" 'service:mdns' 'listen' "${LISTEN_VALUE}"
+else
+    echo "No value"
 fi

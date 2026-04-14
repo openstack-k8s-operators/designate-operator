@@ -244,12 +244,9 @@ func main() {
 		os.Exit(1)
 	}
 	kclient, err := kubernetes.NewForConfig(cfg)
+
 	if err != nil {
 		setupLog.Error(err, "")
-		os.Exit(1)
-	}
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
