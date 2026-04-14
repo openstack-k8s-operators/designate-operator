@@ -465,6 +465,30 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		return nil
 	}
 
+	// Watch for changes to the Redis CR used by Designate (e.g. TLS config changes)
+	redisWatchFn := func(_ context.Context, o client.Object) []reconcile.Request {
+		designates := &designatev1beta1.DesignateList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(o.GetNamespace()),
+		}
+		if err := r.List(context.Background(), designates, listOpts...); err != nil {
+			Log.Error(err, "Unable to retrieve Designate CRs")
+			return nil
+		}
+		var result []reconcile.Request
+		for _, cr := range designates.Items {
+			if cr.Spec.RedisServiceName == o.GetName() {
+				name := client.ObjectKey{
+					Namespace: o.GetNamespace(),
+					Name:      cr.Name,
+				}
+				Log.Info(fmt.Sprintf("Redis CR %s changed, triggering reconciliation for Designate CR %s", o.GetName(), cr.Name))
+				result = append(result, reconcile.Request{NamespacedName: name})
+			}
+		}
+		return result
+	}
+
 	// TODO(beagles):
 	// - Watch for changes to the redis PODs and resync the headless hostnames for the PODs if necessary.
 	return ctrl.NewControllerManagedBy(mgr).
@@ -481,7 +505,6 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Owns(&corev1.Secret{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&rabbitmqv1.TransportURL{}).
-		Owns(&redisv1.Redis{}).
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.ServiceAccount{}).
@@ -493,6 +516,9 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		// Watch for TransportURL Secrets which belong to any TransportURLs created by Designate CRs
 		Watches(&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(transportURLSecretFn)).
+		// Watch for Redis CR changes (e.g. TLS configuration)
+		Watches(&redisv1.Redis{},
+			handler.EnqueueRequestsFromMapFunc(redisWatchFn)).
 		Complete(r)
 }
 
@@ -871,6 +897,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	sort.Strings(hostIPs)
 	instance.Status.RedisHostIPs = hostIPs
 
+	redisTLS, err := isRedisTLS(ctx, instance, helper)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	instance.Status.RedisTLS = fmt.Sprintf("%t", redisTLS)
+
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
 	//
@@ -1127,7 +1159,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 				oldHash,
 			)
 
-			_, err := poolUpdatejob.DoJob(ctx, helper)
+			_, err = poolUpdatejob.DoJob(ctx, helper)
 			if err != nil {
 				return ctrl.Result{}, err
 			}
@@ -1733,7 +1765,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	// TODO(beagles): This should be set to sentinel services! There seems to be a problem with sentinels at them moment.
 	// We should also check for IPv6 validity.
 	backendURL := fmt.Sprintf("redis://%s:6379/", redisIPs[0])
-	if tlsCfg != nil {
+	if instance.Status.RedisTLS == "true" {
 		backendURL = fmt.Sprintf("%s?ssl=true", backendURL)
 	}
 	templateParameters["CoordinationBackendURL"] = backendURL
@@ -2372,4 +2404,17 @@ func getRedisServiceIPs(
 	}
 	// TODO: Ensure that the correct port is exposed
 	return service.Spec.ClusterIPs, nil
+}
+
+func isRedisTLS(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+	helper *helper.Helper,
+) (bool, error) {
+	redis := &redisv1.Redis{}
+	err := helper.GetClient().Get(ctx, types.NamespacedName{Name: instance.Spec.RedisServiceName, Namespace: instance.Namespace}, redis)
+	if err != nil {
+		return false, err
+	}
+	return redis.Spec.TLS.SecretName != nil && *redis.Spec.TLS.SecretName != "", nil
 }

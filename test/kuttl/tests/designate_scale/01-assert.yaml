@@ -175,3 +175,5 @@ commands:
         fi
       done
       exit 0
+  - script: |
+      ../../common/validate-pool-update-job.sh

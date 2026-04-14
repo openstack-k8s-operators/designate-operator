@@ -4,9 +4,10 @@
 #
 # Check Bind9 predictable IPs configmap
 NUM_OF_SERVICES=$1
-bind_ips=$(oc get -n $NAMESPACE configmap designate-bind-ip-map -o json | jq -r '.data | values[]')
+bind_ips=$(oc get -n $NAMESPACE configmap designate-bind-ip-map -o json | jq -r '.data | with_entries(select(.key | test("bind_address_"))) | values[]')
 if [ $(echo "$bind_ips" | wc -l) -ne ${NUM_OF_SERVICES} ]; then
     echo "Expected ${NUM_OF_SERVICES} bind addresses, found $(echo "$bind_ips" | wc -l)"
+    echo "IPS: $bind_ips"
     exit 1
 fi
 for ip in $bind_ips; do
@@ -20,6 +21,7 @@ done
 mdns_ips=$(oc get -n $NAMESPACE configmap designate-mdns-ip-map -o json | jq -r '.data | values[]')
 if [ $(echo "$mdns_ips" | wc -l) -ne ${NUM_OF_SERVICES} ]; then
     echo "Expected ${NUM_OF_SERVICES} mdns addresses, found $(echo "$mdns_ips" | wc -l)"
+    echo "IPS: $mdns_ips"
     exit 1
 fi
 for ip in $mdns_ips; do
