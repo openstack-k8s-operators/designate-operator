@@ -889,12 +889,41 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	// end notifications transportURL
 
+	// TODO(beagles): Due to how the Redis operator manages the Redis service,
+	// we only need a single IP service endpoint. Even for dual-stack setups,
+	// configuring just one is likely sufficient.
 	hostIPs, err := getRedisServiceIPs(ctx, instance, helper)
 	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			Log.Info(fmt.Sprintf("Redis service %s not found, waiting for it to be created", instance.Spec.RedisServiceName))
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.InputReadyWaitingMessage))
+			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+		}
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
 		return ctrl.Result{}, err
 	}
 
+	if len(hostIPs) == 0 {
+		err = designate.ErrRedisRequired
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, err
+	}
 	sort.Strings(hostIPs)
+
 	instance.Status.RedisHostIPs = hostIPs
 
 	redisTLS, err := isRedisTLS(ctx, instance, helper)
@@ -1738,18 +1767,8 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	}
 	templateParameters["AdminPassword"] = string(adminPasswordSecret.Data["DesignatePassword"])
 
-	redisIPs, err := getRedisServiceIPs(ctx, instance, h)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return err
-	}
-
-	if len(redisIPs) == 0 {
+	// We should never get here, but just in case.
+	if len(instance.Status.RedisHostIPs) == 0 {
 		err = designate.ErrRedisRequired
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.InputReadyCondition,
@@ -1760,11 +1779,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 		return err
 	}
 
-	sort.Strings(redisIPs)
-
-	// TODO(beagles): This should be set to sentinel services! There seems to be a problem with sentinels at them moment.
-	// We should also check for IPv6 validity.
-	backendURL := fmt.Sprintf("redis://%s:6379/", redisIPs[0])
+	backendURL := fmt.Sprintf("redis://%s:6379/", instance.Status.RedisHostIPs[0])
 	if instance.Status.RedisTLS == "true" {
 		backendURL = fmt.Sprintf("%s?ssl=true", backendURL)
 	}
