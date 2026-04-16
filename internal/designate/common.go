@@ -53,18 +53,6 @@ const (
 	DesignateDatabaseName = "designate"
 )
 
-// GetScriptConfigMapName returns the name of the ConfigMap used for the
-// config merger and the service init scripts
-func GetScriptConfigMapName(crName string) string {
-	return fmt.Sprintf("%s-scripts", crName)
-}
-
-// GetServiceConfigConfigMapName returns the name of the ConfigMap used to
-// store the service configuration files
-func GetServiceConfigConfigMapName(crName string) string {
-	return fmt.Sprintf("%s-config-data", crName)
-}
-
 // DatabaseStatus -
 type DatabaseStatus int
 
