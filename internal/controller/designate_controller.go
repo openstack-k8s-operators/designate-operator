@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -889,49 +888,6 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	// end notifications transportURL
 
-	// TODO(beagles): Due to how the Redis operator manages the Redis service,
-	// we only need a single IP service endpoint. Even for dual-stack setups,
-	// configuring just one is likely sufficient.
-	hostIPs, err := getRedisServiceIPs(ctx, instance, helper)
-	if err != nil {
-		if k8s_errors.IsNotFound(err) {
-			Log.Info(fmt.Sprintf("Redis service %s not found, waiting for it to be created", instance.Spec.RedisServiceName))
-			instance.Status.Conditions.Set(condition.FalseCondition(
-				condition.InputReadyCondition,
-				condition.RequestedReason,
-				condition.SeverityInfo,
-				condition.InputReadyWaitingMessage))
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
-		}
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-
-	if len(hostIPs) == 0 {
-		err = designate.ErrRedisRequired
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.InputReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.InputReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	sort.Strings(hostIPs)
-
-	instance.Status.RedisHostIPs = hostIPs
-
-	redisTLS, err := isRedisTLS(ctx, instance, helper)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	instance.Status.RedisTLS = fmt.Sprintf("%t", redisTLS)
-
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
 	//
@@ -1767,9 +1723,8 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	}
 	templateParameters["AdminPassword"] = string(adminPasswordSecret.Data["DesignatePassword"])
 
-	// We should never get here, but just in case.
-	if len(instance.Status.RedisHostIPs) == 0 {
-		err = designate.ErrRedisRequired
+	redis, err := redisv1.GetRedisByName(ctx, h, instance.Spec.RedisServiceName, instance.Namespace)
+	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
 			condition.InputReadyCondition,
 			condition.ErrorReason,
@@ -1778,12 +1733,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 			err.Error()))
 		return err
 	}
-
-	backendURL := fmt.Sprintf("redis://%s:6379/", instance.Status.RedisHostIPs[0])
-	if instance.Status.RedisTLS == "true" {
-		backendURL = fmt.Sprintf("%s?ssl=true", backendURL)
-	}
-	templateParameters["CoordinationBackendURL"] = backendURL
+	templateParameters["CoordinationBackendURL"] = redis.GetRedisClientURL()
 
 	cms := []util.Template{
 		// ScriptsConfigMap
@@ -2019,8 +1969,6 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		// TODO(beagles): redundant but we cannot remove them from the API for the time being so let's keep this here.
-		deployment.Spec.RedisHostIPs = instance.Status.RedisHostIPs
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
 		deployment.Spec.NodeSelector = instance.Spec.DesignateCentral.NodeSelector
 		deployment.Spec.TopologyRef = instance.Spec.DesignateCentral.TopologyRef
@@ -2154,7 +2102,6 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		deployment.Spec.RedisHostIPs = instance.Status.RedisHostIPs
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
 		deployment.Spec.NodeSelector = instance.Spec.DesignateProducer.NodeSelector
 		deployment.Spec.TopologyRef = instance.Spec.DesignateProducer.TopologyRef
@@ -2405,31 +2352,4 @@ func (r *DesignateReconciler) checkDesignateUnboundGeneration(
 		}
 	}
 	return true, nil
-}
-
-func getRedisServiceIPs(
-	ctx context.Context,
-	instance *designatev1beta1.Designate,
-	helper *helper.Helper,
-) ([]string, error) {
-	getOptions := metav1.GetOptions{}
-	service, err := helper.GetKClient().CoreV1().Services(instance.Namespace).Get(ctx, instance.Spec.RedisServiceName, getOptions)
-	if err != nil {
-		return []string{}, err
-	}
-	// TODO: Ensure that the correct port is exposed
-	return service.Spec.ClusterIPs, nil
-}
-
-func isRedisTLS(
-	ctx context.Context,
-	instance *designatev1beta1.Designate,
-	helper *helper.Helper,
-) (bool, error) {
-	redis := &redisv1.Redis{}
-	err := helper.GetClient().Get(ctx, types.NamespacedName{Name: instance.Spec.RedisServiceName, Namespace: instance.Namespace}, redis)
-	if err != nil {
-		return false, err
-	}
-	return redis.Spec.TLS.SecretName != nil && *redis.Spec.TLS.SecretName != "", nil
 }

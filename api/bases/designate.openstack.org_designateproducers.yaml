@@ -128,7 +128,9 @@ spec:
                     type: string
                 type: object
               redisHostIPs:
-                description: List of Redis Host IP addresses
+                description: |-
+                  Deprecated: RedisHostIPs is no longer used. Redis connection details
+                  are now obtained directly from the Redis status field.
                 items:
                   type: string
                 type: array
