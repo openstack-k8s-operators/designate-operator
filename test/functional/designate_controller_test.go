@@ -495,7 +495,7 @@ var _ = Describe("Designate controller", func() {
 							db.Name)))
 			}
 			Expect(conf).Should(
-				MatchRegexp(`backend_url=redis://[\d\.]+:6379`),
+				MatchRegexp(`backend_url=redis://designate-redis:6379/`),
 			)
 		})
 

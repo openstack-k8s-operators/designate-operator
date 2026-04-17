@@ -69,8 +69,9 @@ type DesignateProducerSpecBase struct {
 	// TLS - Parameters related to the TLS
 	TLS tls.Ca `json:"tls,omitempty"`
 
-	// List of Redis Host IP addresses
-	// +listType:=atomic
+	// Deprecated: RedisHostIPs is no longer used. Redis connection details
+	// are now obtained directly from the Redis status field.
+	// +listType=atomic
 	RedisHostIPs []string `json:"redisHostIPs,omitempty"`
 }
 

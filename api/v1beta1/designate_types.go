@@ -281,11 +281,9 @@ type DesignateStatus struct {
 	// the opentack-operator in the top-level CR (e.g. the ContainerImage)
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// List of Redis Host IP addresses
+	// Deprecated: RedisHostIPs is no longer used. Redis connection details
+	// are now obtained directly from the Redis status field.
 	RedisHostIPs []string `json:"redisHostIPs,omitempty"`
-
-	// RedisTLS - whether the Redis instance has TLS enabled
-	RedisTLS string `json:"redisTLS,omitempty"`
 }
 
 // +kubebuilder:object:root=true
