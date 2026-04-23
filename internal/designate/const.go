@@ -101,4 +101,7 @@ const (
 
 	// SharedTSIGKeyName is the name of the shared TSIG key used for all non-default pools
 	SharedTSIGKeyName = "multipool-shared-key"
+
+	// ACConsumerFinalizer is added to AC secrets that designate is actively consuming
+	ACConsumerFinalizer = "openstack.org/designateapi-ac-consumer"
 )
