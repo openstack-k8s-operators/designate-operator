@@ -1248,13 +1248,14 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 	cms := []util.Template{
 		// Custom ConfigMap
 		{
-			Name:          designate.ConfigVolumeName(instance.Name),
-			Namespace:     instance.Namespace,
-			Type:          util.TemplateTypeConfig,
-			InstanceType:  instance.Kind,
-			CustomData:    customData,
-			ConfigOptions: templateParameters,
-			Labels:        cmLabels,
+			Name:            designate.ConfigVolumeName(instance.Name),
+			Namespace:       instance.Namespace,
+			Type:            util.TemplateTypeConfig,
+			InstanceType:    instance.Kind,
+			CustomData:      customData,
+			ConfigOptions:   templateParameters,
+			Labels:          cmLabels,
+			CommonTemplates: []string{"ssl.conf"},
 		},
 		{
 			Name:         designate.DefaultsVolumeName(instance.Name),
