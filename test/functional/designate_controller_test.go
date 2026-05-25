@@ -638,7 +638,7 @@ var _ = Describe("Designate controller", func() {
 			}
 		})
 
-		It("should create ConfigMaps for Bind9 and Mdns predictable IPs", func() {
+		It("should create ConfigMaps for Bind9, Mdns and Unbound predictable IPs", func() {
 			bindConfigMap := th.GetConfigMap(types.NamespacedName{
 				Name:      designate.BindPredIPConfigMap,
 				Namespace: namespace})
@@ -686,6 +686,23 @@ var _ = Describe("Designate controller", func() {
 				Expect(ip).NotTo(BeNil(), "Invalid IP format: %s", ipAddress)
 
 				// check there are no duplicate IPs
+				Expect(usedIPs[ipAddress]).To(BeFalse(), "Duplicate IP found: %s", ipAddress)
+				usedIPs[ipAddress] = true
+			}
+
+			unboundConfigMap := th.GetConfigMap(types.NamespacedName{
+				Name:      designate.UnboundPredIPConfigMap,
+				Namespace: namespace})
+			Expect(unboundConfigMap.Data).To(HaveLen(unboundReplicaCount))
+			for key, ipAddress := range unboundConfigMap.Data {
+				// verify key with unbound_address_N format
+				Expect(key).To(MatchRegexp(`^unbound_address_\d+$`))
+
+				// verify valid IP format
+				ip := net.ParseIP(ipAddress)
+				Expect(ip).NotTo(BeNil(), "Invalid IP format: %s", ipAddress)
+
+				// check there are no duplicate IPs across all services
 				Expect(usedIPs[ipAddress]).To(BeFalse(), "Duplicate IP found: %s", ipAddress)
 				usedIPs[ipAddress] = true
 			}

@@ -1172,12 +1172,22 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
+	// Handle Unbound predictable IPs configmap
+	unboundLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.Name), map[string]string{})
+	unboundConfigMap, err := r.handleConfigMap(ctx, helper, instance, designate.UnboundPredIPConfigMap, unboundLabels)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	allocatedIPs := make(map[string]bool)
 	for _, key := range slices.Sorted(maps.Keys(bindConfigMap.Data)) {
 		allocatedIPs[bindConfigMap.Data[key]] = true
 	}
 	for _, key := range slices.Sorted(maps.Keys(mdnsConfigMap.Data)) {
 		allocatedIPs[mdnsConfigMap.Data[key]] = true
+	}
+	for _, key := range slices.Sorted(maps.Keys(unboundConfigMap.Data)) {
+		allocatedIPs[unboundConfigMap.Data[key]] = true
 	}
 
 	// Handle Mdns predictable IPs configmap
@@ -1221,7 +1231,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		bindNames = append(bindNames, fmt.Sprintf("bind_address_%d", i))
 	}
 
-	updatedBindMap, _, err := r.allocatePredictableIPs(ctx, predictableIPParams, bindNames, bindConfigMap.Data, allocatedIPs)
+	updatedBindMap, allocatedIPs, err := r.allocatePredictableIPs(ctx, predictableIPParams, bindNames, bindConfigMap.Data, allocatedIPs)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1230,6 +1240,27 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	ctrlResult, err = r.reconcileBindConfigMaps(ctx, instance, helper, multipoolConfig, updatedBindMap, bindLabels)
 	if err != nil || (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, err
+	}
+
+	unboundReplicaCount := int(*instance.Spec.DesignateUnbound.Replicas)
+	var unboundNames []string
+	for i := 0; i < unboundReplicaCount; i++ {
+		unboundNames = append(unboundNames, fmt.Sprintf("unbound_address_%d", i))
+	}
+
+	updatedUnboundMap, _, err := r.allocatePredictableIPs(ctx, predictableIPParams, unboundNames, unboundConfigMap.Data, allocatedIPs)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), unboundConfigMap, func() error {
+		unboundConfigMap.Labels = util.MergeStringMaps(unboundConfigMap.Labels, unboundLabels)
+		unboundConfigMap.Data = updatedUnboundMap
+		return controllerutil.SetControllerReference(instance, unboundConfigMap, helper.GetScheme())
+	})
+	if err != nil {
+		Log.Info("Unable to create config map for unbound ips...")
+		return ctrl.Result{}, err
 	}
 
 	if len(nsRecords) > 0 && instance.Status.DesignateCentralReadyCount > 0 {

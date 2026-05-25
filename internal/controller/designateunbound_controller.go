@@ -503,6 +503,16 @@ func (r *UnboundReconciler) reconcileNormal(ctx context.Context, instance *desig
 		// by comparing it with the ObservedGeneration.
 		if statefulset.IsReady(deploy) {
 			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
+
+			// Handle pod labeling for predictable IPs when statefulset is ready
+			config := designate.PodLabelingConfig{
+				ConfigMapName: designate.UnboundPredIPConfigMap,
+				IPKeyPrefix:   "unbound_address_",
+			}
+			err = designate.HandlePodLabeling(ctx, helper, instance.Name, instance.Namespace, config)
+			if err != nil {
+				Log.Error(err, "Failed to handle pod labeling")
+			}
 		} else {
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.DeploymentReadyCondition,
@@ -667,6 +677,18 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 	templateParameters["AllowCidrs"] = allowCidrs
 
 	cms := []util.Template{
+		// ScriptsConfigMap
+		{
+			Name:         designate.ScriptsVolumeName(instance.Name),
+			Namespace:    instance.Namespace,
+			Type:         util.TemplateTypeScripts,
+			InstanceType: instance.Kind,
+			AdditionalTemplate: map[string]string{
+				"setipalias.py": "/common/setipalias.py",
+				"setipalias.sh": "/designateunbound/bin/setipalias.sh",
+			},
+			Labels: cmLabels,
+		},
 		// ConfigMap
 		{
 			Name:          designate.ConfigVolumeName(instance.Name),
