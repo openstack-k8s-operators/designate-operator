@@ -31,10 +31,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
@@ -488,6 +490,36 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		return result
 	}
 
+	externalBindsFn := func(_ context.Context, o client.Object) []reconcile.Request {
+		result := []reconcile.Request{}
+
+		var namespace = o.GetNamespace()
+		var secretName = o.GetName()
+
+		designates := &designatev1beta1.DesignateList{}
+		listOpts := []client.ListOption{
+			client.InNamespace(namespace),
+		}
+		if err := r.List(context.Background(), designates, listOpts...); err != nil {
+			Log.Error(err, "Unable to retrieve Designate CRs")
+			return nil
+		}
+
+		for _, cr := range designates.Items {
+			if cr.Spec.ExternalBindsSecret == secretName || secretName == designate.ExternalBindsData {
+				name := client.ObjectKey{
+					Namespace: namespace,
+					Name:      cr.Name,
+				}
+				result = append(result, reconcile.Request{NamespacedName: name})
+			}
+		}
+		if len(result) > 0 {
+			return result
+		}
+		return nil
+	}
+
 	// TODO(beagles):
 	// - Watch for changes to the redis PODs and resync the headless hostnames for the PODs if necessary.
 	return ctrl.NewControllerManagedBy(mgr).
@@ -510,14 +542,27 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
 		// Watch for multipool ConfigMap changes to regenerate pools.yaml
-		Watches(&corev1.ConfigMap{},
-			handler.EnqueueRequestsFromMapFunc(r.findDesignatesForMultipoolConfigMap)).
+		Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(r.findDesignatesForMultipoolConfigMap),
+		).
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(externalBindsFn),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		// Watch for TransportURL Secrets which belong to any TransportURLs created by Designate CRs
-		Watches(&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(transportURLSecretFn)).
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(transportURLSecretFn),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		// Watch for Redis CR changes (e.g. TLS configuration)
-		Watches(&redisv1.Redis{},
-			handler.EnqueueRequestsFromMapFunc(redisWatchFn)).
+		Watches(
+			&redisv1.Redis{},
+			handler.EnqueueRequestsFromMapFunc(redisWatchFn),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Complete(r)
 }
 
@@ -970,6 +1015,97 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
 	}
 	Log.Info("Deployment API task reconciled")
+
+	// Check for external BIND9 configurations.
+	// Note: We can't use getSecret() here as the absence of the secret just means there are
+	// no external binds defined, which is not an error. We need this secret's data
+	// for the pool generator and to create an extra secret for the RNDC keys.
+	// Also note: This is a little problematic with respect to optimization. Any time this
+	// changes we need to:
+	// - rebuild the mountable rndc secret for the workers
+	// - restart the workers ... we should really be starting workers along with mDNS before
+	//   any other designate component.
+	// - regenerate the pools
+
+	externalBindData := make(map[string][]designate.ExternalBind)
+	externalRndcSecretData := make(map[string]string)
+	updateRndcSecret := true
+
+	if instance.Spec.ExternalBindsSecret != "" {
+		externalBindsSecret, hash, err := oko_secret.GetSecret(ctx, helper, instance.Spec.ExternalBindsSecret, instance.Namespace)
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				instance.Status.Conditions.Set(condition.FalseCondition(
+					condition.InputReadyCondition,
+					condition.ErrorReason,
+					condition.SeverityWarning,
+					condition.InputReadyErrorMessage,
+					fmt.Sprintf("External Binds Secret %s not found", instance.Spec.ExternalBindsSecret)))
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.InputReadyErrorMessage,
+				err.Error()))
+			return ctrl.Result{}, err
+		}
+
+		if hash != instance.Status.Hash[designate.ExternalBindsData] {
+			// We only care about the data for the default pool at the moment,
+			// but let's accommodate all for the BYOB case in the future.
+			for poolName, data := range externalBindsSecret.Data {
+				externalBinds, err := designate.ReadExternalBinds(data)
+				if err != nil {
+					instance.Status.Conditions.Set(condition.FalseCondition(
+						condition.InputReadyCondition,
+						condition.ErrorReason,
+						condition.SeverityWarning,
+						condition.InputReadyErrorMessage,
+						err.Error()))
+					return ctrl.Result{}, err
+				}
+				externalBindData[poolName] = externalBinds
+				for i, bind := range externalBinds {
+					rndcBlock := fmt.Sprintf(
+						"key \"%s\" {\n\talgorithm %s;\n\tsecret \"%s\";\n};",
+						bind.RndcKeyName, bind.RndcAlgorithm, bind.RndcSecret,
+					)
+					externalRndcSecretData[fmt.Sprintf("%s-rndc-%d", poolName, i)] = rndcBlock
+				}
+			}
+			instance.Status.Hash[designate.ExternalBindsData] = hash
+		} else {
+			// if the hash is the same, we don't need to update the rndc secret
+			updateRndcSecret = false
+		}
+	} else {
+		instance.Status.Hash[designate.ExternalBindsData] = ""
+	}
+
+	if updateRndcSecret {
+		// Update the rndc secret data
+		labels := labels.GetLabels(instance, labels.GetGroupLabel(instance.Name), map[string]string{})
+		rndcKeySecretData := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      designate.ExternalRndcData,
+				Namespace: instance.Namespace,
+				Labels:    labels,
+			},
+			StringData: externalRndcSecretData,
+		}
+		_, _, err = oko_secret.CreateOrPatchSecret(ctx, helper, instance, rndcKeySecretData)
+		if err != nil {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.InputReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.InputReadyErrorMessage,
+				err.Error()))
+			return ctrl.Result{}, err
+		}
+	}
 
 	// Get multipool configuration once for use in bind IP allocation and pools.yaml generation
 	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)

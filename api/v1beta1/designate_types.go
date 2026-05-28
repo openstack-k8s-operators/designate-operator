@@ -231,6 +231,10 @@ type DesignateSpecBase struct {
 	// +listType=atomic
 	// NSRecords contains the list of nameserver records for the Designate pool
 	NSRecords []DesignateNSRecord `json:"nsRecords,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// ExternalBindsSecret is the name of the secret containing external BIND9 configurations
+	ExternalBindsSecret string `json:"externalBindsSecret,omitempty"`
 }
 
 // DesignateStatus defines the observed state of Designate
