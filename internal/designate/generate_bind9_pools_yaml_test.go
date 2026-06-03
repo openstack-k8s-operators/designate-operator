@@ -283,7 +283,7 @@ func TestGenerateDefaultPool(t *testing.T) {
 		{Hostname: "ns2.example.org.", Priority: 2},
 	}
 
-	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, []ExternalBind{})
+	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, []ExternalBind{}, []string{})
 	if err != nil {
 		t.Fatalf("generateDefaultPool() error = %v", err)
 	}
@@ -457,7 +457,7 @@ func TestSinglePoolModeUsesCRNSRecords(t *testing.T) {
 	}
 
 	// In single-pool mode, generateDefaultPool should use CR NS records
-	pool, err := generateDefaultPool(bindMap, masterHosts, crNSRecords, []ExternalBind{})
+	pool, err := generateDefaultPool(bindMap, masterHosts, crNSRecords, []ExternalBind{}, []string{})
 	if err != nil {
 		t.Fatalf("generateDefaultPool() error = %v", err)
 	}
@@ -602,7 +602,7 @@ func TestGenerateDefaultPoolWithExternalBinds(t *testing.T) {
 		},
 	}
 
-	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, externalBinds)
+	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, externalBinds, []string{})
 	if err != nil {
 		t.Fatalf("generateDefaultPool() error = %v", err)
 	}
@@ -675,7 +675,7 @@ func TestGenerateDefaultPoolWithMultipleExternalBinds(t *testing.T) {
 		},
 	}
 
-	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, externalBinds)
+	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, externalBinds, []string{})
 	if err != nil {
 		t.Fatalf("generateDefaultPool() error = %v", err)
 	}
@@ -733,7 +733,7 @@ func TestGenerateDefaultPoolWithExternalBindsFromYAML(t *testing.T) {
 	}
 	parsedBinds[0].RndcFile = "default-rndc-0"
 
-	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, parsedBinds)
+	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, parsedBinds, []string{})
 	if err != nil {
 		t.Fatalf("generateDefaultPool() error = %v", err)
 	}

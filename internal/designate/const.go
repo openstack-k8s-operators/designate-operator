@@ -114,4 +114,18 @@ const (
 	// ExternalRndcData is the name of the secret for mounting the external binds rndc keys
 	// in the workers.
 	ExternalRndcData = "designate-external-rndc"
+
+	// Fields for Service objects for accessing mDNS/DNS masters from outside the cluster for
+	// external DNS secondaries. Why a label AND an annotation? The label is used to identify the
+	// service as an external master, while the annotation is used to specify the pool name the
+	// external service is intended for. This allows different pools to have different masters
+	// and be configured with different networking as needed.
+
+	// ExternalMasterServiceLabel is the label name for identifying services to be as mDNS
+	// endpoints
+	ExternalMasterServiceLabel = "designate.openstack.org/external_master"
+
+	// ExternalPoolServiceAnnotation is the annotation name for specifying the pool name the external
+	// service is intended for
+	ExternalPoolServiceAnnotation = "designate.openstack.org/external_pool"
 )
