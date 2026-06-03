@@ -13,11 +13,11 @@ require (
 	github.com/openshift/api v3.9.0+incompatible
 	github.com/openstack-k8s-operators/designate-operator/api v0.1.1-0.20240807132522-6c2eca7c6bbb
 	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260508091801-73f228e6af31
-	github.com/openstack-k8s-operators/keystone-operator/api v0.6.1-0.20260507114237-f0b612d6c21f
+	github.com/openstack-k8s-operators/keystone-operator/api v0.6.1-0.20260520090027-4d7b7a01c0bf
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260518125357-72bdd580c587
 	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.6.1-0.20260506154724-30a976ba8ef0
-	github.com/openstack-k8s-operators/lib-common/modules/test v0.6.1-0.20260506154724-30a976ba8ef0
-	github.com/openstack-k8s-operators/mariadb-operator/api v0.6.1-0.20260503164939-40728ae44d65
+	github.com/openstack-k8s-operators/lib-common/modules/test v0.6.1-0.20260518125357-72bdd580c587
+	github.com/openstack-k8s-operators/mariadb-operator/api v0.6.1-0.20260421135251-4fb605db7d18
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.31.14
 	k8s.io/apimachinery v0.31.14
