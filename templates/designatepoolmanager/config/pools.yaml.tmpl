@@ -18,12 +18,18 @@
     {{- range .Nameservers }}
     - host: {{.Host}}
       port: {{.Port}}
+      {{- if .TSIGKeyID }}
+      tsigkey_id: {{.TSIGKeyID}}
+      {{- end }}
     {{- end }}
 
   targets:
     {{- range .Targets }}
     - type: {{.Type}}
       description: {{.Description}}
+      {{- if .TSIGKeyID }}
+      tsigkey_id: {{.TSIGKeyID}}
+      {{- end }}
 
       masters:
         {{- range .Masters }}
@@ -37,6 +43,9 @@
         rndc_host: {{.Options.RNDCHost}}
         rndc_port: {{.Options.RNDCPort}}
         rndc_key_file: {{.Options.RNDCKeyFile}}
+        {{- if .Options.View }}
+        view: {{.Options.View}}
+        {{- end }}
     {{- end }}
 
   {{- if .CatalogZone }}
