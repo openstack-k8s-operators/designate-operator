@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -109,6 +110,41 @@ func getSecret(
 	(*envVars)[prefix+secret.Name] = env.SetValue(hash)
 
 	return ctrl.Result{}, nil
+}
+
+// getExternalMasterServiceIPs returns the LoadBalancer ingress IPs for external master services
+// matching the given pool name. The second return value is true when at least one matching service
+// has no ingress IP yet, signalling that the caller should requeue and retry later.
+func getExternalMasterServiceIPs(ctx context.Context, helper *helper.Helper, instance *designatev1beta1.Designate, poolName string, Log logr.Logger) ([]string, bool, error) {
+	services := &corev1.ServiceList{}
+	err := helper.GetClient().List(ctx, services, client.InNamespace(instance.Namespace), client.MatchingLabels{
+		designate.ExternalMasterServiceLabel: "true",
+		"service":                            "designate-mdns",
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	ips := make([]string, 0, len(services.Items))
+	pendingIngress := false
+	for _, service := range services.Items {
+		if service.Spec.Type != corev1.ServiceTypeLoadBalancer {
+			continue
+		}
+		// If the service is missing the annotation, apply to all pools by skipping the pool name check.
+		servicePool, ok := service.Annotations[designate.ExternalPoolServiceAnnotation]
+		if ok && servicePool != poolName {
+			continue
+		}
+
+		if len(service.Status.LoadBalancer.Ingress) == 0 {
+			Log.Info(fmt.Sprintf("External master Service %s/%s has no LoadBalancer ingress IP yet, will requeue", service.Namespace, service.Name))
+			pendingIngress = true
+			continue
+		}
+		ips = append(ips, service.Status.LoadBalancer.Ingress[0].IP)
+	}
+	sort.Strings(ips)
+	return ips, pendingIngress, nil
 }
 
 // GetClient -
@@ -299,6 +335,7 @@ func (r *DesignateReconciler) validatePoolRemovals(
 // +kubebuilder:rbac:groups="security.openshift.io",resourceNames=anyuid;privileged,resources=securitycontextconstraints,verbs=use
 // +kubebuilder:rbac:groups="",resources=pods,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups="",resources=pods/log,verbs=get
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 
 // Reconcile -
 func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, _err error) {
@@ -503,6 +540,25 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		return result
 	}
 
+	externalMasterServiceFn := func(ctx context.Context, o client.Object) []reconcile.Request {
+		if o.GetLabels()[designate.ExternalMasterServiceLabel] != "true" {
+			return nil
+		}
+
+		designates := &designatev1beta1.DesignateList{}
+		if err := r.List(ctx, designates, client.InNamespace(o.GetNamespace())); err != nil {
+			Log.Error(err, "Unable to retrieve Designate CRs")
+			return nil
+		}
+		var result []reconcile.Request
+		for _, cr := range designates.Items {
+			result = append(result, reconcile.Request{
+				NamespacedName: client.ObjectKey{Namespace: o.GetNamespace(), Name: cr.Name},
+			})
+		}
+		return result
+	}
+
 	// TODO(beagles):
 	// - Watch for changes to the redis PODs and resync the headless hostnames for the PODs if necessary.
 	return ctrl.NewControllerManagedBy(mgr).
@@ -539,6 +595,12 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Watches(
 			&redisv1.Redis{},
 			handler.EnqueueRequestsFromMapFunc(redisWatchFn),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
+		// Watch for external master Service changes (LoadBalancer IP assignments)
+		Watches(
+			&corev1.Service{},
+			handler.EnqueueRequestsFromMapFunc(externalMasterServiceFn),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		Complete(r)
@@ -1005,6 +1067,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 
 	externalBindData := make(map[string][]designate.ExternalBind)
 	externalRndcSecretData := make(map[string]string)
+	externalMasterServiceIPs := make(map[string][]string)
 	updateRndcSecret := false
 
 	if instance.Spec.ExternalBindsSecret != "" {
@@ -1048,9 +1111,18 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 				externalBindData[poolName][i].RndcFile = rndcFilename
 				externalRndcSecretData[rndcFilename] = rndcBlock
 			}
+			var pendingIngress bool
+			externalMasterServiceIPs[poolName], pendingIngress, err = getExternalMasterServiceIPs(ctx, helper, instance, poolName, Log)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if pendingIngress {
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			}
 		}
 		updateRndcSecret = hash != instance.Status.Hash[designate.ExternalBindsData]
 		instance.Status.Hash[designate.ExternalBindsData] = hash
+
 	} else {
 		// No external binds secret, so we need to check if the external rndc secret data is present
 		// and if it is - remove the contents so the workers have up to date.
@@ -1265,7 +1337,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Data: make(map[string]string),
 		}
 
-		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(updatedBindMap, mdnsConfigMap.Data, nsRecords, multipoolConfig, externalBindData)
+		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(updatedBindMap, mdnsConfigMap.Data, nsRecords, multipoolConfig, externalBindData, externalMasterServiceIPs)
 		if err != nil {
 			return ctrl.Result{}, err
 		}

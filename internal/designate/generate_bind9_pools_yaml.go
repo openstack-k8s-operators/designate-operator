@@ -229,7 +229,7 @@ func validateMultipoolConfig(config *MultipoolConfig, azAwareMode designatev1.De
 }
 
 // GeneratePoolsYamlDataAndHash sorts all pool resources to get the correct hash every time
-func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord, multipoolConfig *MultipoolConfig, externalBinds map[string][]ExternalBind) (string, string, error) {
+func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord, multipoolConfig *MultipoolConfig, externalBinds map[string][]ExternalBind, externalMasterServiceIPs map[string][]string) (string, string, error) {
 	masterHosts := make([]string, 0, len(MdnsMap))
 	for _, host := range MdnsMap {
 		masterHosts = append(masterHosts, host)
@@ -239,7 +239,7 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 	var pools []Pool
 
 	if multipoolConfig == nil {
-		pool, err := generateDefaultPool(BindMap, masterHosts, nsRecords, externalBinds["default"])
+		pool, err := generateDefaultPool(BindMap, masterHosts, nsRecords, externalBinds["default"], externalMasterServiceIPs["default"])
 		if err != nil {
 			return "", "", err
 		}
@@ -348,7 +348,7 @@ func createExternalTargetAndNameserver(bindInfo ExternalBind, masters []Master, 
 	return target, nameserver
 }
 
-func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsRecords []designatev1.DesignateNSRecord, externalBinds []ExternalBind) (Pool, error) {
+func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsRecords []designatev1.DesignateNSRecord, externalBinds []ExternalBind, externalMasterServiceIPs []string) (Pool, error) {
 	sortNSRecords(nsRecords)
 
 	bindIPs := make([]string, len(BindMap))
@@ -364,11 +364,14 @@ func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsReco
 		targets[i], nameservers[i] = createTargetAndNameserver(bindIPs[i], i, masters, description, "", "")
 	}
 
-	// NOTE: external BIND9 servers inherit the internal mDNS masters list. These masters may not be
-	// reachable from an external network — the deployer must ensure connectivity (e.g. via NAT, an
-	// exposed mDNS endpoint, or custom master addresses in a future iteration of this feature).
 	externalTargets := make([]Target, len(externalBinds))
 	externalNameservers := make([]Nameserver, len(externalBinds))
+	// Prefer external master service IPs as masters if available; fallback to internal masters if not (may require additional network routing/configuration by the admin).
+	if len(externalMasterServiceIPs) > 0 {
+		masters = createMasters(externalMasterServiceIPs)
+	} else {
+		masters = createMasters(masterHosts)
+	}
 	for i := range externalBinds {
 		description := fmt.Sprintf("External BIND9 Server %d (%s)", i, externalBinds[i].Name)
 		externalTargets[i], externalNameservers[i] = createExternalTargetAndNameserver(externalBinds[i], masters, description)
