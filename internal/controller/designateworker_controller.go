@@ -677,7 +677,6 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	//
 
 	// Define a new Deployment object
-
 	deplDef := designateworker.Deployment(instance, inputHash, serviceLabels, serviceAnnotations, topology)
 	depl := deployment.NewDeployment(
 		deplDef,
@@ -883,7 +882,7 @@ func (r *DesignateWorkerReconciler) createHashOfInputHashes(
 
 	if err != nil {
 		if k8s_errors.IsNotFound(err) {
-			Log.Error(err, "Unable to retrieve extra rndc key - may not be an error")
+			Log.Info("External RNDC key secret not found, may not be created yet")
 		} else {
 			return "", false, err
 		}

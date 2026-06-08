@@ -45,6 +45,13 @@ const (
 	KeystoneSecretName = "%s-keystone-secret" // #nosec G101
 	RabbitmqSecretName = "rabbitmq-secret"
 
+	// Test fixture secret name only; not a real credential.
+	ExternalBindsSecretTestName = "designate-external-binds-test" // #nosec G101
+	ExternalBindAddress         = "192.168.100.50"
+	ExternalBindName            = "bind9-external"
+	// Fake RNDC secret for functional tests only; not a real credential.
+	ExternalRndcSecretValue = "c2VjcmV0MTIz" // #nosec G101
+
 	PublicCertSecretName   = "public-tls-certs"   // #nosec G101
 	InternalCertSecretName = "internal-tls-certs" // #nosec G101
 	CABundleSecretName     = "combined-ca-bundle" // #nosec G101
@@ -616,6 +623,19 @@ func CreateNode(name types.NamespacedName) client.Object {
 		"spec": map[string]any{},
 	}
 	return th.CreateUnstructured(raw)
+}
+
+func CreateExternalBindsSecret(name types.NamespacedName) *corev1.Secret {
+	bindsYAML := fmt.Sprintf("- name: %s\n  address: %s\n  rndcsecret: %s\n",
+		ExternalBindName, ExternalBindAddress, ExternalRndcSecretValue)
+	return th.CreateSecret(name, map[string][]byte{
+		designate.DefaultPoolName: []byte(bindsYAML),
+	})
+}
+
+func createAndSimulateExternalBinds(secretName types.NamespacedName) {
+	secret := CreateExternalBindsSecret(secretName)
+	DeferCleanup(k8sClient.Delete, ctx, secret)
 }
 
 func CreateDesignateNSRecordsConfigMap(name types.NamespacedName) client.Object {

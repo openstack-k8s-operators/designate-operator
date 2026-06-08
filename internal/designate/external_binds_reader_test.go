@@ -42,11 +42,11 @@ func TestReadExternalBinds(t *testing.T) {
   rndcport: 1953
 `,
 			expected: []ExternalBind{
-				{
+				{ //nolint:gosec // G101: test fixture, not a real credential
 					Name:          "bind9-primary",
 					Address:       "192.168.1.10",
 					Port:          5353,
-					RndcHost:      &rndcHost,
+					RndcHost:      rndcHost,
 					RndcKeyName:   "my-custom-key",
 					RndcAlgorithm: "hmac-sha512",
 					RndcSecret:    "c2VjcmV0MTIz",
@@ -62,11 +62,11 @@ func TestReadExternalBinds(t *testing.T) {
   rndcsecret: c2VjcmV0MTIz
 `,
 			expected: []ExternalBind{
-				{
+				{ //nolint:gosec // G101: test fixture, not a real credential
 					Name:          "bind9-minimal",
 					Address:       "192.168.1.10",
 					Port:          DNSPort,
-					RndcHost:      nil,
+					RndcHost:      "192.168.1.10",
 					RndcKeyName:   DefaultRndcKeyName,
 					RndcAlgorithm: DefaultRndcAlgorithm,
 					RndcSecret:    "c2VjcmV0MTIz",
@@ -88,21 +88,21 @@ func TestReadExternalBinds(t *testing.T) {
   rndcsecret: c2VjcmV0Mg==
 `,
 			expected: []ExternalBind{
-				{
+				{ //nolint:gosec // G101: test fixture, not a real credential
 					Name:          "primary",
 					Address:       "192.168.1.10",
 					Port:          5353,
-					RndcHost:      nil,
+					RndcHost:      "192.168.1.10",
 					RndcKeyName:   DefaultRndcKeyName,
 					RndcAlgorithm: DefaultRndcAlgorithm,
 					RndcSecret:    "c2VjcmV0MQ==",
 					RndcPort:      RNDCPort,
 				},
-				{
+				{ //nolint:gosec // G101: test fixture, not a real credential
 					Name:          "secondary",
 					Address:       "192.168.1.11",
 					Port:          DNSPort,
-					RndcHost:      &rndcHost,
+					RndcHost:      rndcHost,
 					RndcKeyName:   "custom-key",
 					RndcAlgorithm: DefaultRndcAlgorithm,
 					RndcSecret:    "c2VjcmV0Mg==",
@@ -131,7 +131,7 @@ func TestReadExternalBinds(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "explicit zero port not overridden",
+			name: "zero port treated as default",
 			input: `
 - name: bind9-zero-port
   address: 192.168.1.10
@@ -140,11 +140,11 @@ func TestReadExternalBinds(t *testing.T) {
   rndcsecret: c2VjcmV0
 `,
 			expected: []ExternalBind{
-				{
+				{ //nolint:gosec // G101: test fixture, not a real credential
 					Name:          "bind9-zero-port",
 					Address:       "192.168.1.10",
 					Port:          DNSPort,
-					RndcHost:      nil,
+					RndcHost:      "192.168.1.10",
 					RndcKeyName:   DefaultRndcKeyName,
 					RndcAlgorithm: DefaultRndcAlgorithm,
 					RndcSecret:    "c2VjcmV0",
@@ -197,10 +197,10 @@ func TestReadExternalBinds(t *testing.T) {
 					t.Errorf("[%d] RndcSecret: got %q, want %q", i, got.RndcSecret, exp.RndcSecret)
 				}
 
-				if (got.RndcHost == nil) != (exp.RndcHost == nil) {
-					t.Errorf("[%d] RndcHost: got %v, want %v", i, got.RndcHost, exp.RndcHost)
-				} else if got.RndcHost != nil && *got.RndcHost != *exp.RndcHost {
-					t.Errorf("[%d] RndcHost: got %q, want %q", i, *got.RndcHost, *exp.RndcHost)
+				if (got.RndcHost == "") != (exp.RndcHost == "") {
+					t.Errorf("[%d] RndcHost: got %q, want %q", i, got.RndcHost, exp.RndcHost)
+				} else if got.RndcHost != "" && got.RndcHost != exp.RndcHost {
+					t.Errorf("[%d] RndcHost: got %q, want %q", i, got.RndcHost, exp.RndcHost)
 				}
 			}
 		})

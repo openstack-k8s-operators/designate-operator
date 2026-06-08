@@ -41,7 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
@@ -928,15 +928,15 @@ func (r *DesignateBackendbind9Reconciler) generateTSIGConfig(
 	var config strings.Builder
 
 	// Add key definition
-	config.WriteString(fmt.Sprintf("key \"%s\" {\n", tsigKey.Name))
-	config.WriteString(fmt.Sprintf("    algorithm %s;\n", tsigKey.Algorithm))
-	config.WriteString(fmt.Sprintf("    secret \"%s\";\n", tsigKey.Secret))
+	fmt.Fprintf(&config, "key \"%s\" {\n", tsigKey.Name)
+	fmt.Fprintf(&config, "    algorithm %s;\n", tsigKey.Algorithm)
+	fmt.Fprintf(&config, "    secret \"%s\";\n", tsigKey.Secret)
 	config.WriteString("};\n\n")
 
 	// Add server blocks for each mdns IP
 	for _, mdnsIP := range mdnsIPs {
-		config.WriteString(fmt.Sprintf("server %s {\n", mdnsIP))
-		config.WriteString(fmt.Sprintf("    keys { %s; };\n", tsigKey.Name))
+		fmt.Fprintf(&config, "server %s {\n", mdnsIP)
+		fmt.Fprintf(&config, "    keys { %s; };\n", tsigKey.Name)
 		config.WriteString("};\n")
 	}
 
