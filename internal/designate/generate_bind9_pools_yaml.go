@@ -86,14 +86,16 @@ type Pool struct {
 
 // Nameserver represents a nameserver configuration
 type Nameserver struct {
-	Host string `yaml:"host"`
-	Port int    `yaml:"port"`
+	Host      string `yaml:"host"`
+	Port      int    `yaml:"port"`
+	TSIGKeyID string `yaml:"tsigkey_id,omitempty"`
 }
 
 // Target represents a designate target configuration
 type Target struct {
 	Type        string   `yaml:"type"`
 	Description string   `yaml:"description"`
+	TSIGKeyID   string   `yaml:"tsigkey_id,omitempty"`
 	Masters     []Master `yaml:"masters"`
 	Options     Options  `yaml:"options"`
 }
@@ -111,6 +113,7 @@ type Options struct {
 	RNDCHost    string `yaml:"rndc_host"`
 	RNDCPort    int    `yaml:"rndc_port"`
 	RNDCKeyFile string `yaml:"rndc_key_file"`
+	View        string `yaml:"view,omitempty"`
 }
 
 // CatalogZone represents a designate catalog zone configuration
@@ -121,11 +124,13 @@ type CatalogZone struct {
 
 // PoolConfig defines configuration for a single pool from the multipool ConfigMap
 type PoolConfig struct {
-	Name         string                          `yaml:"name"`
-	Description  string                          `yaml:"description,omitempty"`
-	Attributes   map[string]string               `yaml:"attributes,omitempty"`
-	BindReplicas int32                           `yaml:"bindReplicas"`
-	NSRecords    []designatev1.DesignateNSRecord `yaml:"nsRecords,omitempty"`
+	Name             string                          `yaml:"name"`
+	Description      string                          `yaml:"description,omitempty"`
+	Attributes       map[string]string               `yaml:"attributes,omitempty"`
+	BindReplicas     int32                           `yaml:"bindReplicas"`
+	NSRecords        []designatev1.DesignateNSRecord `yaml:"nsRecords,omitempty"`
+	View             string                          `yaml:"view,omitempty"`
+	AvailabilityZone *string                         `yaml:"availabilityZone,omitempty"`
 }
 
 // MultipoolConfig defines the complete multipool configuration
@@ -290,14 +295,16 @@ func createMasters(masterHosts []string) []Master {
 }
 
 // createTargetAndNameserver creates Target and Nameserver structs for a bind instance
-func createTargetAndNameserver(bindIP string, globalIndex int, masters []Master, description string) (Target, Nameserver) {
+func createTargetAndNameserver(bindIP string, globalIndex int, masters []Master, description, view, tsigKeyID string) (Target, Nameserver) {
 	nameserver := Nameserver{
-		Host: bindIP,
-		Port: DNSPort,
+		Host:      bindIP,
+		Port:      DNSPort,
+		TSIGKeyID: tsigKeyID,
 	}
 	target := Target{
 		Type:        "bind9",
 		Description: description,
+		TSIGKeyID:   tsigKeyID,
 		Masters:     masters,
 		Options: Options{
 			Host:        bindIP,
@@ -305,6 +312,7 @@ func createTargetAndNameserver(bindIP string, globalIndex int, masters []Master,
 			RNDCHost:    bindIP,
 			RNDCPort:    RNDCPort,
 			RNDCKeyFile: fmt.Sprintf("%s/%s-%d", RndcConfDir, DesignateRndcKey, globalIndex),
+			View:        view,
 		},
 	}
 	return target, nameserver
@@ -323,7 +331,7 @@ func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsReco
 	nameservers := make([]Nameserver, len(bindIPs))
 	for i := range bindIPs {
 		description := fmt.Sprintf("BIND9 Server %d (%s)", i, bindIPs[i])
-		targets[i], nameservers[i] = createTargetAndNameserver(bindIPs[i], i, masters, description)
+		targets[i], nameservers[i] = createTargetAndNameserver(bindIPs[i], i, masters, description, "", "")
 	}
 
 	// Catalog zone is an optional section
@@ -381,7 +389,7 @@ func generateMultiplePools(BindMap map[string]string, masterHosts []string, mult
 		for i := int32(0); i < poolConfig.BindReplicas; i++ {
 			globalIndex := bindIndex - int(poolConfig.BindReplicas) + int(i)
 			description := fmt.Sprintf("BIND9 Server for pool %s (%s)", poolConfig.Name, poolBindIPs[i])
-			targets[i], nameservers[i] = createTargetAndNameserver(poolBindIPs[i], globalIndex, masters, description)
+			targets[i], nameservers[i] = createTargetAndNameserver(poolBindIPs[i], globalIndex, masters, description, poolConfig.View, "")
 		}
 
 		attributes := poolConfig.Attributes
