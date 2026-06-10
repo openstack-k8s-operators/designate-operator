@@ -51,6 +51,8 @@ var (
 	ErrMultipoolConfigKeyMissing = errors.New("multipool ConfigMap missing pools key")
 	// ErrPoolMissingNSRecords is returned when a pool doesn't define NS records in multipool mode
 	ErrPoolMissingNSRecords = errors.New("pool missing NS records in multipool mode")
+	// ErrPoolMissingView is returned when AZ mode is enabled and a pool doesn't have a view
+	ErrPoolMissingView = errors.New("pool missing view in AZ-aware mode")
 )
 
 const (
@@ -140,7 +142,7 @@ type MultipoolConfig struct {
 
 // GetMultipoolConfig reads and parses the multipool ConfigMap
 // Returns nil if ConfigMap doesn't exist
-func GetMultipoolConfig(ctx context.Context, k8sClient client.Client, namespace string) (*MultipoolConfig, error) {
+func GetMultipoolConfig(ctx context.Context, k8sClient client.Client, namespace string, azAwareMode designatev1.DesignateAZMode) (*MultipoolConfig, error) {
 	configMap := &corev1.ConfigMap{}
 	err := k8sClient.Get(ctx, types.NamespacedName{
 		Name:      MultipoolConfigMapName,
@@ -171,7 +173,7 @@ func GetMultipoolConfig(ctx context.Context, k8sClient client.Client, namespace 
 
 	config := &MultipoolConfig{Pools: pools}
 
-	if err := validateMultipoolConfig(config); err != nil {
+	if err := validateMultipoolConfig(config, azAwareMode); err != nil {
 		return nil, fmt.Errorf("invalid multipool config: %w", err)
 	}
 
@@ -179,7 +181,7 @@ func GetMultipoolConfig(ctx context.Context, k8sClient client.Client, namespace 
 }
 
 // validateMultipoolConfig validates the multipool configuration
-func validateMultipoolConfig(config *MultipoolConfig) error {
+func validateMultipoolConfig(config *MultipoolConfig, azAwareMode designatev1.DesignateAZMode) error {
 	if len(config.Pools) == 0 {
 		return ErrNoPoolsDefined
 	}
@@ -207,6 +209,14 @@ func validateMultipoolConfig(config *MultipoolConfig) error {
 		// Validate bindReplicas must be greater than 0
 		if pool.BindReplicas <= 0 {
 			return fmt.Errorf("%w: pool %s has %d", ErrInvalidBindReplicas, pool.Name, pool.BindReplicas)
+		}
+
+		// AZ-aware mode validations
+		if azAwareMode == designatev1.AZModeEnabled {
+			if pool.View == "" {
+				return fmt.Errorf("%w: pool %s", ErrPoolMissingView, pool.Name)
+			}
+			// TODO: Validate pool TSIGKeyID is non-empty once per-pool TSIG keys are implemented
 		}
 	}
 

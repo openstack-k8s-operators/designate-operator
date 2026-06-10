@@ -302,7 +302,7 @@ var _ = Describe("DesignateBackendbind9 controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Verify we can fetch and parse the config
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config).ShouldNot(BeNil())
 			Expect(config.Pools).To(HaveLen(2))
@@ -313,7 +313,7 @@ var _ = Describe("DesignateBackendbind9 controller", func() {
 		})
 
 		It("should not fail if multipool ConfigMap is missing", func() {
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config).Should(BeNil())
 		})
@@ -332,7 +332,7 @@ var _ = Describe("DesignateBackendbind9 controller", func() {
 			Expect(k8sClient.Create(ctx, invalidConfig)).Should(Succeed())
 			DeferCleanup(k8sClient.Delete, ctx, invalidConfig)
 
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).Should(HaveOccurred())
 			Expect(config).Should(BeNil())
 		})
@@ -369,7 +369,7 @@ var _ = Describe("DesignateBackendbind9 controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Fetch and verify pools are sorted alphabetically
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config).ShouldNot(BeNil())
 			Expect(config.Pools).To(HaveLen(3))

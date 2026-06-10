@@ -1171,7 +1171,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileByPoolMode(
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
-	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)
+	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace, "")
 	if err != nil {
 		Log.Error(err, "Failed to get multipool configuration")
 		return ctrl.Result{}, err

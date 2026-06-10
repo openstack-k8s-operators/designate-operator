@@ -61,7 +61,7 @@ var _ = Describe("Designate multipool controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Verify multipool config can be parsed
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config).ShouldNot(BeNil())
 			Expect(config.Pools).To(HaveLen(2))
@@ -88,7 +88,7 @@ var _ = Describe("Designate multipool controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Verify only one pool exists
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config).ShouldNot(BeNil())
 			Expect(config.Pools).To(HaveLen(1))
@@ -123,7 +123,7 @@ var _ = Describe("Designate multipool controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Verify initial state
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config.Pools).To(HaveLen(2))
 
@@ -149,7 +149,7 @@ var _ = Describe("Designate multipool controller", func() {
 			Expect(k8sClient.Update(ctx, multipoolConfig)).Should(Succeed())
 
 			// Verify new state
-			config, err = designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err = designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config.Pools).To(HaveLen(3))
 			Expect(config.Pools[2].Name).To(Equal("pool2"))
@@ -182,7 +182,7 @@ var _ = Describe("Designate multipool controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Verify replica counts
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config.Pools).To(HaveLen(2))
 			Expect(config.Pools[0].BindReplicas).To(Equal(int32(2)))
@@ -222,7 +222,7 @@ var _ = Describe("Designate multipool controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Verify attributes
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config.Pools).To(HaveLen(2))
 			Expect(config.Pools[0].Attributes).To(HaveKeyWithValue("availability_zone", "az1"))
@@ -264,7 +264,7 @@ var _ = Describe("Designate multipool controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Verify pool order matches alphabetical sorting (from code implementation)
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config.Pools).To(HaveLen(3))
 			// Pools should be sorted alphabetically by name
@@ -304,7 +304,7 @@ var _ = Describe("Designate multipool controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Verify per-pool NS records
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config.Pools).To(HaveLen(2))
 
@@ -347,7 +347,7 @@ var _ = Describe("Designate multipool controller", func() {
 			DeferCleanup(k8sClient.Delete, ctx, multipoolConfig)
 
 			// Verify initial replica counts
-			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err := designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config.Pools[0].BindReplicas).To(Equal(int32(1)))
 			Expect(config.Pools[1].BindReplicas).To(Equal(int32(1)))
@@ -368,7 +368,7 @@ var _ = Describe("Designate multipool controller", func() {
 			Expect(k8sClient.Update(ctx, multipoolConfig)).Should(Succeed())
 
 			// Verify updated replica count
-			config, err = designate.GetMultipoolConfig(ctx, k8sClient, namespace)
+			config, err = designate.GetMultipoolConfig(ctx, k8sClient, namespace, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(config.Pools[0].BindReplicas).To(Equal(int32(1)))
 			Expect(config.Pools[1].BindReplicas).To(Equal(int32(3)))

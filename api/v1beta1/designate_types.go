@@ -26,7 +26,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// DesignateAZMode describes the AZ-aware multipool mode setting
+// +kubebuilder:validation:Enum="";Enabled;Disabled
+type DesignateAZMode string
+
 const (
+	// AZModeEnabled activates AZ-aware multipool with BIND views and per-pool TSIG keys
+	AZModeEnabled DesignateAZMode = "Enabled"
+
+	// AZModeDisabled explicitly disables AZ-aware multipool mode
+	AZModeDisabled DesignateAZMode = "Disabled"
+
 	// DbSyncHash hash
 	DbSyncHash = "dbsync"
 
@@ -235,6 +245,12 @@ type DesignateSpecBase struct {
 	// +kubebuilder:validation:Optional
 	// ExternalBindsSecret is the name of the secret containing external BIND9 configurations
 	ExternalBindsSecret string `json:"externalBindsSecret,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// AZAwareMode - when set to "Enabled", activates AZ-aware multipool mode with
+	// BIND views, per-pool TSIG keys, and per-AZ Unbound instances. Requires a valid
+	// multipool ConfigMap with view fields defined for each pool.
+	AZAwareMode DesignateAZMode `json:"azAwareMode,omitempty"`
 }
 
 // DesignateStatus defines the observed state of Designate
