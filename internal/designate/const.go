@@ -104,4 +104,11 @@ const (
 
 	// ACConsumerFinalizer is added to AC secrets that designate is actively consuming
 	ACConsumerFinalizer = "openstack.org/designateapi-ac-consumer"
+
+	// ExternalBindsData is the name of the secret containing external BIND9 configurations
+	ExternalBindsData = "designate-external-binds"
+
+	// ExternalRndcData is the name of the secret for mounting the external binds rndc keys
+	// in the workers.
+	ExternalRndcData = "designate-external-rndc"
 )

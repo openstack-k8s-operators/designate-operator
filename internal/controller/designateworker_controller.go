@@ -285,6 +285,15 @@ func (r *DesignateWorkerReconciler) SetupWithManager(ctx context.Context, mgr ct
 					result = append(result, reconcile.Request{NamespacedName: name})
 				}
 			}
+			// the rndc secret is a computed secret with a fixed name so we can just check by constant.
+			if secretName == designate.ExternalRndcData {
+				name := client.ObjectKey{
+					Namespace: namespace,
+					Name:      cr.Name,
+				}
+				Log.Info(fmt.Sprintf("Secret %s is used by Designate CR %s", secretName, cr.Name))
+				result = append(result, reconcile.Request{NamespacedName: name})
+			}
 		}
 		if len(result) > 0 {
 			return result
@@ -668,6 +677,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	//
 
 	// Define a new Deployment object
+
 	deplDef := designateworker.Deployment(instance, inputHash, serviceLabels, serviceAnnotations, topology)
 	depl := deployment.NewDeployment(
 		deplDef,
@@ -862,8 +872,29 @@ func (r *DesignateWorkerReconciler) createHashOfInputHashes(
 	if err != nil {
 		return secretHash, changed, err
 	}
-
 	envVars[designate.DesignateBindKeySecret] = env.SetValue(secretHash)
+
+	// Make sure we redeploy if the secret changes
+	extraRndcSecret := &corev1.Secret{}
+	err = h.GetClient().Get(ctx, types.NamespacedName{
+		Name:      designate.ExternalRndcData,
+		Namespace: instance.Namespace,
+	}, extraRndcSecret)
+
+	if err != nil {
+		if k8s_errors.IsNotFound(err) {
+			Log.Error(err, "Unable to retrieve extra rndc key - may not be an error")
+		} else {
+			return "", false, err
+		}
+	} else {
+		extraRndcSecretHash, err := secret.Hash(extraRndcSecret)
+		if err != nil {
+			return extraRndcSecretHash, changed, err
+		}
+		envVars[designate.ExternalRndcData] = env.SetValue(extraRndcSecretHash)
+	}
+
 	mergedMapVars := env.MergeEnvs([]corev1.EnvVar{}, envVars)
 	hash, err := util.ObjectHash(mergedMapVars)
 	if err != nil {

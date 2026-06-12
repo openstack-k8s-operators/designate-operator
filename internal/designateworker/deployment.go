@@ -46,17 +46,48 @@ func Deployment(
 	rootUser := int64(0)
 	serviceName := fmt.Sprintf("%s-worker", designate.ServiceName)
 
-	volumeDefs := append(designate.GetStandardVolumeMapping(instance),
-		designate.VolumeMapping{Name: designate.DesignateBindKeySecret, Type: designate.SecretMount, MountPath: "/etc/designate/rndc-keys"})
+	volumes, initVolumeMounts := designate.ProcessVolumes(designate.GetStandardVolumeMapping(instance))
+	projectedVolumes := []corev1.VolumeProjection{
+		{
+			Secret: &corev1.SecretProjection{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: designate.DesignateBindKeySecret,
+				},
+			},
+		},
+		{
+			Secret: &corev1.SecretProjection{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: designate.ExternalRndcData,
+				},
+			},
+		},
+	}
+	var projVolMode int32 = 0640
+	projectedVolume := corev1.Volume{
+		Name: "worker-projected-volumes",
+		VolumeSource: corev1.VolumeSource{
+			Projected: &corev1.ProjectedVolumeSource{
+				Sources:     projectedVolumes,
+				DefaultMode: &projVolMode,
+			},
+		},
+	}
+	volumes = append(volumes, projectedVolume)
 
-	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
-
-	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
-		Name:      designate.MergedVolumeName(instance.Name),
-		MountPath: "/var/lib/kolla/config_files/config.json",
-		SubPath:   serviceName + "-config.json",
-		ReadOnly:  true,
-	})
+	volumeMounts := append(initVolumeMounts,
+		corev1.VolumeMount{
+			Name:      designate.MergedVolumeName(instance.Name),
+			MountPath: "/var/lib/kolla/config_files/config.json",
+			SubPath:   serviceName + "-config.json",
+			ReadOnly:  true,
+		},
+		corev1.VolumeMount{
+			Name:      "worker-projected-volumes",
+			MountPath: "/etc/designate/rndc-keys",
+			ReadOnly:  true,
+		},
+	)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
