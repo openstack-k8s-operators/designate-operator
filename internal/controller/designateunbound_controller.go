@@ -637,10 +637,12 @@ func (r *UnboundReconciler) generateServiceConfigMaps(
 			}
 			return err
 		}
-		bindIPs := make([]string, len(bindIPMap.Data))
+		bindIPs := make([]string, 0, len(bindIPMap.Data))
 		keyTmpl := "bind_address_%d"
 		for i := 0; i < len(bindIPMap.Data); i++ {
-			bindIPs[i] = bindIPMap.Data[fmt.Sprintf(keyTmpl, i)]
+			if ip, ok := bindIPMap.Data[fmt.Sprintf(keyTmpl, i)]; ok {
+				bindIPs = append(bindIPs, ip)
+			}
 		}
 
 		for i := 0; i < len(instance.Spec.StubZones); i++ {
