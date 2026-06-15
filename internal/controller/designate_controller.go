@@ -1108,7 +1108,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	// Get multipool configuration once for use in bind IP allocation and pools.yaml generation
-	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace)
+	multipoolConfig, err := designate.GetMultipoolConfig(ctx, helper.GetClient(), instance.Namespace, instance.Spec.AZAwareMode)
 	if err != nil {
 		Log.Error(err, "Failed to get multipool configuration")
 		return ctrl.Result{}, err
@@ -1690,7 +1690,7 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), map[string]string{})
 
 	var replicas int
-	multipoolConfig, err := designate.GetMultipoolConfig(ctx, h.GetClient(), instance.Namespace)
+	multipoolConfig, err := designate.GetMultipoolConfig(ctx, h.GetClient(), instance.Namespace, instance.Spec.AZAwareMode)
 	if err != nil {
 		Log.Error(err, "Failed to get multipool configuration")
 		return err

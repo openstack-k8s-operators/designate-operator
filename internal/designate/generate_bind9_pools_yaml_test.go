@@ -145,7 +145,120 @@ func TestValidateMultipoolConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateMultipoolConfig(tt.config)
+			err := validateMultipoolConfig(tt.config, "")
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateMultipoolConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil && tt.errMsg != "" {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("validateMultipoolConfig() error = %v, want error containing %v", err, tt.errMsg)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateMultipoolConfigAZMode(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  *MultipoolConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid AZ config with views on all pools",
+			config: &MultipoolConfig{
+				Pools: []PoolConfig{
+					{
+						Name:         "default",
+						BindReplicas: 2,
+						View:         "default",
+						NSRecords: []designatev1.DesignateNSRecord{
+							{Hostname: "ns1.example.org.", Priority: 1},
+						},
+					},
+					{
+						Name:         "pool1",
+						BindReplicas: 2,
+						View:         "az1-view",
+						NSRecords: []designatev1.DesignateNSRecord{
+							{Hostname: "ns2.example.org.", Priority: 1},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "multiple pools sharing same view is valid",
+			config: &MultipoolConfig{
+				Pools: []PoolConfig{
+					{
+						Name:         "default",
+						BindReplicas: 2,
+						View:         "shared-view",
+						NSRecords: []designatev1.DesignateNSRecord{
+							{Hostname: "ns1.example.org.", Priority: 1},
+						},
+					},
+					{
+						Name:         "pool1",
+						BindReplicas: 2,
+						View:         "shared-view",
+						NSRecords: []designatev1.DesignateNSRecord{
+							{Hostname: "ns2.example.org.", Priority: 1},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "reject pool missing view in AZ mode",
+			config: &MultipoolConfig{
+				Pools: []PoolConfig{
+					{
+						Name:         "default",
+						BindReplicas: 2,
+						View:         "default",
+						NSRecords: []designatev1.DesignateNSRecord{
+							{Hostname: "ns1.example.org.", Priority: 1},
+						},
+					},
+					{
+						Name:         "pool1",
+						BindReplicas: 2,
+						NSRecords: []designatev1.DesignateNSRecord{
+							{Hostname: "ns2.example.org.", Priority: 1},
+						},
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "pool missing view in AZ-aware mode",
+		},
+		{
+			name: "reject default pool missing view in AZ mode",
+			config: &MultipoolConfig{
+				Pools: []PoolConfig{
+					{
+						Name:         "default",
+						BindReplicas: 2,
+						NSRecords: []designatev1.DesignateNSRecord{
+							{Hostname: "ns1.example.org.", Priority: 1},
+						},
+					},
+				},
+			},
+			wantErr: true,
+			errMsg:  "pool missing view in AZ-aware mode: pool default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateMultipoolConfig(tt.config, designatev1.AZModeEnabled)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateMultipoolConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
