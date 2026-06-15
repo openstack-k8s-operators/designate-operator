@@ -82,15 +82,10 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 
 	livenessProbe.Exec = &corev1.ExecAction{
 		Command: []string{
-			"/usr/sbin/unbound-streamtcp", "-u", ".", "SOA", "IN",
+			"/usr/bin/pgrep", "-r", "DRST", "-f", "unbound",
 		},
 	}
-
-	readinessProbe.Exec = &corev1.ExecAction{
-		Command: []string{
-			"/usr/sbin/unbound-streamtcp", "-u", ".", "SOA", "IN",
-		},
-	}
+	readinessProbe.Exec = livenessProbe.Exec
 
 	envVars := map[string]env.Setter{}
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
