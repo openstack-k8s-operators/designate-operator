@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# This is a base script which will verify Bind9 & Mdns predictable IPs.
+# This is a base script which will verify Bind9, Mdns & Unbound predictable IPs.
 #
 # Check Bind9 predictable IPs configmap
 NUM_OF_SERVICES=$1
@@ -30,4 +30,18 @@ for ip in $mdns_ips; do
         exit 1
     fi
 done
-echo "Bind9 & Mdns predictable IPs were verified successfully"
+
+# Check Unbound predictable IPs configmap
+unbound_ips=$(oc get -n $NAMESPACE configmap designate-unbound-ip-map -o json | jq -r '.data | with_entries(select(.key | test("unbound_address_"))) | values[]')
+if [ $(echo "$unbound_ips" | wc -l) -ne ${NUM_OF_SERVICES} ]; then
+    echo "Expected ${NUM_OF_SERVICES} unbound addresses, found $(echo "$unbound_ips" | wc -l)"
+    echo "IPS: $unbound_ips"
+    exit 1
+fi
+for ip in $unbound_ips; do
+    if [[ ! $ip =~ ^172\.28\.0\.[0-9]+$ ]]; then
+        echo "Invalid unbound IP format: $ip"
+        exit 1
+    fi
+done
+echo "Bind9, Mdns & Unbound predictable IPs were verified successfully"

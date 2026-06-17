@@ -47,6 +47,10 @@ type DesignateUnboundSpecBase struct {
 	ServiceAccount string `json:"serviceAccount"`
 
 	// +kubebuilder:validation:Optional
+	// NetUtilsImage - NetUtils container image
+	NetUtilsImage string `json:"netUtilsImage"`
+
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=1
 	// +kubebuilder:validation:Maximum=32
 	// +kubebuilder:validation:Minimum=0

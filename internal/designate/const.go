@@ -54,6 +54,9 @@ const (
 	// BindPredIPConfigMap is the name of the ConfigMap containing bind predictable IP mappings
 	BindPredIPConfigMap = "designate-bind-ip-map"
 
+	// UnboundPredIPConfigMap is the name of the ConfigMap containing Unbound predictable IP mappings
+	UnboundPredIPConfigMap = "designate-unbound-ip-map"
+
 	// RndcConfDir is the directory path for RNDC configuration files
 	RndcConfDir = "/etc/designate/rndc-keys"
 

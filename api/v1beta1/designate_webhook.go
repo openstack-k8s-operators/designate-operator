@@ -98,6 +98,9 @@ func (spec *DesignateSpec) Default() {
 	if spec.DesignateUnbound.ContainerImage == "" {
 		spec.DesignateUnbound.ContainerImage = designateDefaults.UnboundContainerImageURL
 	}
+	if spec.DesignateUnbound.NetUtilsImage == "" {
+		spec.DesignateUnbound.NetUtilsImage = designateDefaults.NetUtilsURL
+	}
 }
 
 func (spec *DesignateSpecBase) Default() {

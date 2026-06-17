@@ -31,10 +31,6 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-const (
-	configVolume = "designateunbound-config"
-)
-
 // StatefulSet func
 func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 	configHash string,
@@ -42,26 +38,18 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 	annotations map[string]string,
 	topology *topologyv1.Topology,
 ) *appsv1.StatefulSet {
-	var configMode int32 = 0640
 
-	volumes := []corev1.Volume{
-		{
-			Name: configVolume,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &configMode,
-					SecretName:  fmt.Sprintf("%s-config-data", instance.Name),
-				},
-			},
-		},
+	volumeDefs := []designate.VolumeMapping{
+		{Name: designate.ScriptsVolumeName(instance.Name), Type: designate.ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
+		{Name: designate.ConfigVolumeName(instance.Name), Type: designate.SecretMount, MountPath: "/etc/unbound/conf.d"},
 	}
-	mounts := []corev1.VolumeMount{
-		{
-			Name:      configVolume,
-			MountPath: "/etc/unbound/conf.d",
-			ReadOnly:  true,
-		},
+	if instance.Spec.NetUtilsImage != "" && len(instance.Spec.NetworkAttachments) > 0 {
+		volumeDefs = append(volumeDefs, designate.VolumeMapping{
+			Name: designate.UnboundPredIPConfigMap, Type: designate.ConfigMount, MountPath: "/var/lib/predictableips",
+		})
 	}
+
+	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -126,7 +114,7 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 							RunAsUser: ptr.To[int64](0),
 						},
 						Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-						VolumeMounts:   mounts,
+						VolumeMounts:   initVolumeMounts,
 						Resources:      instance.Spec.Resources,
 						ReadinessProbe: readinessProbe,
 						LivenessProbe:  livenessProbe,
@@ -157,5 +145,23 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 			corev1.LabelHostname,
 		)
 	}
+
+	if instance.Spec.NetUtilsImage != "" && len(instance.Spec.NetworkAttachments) > 0 {
+		envVars = map[string]env.Setter{}
+		envVars["POD_NAME"] = env.DownwardAPI("metadata.name")
+		envVars["MAP_PREFIX"] = env.SetValue("unbound_address_")
+		podEnv := env.MergeEnvs([]corev1.EnvVar{}, envVars)
+		predIPContainerDetails := designate.PredIPContainerDetails{
+			ContainerImage: instance.Spec.NetUtilsImage,
+			VolumeMounts:   initVolumeMounts,
+			EnvVars:        podEnv,
+			Command:        designate.PredictableIPCommand,
+		}
+
+		statefulSet.Spec.Template.Spec.InitContainers = []corev1.Container{
+			designate.PredictableIPContainer(predIPContainerDetails),
+		}
+	}
+
 	return statefulSet
 }
