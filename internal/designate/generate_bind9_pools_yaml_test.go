@@ -19,6 +19,7 @@ package designate
 import (
 	"strings"
 	"testing"
+	"text/template"
 
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 )
@@ -754,5 +755,323 @@ func TestGenerateDefaultPoolWithExternalBindsFromYAML(t *testing.T) {
 	}
 	if externalTarget.Options.RNDCPort != RNDCPort {
 		t.Errorf("expected external RNDC port %d, got %d", RNDCPort, externalTarget.Options.RNDCPort)
+	}
+}
+
+func TestGenerateMultiplePoolsWithView(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+		"bind_address_1": "192.168.1.11",
+		"bind_address_2": "192.168.1.12",
+		"bind_address_3": "192.168.1.13",
+	}
+	masterHosts := []string{"192.168.1.20"}
+
+	multipoolConfig := &MultipoolConfig{
+		Pools: []PoolConfig{
+			{
+				Name:         "default",
+				Description:  "Default Pool",
+				BindReplicas: 2,
+				View:         "az1-view",
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns1.example.org.", Priority: 1},
+				},
+			},
+			{
+				Name:         "pool1",
+				Description:  "Pool 1",
+				BindReplicas: 2,
+				View:         "az2-view",
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns2.example.org.", Priority: 1},
+				},
+			},
+		},
+	}
+
+	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig)
+	if err != nil {
+		t.Fatalf("generateMultiplePools() error = %v", err)
+	}
+
+	if len(pools) != 2 {
+		t.Fatalf("expected 2 pools, got %d", len(pools))
+	}
+
+	// Verify view is set in Options for default pool
+	for _, target := range pools[0].Targets {
+		if target.Options.View != "az1-view" {
+			t.Errorf("expected default pool target options view 'az1-view', got '%s'", target.Options.View)
+		}
+	}
+
+	// Verify view is set in Options for pool1
+	for _, target := range pools[1].Targets {
+		if target.Options.View != "az2-view" {
+			t.Errorf("expected pool1 target options view 'az2-view', got '%s'", target.Options.View)
+		}
+	}
+}
+
+func TestGenerateMultiplePoolsViewOmittedWhenEmpty(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+		"bind_address_1": "192.168.1.11",
+	}
+	masterHosts := []string{"192.168.1.20"}
+
+	multipoolConfig := &MultipoolConfig{
+		Pools: []PoolConfig{
+			{
+				Name:         "default",
+				Description:  "Default Pool",
+				BindReplicas: 1,
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns1.example.org.", Priority: 1},
+				},
+			},
+			{
+				Name:         "pool1",
+				Description:  "Pool 1",
+				BindReplicas: 1,
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns2.example.org.", Priority: 1},
+				},
+			},
+		},
+	}
+
+	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig)
+	if err != nil {
+		t.Fatalf("generateMultiplePools() error = %v", err)
+	}
+
+	// When view is not set, Options.View should be empty
+	for _, pool := range pools {
+		for _, target := range pool.Targets {
+			if target.Options.View != "" {
+				t.Errorf("expected empty view when not set, got '%s' in pool %s", target.Options.View, pool.Name)
+			}
+		}
+	}
+
+	// TSIGKeyID should also be empty when not set
+	for _, pool := range pools {
+		for _, target := range pool.Targets {
+			if target.TSIGKeyID != "" {
+				t.Errorf("expected empty TSIGKeyID when not set, got '%s' in pool %s", target.TSIGKeyID, pool.Name)
+			}
+		}
+		for _, ns := range pool.Nameservers {
+			if ns.TSIGKeyID != "" {
+				t.Errorf("expected empty TSIGKeyID on nameserver when not set, got '%s' in pool %s", ns.TSIGKeyID, pool.Name)
+			}
+		}
+	}
+}
+
+func TestValidateMultipoolConfigAZModeDisabled(t *testing.T) {
+	// When AZ mode is disabled or empty, view validation should be skipped
+	configWithoutViews := &MultipoolConfig{
+		Pools: []PoolConfig{
+			{
+				Name:         "default",
+				BindReplicas: 2,
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns1.example.org.", Priority: 1},
+				},
+			},
+			{
+				Name:         "pool1",
+				BindReplicas: 2,
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns2.example.org.", Priority: 1},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		azMode  designatev1.DesignateAZMode
+		wantErr bool
+	}{
+		{
+			name:    "empty string (default) skips view validation",
+			azMode:  "",
+			wantErr: false,
+		},
+		{
+			name:    "explicit Disabled skips view validation",
+			azMode:  designatev1.AZModeDisabled,
+			wantErr: false,
+		},
+		{
+			name:    "Enabled requires views",
+			azMode:  designatev1.AZModeEnabled,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateMultipoolConfig(configWithoutViews, tt.azMode)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateMultipoolConfig() with azMode=%q error = %v, wantErr %v", tt.azMode, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestTemplateRenderingWithView(t *testing.T) {
+	pools := []Pool{
+		{
+			Name:        "default",
+			Description: "Default Pool",
+			Attributes:  map[string]string{"zone": "az1"},
+			NSRecords: []designatev1.DesignateNSRecord{
+				{Hostname: "ns1.example.org.", Priority: 1},
+			},
+			Nameservers: []Nameserver{
+				{Host: "192.168.1.10", Port: 53},
+			},
+			Targets: []Target{
+				{
+					Type:        "bind9",
+					Description: "BIND9 Server",
+					Masters:     []Master{{Host: "192.168.1.20", Port: 5354}},
+					Options: Options{
+						Host:        "192.168.1.10",
+						Port:        53,
+						RNDCHost:    "192.168.1.10",
+						RNDCPort:    953,
+						RNDCKeyFile: "/etc/designate/rndc-keys/rndc-key-0",
+						View:        "az1-view",
+					},
+				},
+			},
+		},
+	}
+
+	tmpl, err := template.ParseFiles("../../templates/designatepoolmanager/config/pools.yaml.tmpl")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
+	}
+
+	var buf strings.Builder
+	err = tmpl.Execute(&buf, pools)
+	if err != nil {
+		t.Fatalf("failed to execute template: %v", err)
+	}
+
+	output := buf.String()
+
+	if !strings.Contains(output, "view: az1-view") {
+		t.Errorf("expected rendered output to contain 'view: az1-view', got:\n%s", output)
+	}
+}
+
+func TestTemplateRenderingWithTSIGKeyID(t *testing.T) {
+	pools := []Pool{
+		{
+			Name:        "default",
+			Description: "Default Pool",
+			Attributes:  map[string]string{},
+			NSRecords: []designatev1.DesignateNSRecord{
+				{Hostname: "ns1.example.org.", Priority: 1},
+			},
+			Nameservers: []Nameserver{
+				{Host: "192.168.1.10", Port: 53, TSIGKeyID: "abc-123-tsig-key"},
+			},
+			Targets: []Target{
+				{
+					Type:        "bind9",
+					Description: "BIND9 Server",
+					TSIGKeyID:   "abc-123-tsig-key",
+					Masters:     []Master{{Host: "192.168.1.20", Port: 5354}},
+					Options: Options{
+						Host:        "192.168.1.10",
+						Port:        53,
+						RNDCHost:    "192.168.1.10",
+						RNDCPort:    953,
+						RNDCKeyFile: "/etc/designate/rndc-keys/rndc-key-0",
+					},
+				},
+			},
+		},
+	}
+
+	tmpl, err := template.ParseFiles("../../templates/designatepoolmanager/config/pools.yaml.tmpl")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
+	}
+
+	var buf strings.Builder
+	err = tmpl.Execute(&buf, pools)
+	if err != nil {
+		t.Fatalf("failed to execute template: %v", err)
+	}
+
+	output := buf.String()
+
+	if !strings.Contains(output, "tsigkey_id: abc-123-tsig-key") {
+		t.Errorf("expected rendered output to contain 'tsigkey_id: abc-123-tsig-key', got:\n%s", output)
+	}
+
+	// tsigkey_id should appear in both nameservers and targets sections
+	if strings.Count(output, "tsigkey_id: abc-123-tsig-key") < 2 {
+		t.Errorf("expected tsigkey_id to appear in both nameserver and target, got:\n%s", output)
+	}
+}
+
+func TestTemplateRenderingOmitsEmptyViewAndTSIG(t *testing.T) {
+	pools := []Pool{
+		{
+			Name:        "default",
+			Description: "Default Pool",
+			Attributes:  map[string]string{},
+			NSRecords: []designatev1.DesignateNSRecord{
+				{Hostname: "ns1.example.org.", Priority: 1},
+			},
+			Nameservers: []Nameserver{
+				{Host: "192.168.1.10", Port: 53},
+			},
+			Targets: []Target{
+				{
+					Type:        "bind9",
+					Description: "BIND9 Server",
+					Masters:     []Master{{Host: "192.168.1.20", Port: 5354}},
+					Options: Options{
+						Host:        "192.168.1.10",
+						Port:        53,
+						RNDCHost:    "192.168.1.10",
+						RNDCPort:    953,
+						RNDCKeyFile: "/etc/designate/rndc-keys/rndc-key-0",
+					},
+				},
+			},
+		},
+	}
+
+	tmpl, err := template.ParseFiles("../../templates/designatepoolmanager/config/pools.yaml.tmpl")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
+	}
+
+	var buf strings.Builder
+	err = tmpl.Execute(&buf, pools)
+	if err != nil {
+		t.Fatalf("failed to execute template: %v", err)
+	}
+
+	output := buf.String()
+
+	if strings.Contains(output, "view:") {
+		t.Errorf("expected rendered output to NOT contain 'view:' when view is empty, got:\n%s", output)
+	}
+
+	if strings.Contains(output, "tsigkey_id:") {
+		t.Errorf("expected rendered output to NOT contain 'tsigkey_id:' when TSIGKeyID is empty, got:\n%s", output)
 	}
 }
