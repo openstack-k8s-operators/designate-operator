@@ -28,6 +28,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -60,6 +61,10 @@ func Deployment(
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: designate.ExternalRndcData,
 				},
+				// While the operator should ensure that this secret is always present,
+				// hedge our bets in case something happens where the deployment spec somehow
+				// takes affect before the rndc secret is available.
+				Optional: ptr.To(true),
 			},
 		},
 	}

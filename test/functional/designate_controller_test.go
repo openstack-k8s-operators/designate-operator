@@ -22,13 +22,14 @@ import (
 	"net"
 	"regexp"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2" //revive:disable:dot-imports
 	. "github.com/onsi/gomega"    //revive:disable:dot-imports
 	"k8s.io/apimachinery/pkg/types"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 
@@ -847,15 +848,279 @@ var _ = Describe("Designate controller", func() {
 				allNSRecords = append(allNSRecords, nsRecords...)
 			}
 
-			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil)
+			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind))
 			Expect(err).ToNot(HaveOccurred())
 
 			// we used to have inconsistent ordering, so generate the pools.yaml 10 times and make sure it is has exactly the same content
 			for range 10 {
-				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil)
+				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(poolsYamlHash).Should(Equal(newPoolsYamlHash))
 			}
+		})
+
+		It("should create an empty designate-external-rndc secret", func() {
+			Eventually(func(g Gomega) {
+				secret := th.GetSecret(types.NamespacedName{
+					Name:      designate.ExternalRndcData,
+					Namespace: namespace,
+				})
+				g.Expect(secret).ToNot(BeNil())
+				g.Expect(secret.Data).To(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	When("Designate is configured with external BIND9 servers", func() {
+		var externalBindsSecretName types.NamespacedName
+
+		BeforeEach(func() {
+			externalBindsSecretName = types.NamespacedName{
+				Namespace: namespace,
+				Name:      ExternalBindsSecretTestName,
+			}
+			spec["externalBindsSecret"] = ExternalBindsSecretTestName
+
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			createAndSimulateDB(spec)
+			createAndSimulateExternalBinds(externalBindsSecretName)
+
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+
+			createAndSimulateBind9(designateBind9Name)
+			createAndSimulateMdns(designateMdnsName)
+			createAndSimulateNSRecordsConfigMap(designateNSRecordConfigMapName)
+			simulateCentralReadyCount(designateName, 1)
+		})
+
+		It("creates designate-external-rndc secret with RNDC key blocks", func() {
+			Eventually(func(g Gomega) {
+				secret := th.GetSecret(types.NamespacedName{
+					Name:      designate.ExternalRndcData,
+					Namespace: namespace,
+				})
+				g.Expect(secret).ToNot(BeNil())
+				g.Expect(secret.Data).To(HaveKey("default-rndc-0"))
+
+				rndcBlock := string(secret.Data["default-rndc-0"])
+				g.Expect(rndcBlock).To(ContainSubstring(`key "rndc-key"`))
+				g.Expect(rndcBlock).To(ContainSubstring("algorithm hmac-sha256"))
+				g.Expect(rndcBlock).To(ContainSubstring(fmt.Sprintf(`secret "%s"`, ExternalRndcSecretValue)))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("records external binds secret hash in status", func() {
+			Eventually(func(g Gomega) {
+				designateCR := GetDesignate(designateName)
+				g.Expect(designateCR.Status.Hash[designate.ExternalBindsData]).ToNot(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("includes external BIND9 targets in pools.yaml", func() {
+			Eventually(func(g Gomega) {
+				poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
+					Name:      designate.PoolsYamlConfigMap,
+					Namespace: namespace,
+				})
+				g.Expect(poolsYamlConfigMap).ToNot(BeNil())
+
+				var pools []designate.Pool
+				err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(pools).To(HaveLen(1))
+
+				pool := pools[0]
+				g.Expect(pool.Targets).To(HaveLen(bind9ReplicaCount + 1))
+				g.Expect(pool.Nameservers).To(HaveLen(bind9ReplicaCount + 1))
+
+				externalTarget := pool.Targets[len(pool.Targets)-1]
+				g.Expect(externalTarget.Type).To(Equal("bind9"))
+				g.Expect(externalTarget.Description).To(Equal(
+					fmt.Sprintf("External BIND9 Server 0 (%s)", ExternalBindName)))
+				g.Expect(externalTarget.Options.Host).To(Equal(ExternalBindAddress))
+				g.Expect(externalTarget.Options.RNDCHost).To(Equal(ExternalBindAddress))
+				g.Expect(externalTarget.Options.Port).To(Equal(53))
+				g.Expect(externalTarget.Options.RNDCPort).To(Equal(953))
+				g.Expect(externalTarget.Options.RNDCKeyFile).To(Equal(
+					fmt.Sprintf("%s/default-rndc-0", designate.RndcConfDir)))
+
+				externalNameserver := pool.Nameservers[len(pool.Nameservers)-1]
+				g.Expect(externalNameserver.Host).To(Equal(ExternalBindAddress))
+				g.Expect(externalNameserver.Port).To(Equal(53))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("mounts external RNDC keys in worker deployment", func() {
+			workerDeploymentName := types.NamespacedName{
+				Namespace: namespace,
+				Name:      fmt.Sprintf("%s-worker", designateName.Name),
+			}
+
+			Eventually(func(g Gomega) {
+				deployment := &appsv1.Deployment{}
+				g.Expect(k8sClient.Get(ctx, workerDeploymentName, deployment)).Should(Succeed())
+
+				var projectedVolume *corev1.Volume
+				for i := range deployment.Spec.Template.Spec.Volumes {
+					if deployment.Spec.Template.Spec.Volumes[i].Name == "worker-projected-volumes" {
+						projectedVolume = &deployment.Spec.Template.Spec.Volumes[i]
+						break
+					}
+				}
+				g.Expect(projectedVolume).ToNot(BeNil())
+
+				foundExternalRndc := false
+				for _, source := range projectedVolume.VolumeSource.Projected.Sources {
+					if source.Secret != nil && source.Secret.Name == designate.ExternalRndcData {
+						foundExternalRndc = true
+						g.Expect(source.Secret.Optional).ToNot(BeNil())
+						g.Expect(*source.Secret.Optional).To(BeTrue())
+					}
+				}
+				g.Expect(foundExternalRndc).To(BeTrue())
+
+				var rndcMount *corev1.VolumeMount
+				for i := range deployment.Spec.Template.Spec.Containers[0].VolumeMounts {
+					if deployment.Spec.Template.Spec.Containers[0].VolumeMounts[i].Name == "worker-projected-volumes" {
+						rndcMount = &deployment.Spec.Template.Spec.Containers[0].VolumeMounts[i]
+						break
+					}
+				}
+				g.Expect(rndcMount).ToNot(BeNil())
+				g.Expect(rndcMount.MountPath).To(Equal(designate.RndcConfDir))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	When("external binds secret is not found", func() {
+		BeforeEach(func() {
+			spec["externalBindsSecret"] = "nonexistent-external-binds-secret"
+
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			createAndSimulateDB(spec)
+
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+		})
+
+		It("should set InputReady condition to False", func() {
+			Eventually(func(g Gomega) {
+				designateCR := GetDesignate(designateName)
+				cond := designateCR.Status.Conditions.Get(condition.InputReadyCondition)
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Status).To(Equal(corev1.ConditionFalse))
+				g.Expect(cond.Message).To(ContainSubstring("External Binds Secret nonexistent-external-binds-secret not found"))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	When("external binds secret is removed from spec", func() {
+		var externalBindsSecretName types.NamespacedName
+
+		BeforeEach(func() {
+			externalBindsSecretName = types.NamespacedName{
+				Namespace: namespace,
+				Name:      ExternalBindsSecretTestName,
+			}
+			spec["externalBindsSecret"] = ExternalBindsSecretTestName
+
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			createAndSimulateDB(spec)
+			createAndSimulateExternalBinds(externalBindsSecretName)
+
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+
+			createAndSimulateBind9(designateBind9Name)
+			createAndSimulateMdns(designateMdnsName)
+			createAndSimulateNSRecordsConfigMap(designateNSRecordConfigMapName)
+			simulateCentralReadyCount(designateName, 1)
+		})
+
+		It("clears external BIND9 targets from pools.yaml", func() {
+			Eventually(func(g Gomega) {
+				poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
+					Name:      designate.PoolsYamlConfigMap,
+					Namespace: namespace,
+				})
+				var pools []designate.Pool
+				err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(pools[0].Targets).To(HaveLen(bind9ReplicaCount + 1))
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				designateCR := GetDesignate(designateName)
+				designateCR.Spec.ExternalBindsSecret = ""
+				g.Expect(k8sClient.Update(ctx, designateCR)).Should(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			simulateCentralReadyCount(designateName, 1)
+
+			Eventually(func(g Gomega) {
+				poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
+					Name:      designate.PoolsYamlConfigMap,
+					Namespace: namespace,
+				})
+				var pools []designate.Pool
+				err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(pools[0].Targets).To(HaveLen(bind9ReplicaCount))
+				g.Expect(pools[0].Nameservers).To(HaveLen(bind9ReplicaCount))
+
+				for _, target := range pools[0].Targets {
+					g.Expect(target.Description).ToNot(ContainSubstring("External BIND9 Server"))
+				}
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("clears designate-external-rndc secret data", func() {
+			Eventually(func(g Gomega) {
+				secret := th.GetSecret(types.NamespacedName{
+					Name:      designate.ExternalRndcData,
+					Namespace: namespace,
+				})
+				g.Expect(secret.Data).To(HaveKey("default-rndc-0"))
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				designateCR := GetDesignate(designateName)
+				designateCR.Spec.ExternalBindsSecret = ""
+				g.Expect(k8sClient.Update(ctx, designateCR)).Should(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				secret := th.GetSecret(types.NamespacedName{
+					Name:      designate.ExternalRndcData,
+					Namespace: namespace,
+				})
+				g.Expect(secret.Data).To(BeEmpty())
+
+				designateCR := GetDesignate(designateName)
+				g.Expect(designateCR.Status.Hash[designate.ExternalBindsData]).To(BeEmpty())
+			}, timeout, interval).Should(Succeed())
 		})
 	})
 

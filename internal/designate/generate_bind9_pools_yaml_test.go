@@ -283,7 +283,7 @@ func TestGenerateDefaultPool(t *testing.T) {
 		{Hostname: "ns2.example.org.", Priority: 2},
 	}
 
-	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords)
+	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, []ExternalBind{})
 	if err != nil {
 		t.Fatalf("generateDefaultPool() error = %v", err)
 	}
@@ -457,7 +457,7 @@ func TestSinglePoolModeUsesCRNSRecords(t *testing.T) {
 	}
 
 	// In single-pool mode, generateDefaultPool should use CR NS records
-	pool, err := generateDefaultPool(bindMap, masterHosts, crNSRecords)
+	pool, err := generateDefaultPool(bindMap, masterHosts, crNSRecords, []ExternalBind{})
 	if err != nil {
 		t.Fatalf("generateDefaultPool() error = %v", err)
 	}
@@ -476,5 +476,283 @@ func TestSinglePoolModeUsesCRNSRecords(t *testing.T) {
 
 	if pool.NSRecords[1].Hostname != "ns2-cr-single.example.org." {
 		t.Errorf("expected single-pool mode to use CR NS record 'ns2-cr-single.example.org.', got %s", pool.NSRecords[1].Hostname)
+	}
+}
+
+func TestCreateExternalTargetAndNameserver(t *testing.T) {
+	masters := []Master{{Host: "192.168.1.20", Port: MdnsMasterPort}}
+
+	tests := []struct {
+		name            string
+		bindInfo        ExternalBind
+		description     string
+		wantHost        string
+		wantPort        int
+		wantRndcHost    string
+		wantRndcPort    int
+		wantRndcKeyFile string
+	}{
+		{
+			name: "minimal external bind with defaults",
+			bindInfo: ExternalBind{
+				Name:     "bind9-external",
+				Address:  "192.168.100.50",
+				Port:     DNSPort,
+				RndcHost: "192.168.100.50",
+				RndcPort: RNDCPort,
+				RndcFile: "default-rndc-0",
+			},
+			description:     "External BIND9 Server 0 (bind9-external)",
+			wantHost:        "192.168.100.50",
+			wantPort:        DNSPort,
+			wantRndcHost:    "192.168.100.50",
+			wantRndcPort:    RNDCPort,
+			wantRndcKeyFile: "/etc/designate/rndc-keys/default-rndc-0",
+		},
+		{
+			name: "custom ports and separate rndc host",
+			bindInfo: ExternalBind{
+				Name:     "bind9-primary",
+				Address:  "192.168.1.10",
+				Port:     5353,
+				RndcHost: "10.0.0.99",
+				RndcPort: 1953,
+				RndcFile: "default-rndc-1",
+			},
+			description:     "External BIND9 Server 1 (bind9-primary)",
+			wantHost:        "192.168.1.10",
+			wantPort:        5353,
+			wantRndcHost:    "10.0.0.99",
+			wantRndcPort:    1953,
+			wantRndcKeyFile: "/etc/designate/rndc-keys/default-rndc-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target, nameserver := createExternalTargetAndNameserver(tt.bindInfo, masters, tt.description)
+
+			if target.Type != "bind9" {
+				t.Errorf("expected target type 'bind9', got %s", target.Type)
+			}
+			if target.Description != tt.description {
+				t.Errorf("expected description %q, got %q", tt.description, target.Description)
+			}
+			if target.TSIGKeyID != "" {
+				t.Errorf("expected empty TSIGKeyID for external target, got %q", target.TSIGKeyID)
+			}
+			if len(target.Masters) != 1 {
+				t.Fatalf("expected 1 master, got %d", len(target.Masters))
+			}
+			if target.Masters[0].Host != "192.168.1.20" {
+				t.Errorf("expected master host '192.168.1.20', got %s", target.Masters[0].Host)
+			}
+			if target.Masters[0].Port != MdnsMasterPort {
+				t.Errorf("expected master port %d, got %d", MdnsMasterPort, target.Masters[0].Port)
+			}
+			if target.Options.Host != tt.wantHost {
+				t.Errorf("expected options host %q, got %q", tt.wantHost, target.Options.Host)
+			}
+			if target.Options.Port != tt.wantPort {
+				t.Errorf("expected options port %d, got %d", tt.wantPort, target.Options.Port)
+			}
+			if target.Options.RNDCHost != tt.wantRndcHost {
+				t.Errorf("expected RNDC host %q, got %q", tt.wantRndcHost, target.Options.RNDCHost)
+			}
+			if target.Options.RNDCPort != tt.wantRndcPort {
+				t.Errorf("expected RNDC port %d, got %d", tt.wantRndcPort, target.Options.RNDCPort)
+			}
+			if target.Options.RNDCKeyFile != tt.wantRndcKeyFile {
+				t.Errorf("expected RNDC key file %q, got %q", tt.wantRndcKeyFile, target.Options.RNDCKeyFile)
+			}
+			if target.Options.View != "" {
+				t.Errorf("expected empty view for external target, got %q", target.Options.View)
+			}
+
+			if nameserver.Host != tt.wantHost {
+				t.Errorf("expected nameserver host %q, got %q", tt.wantHost, nameserver.Host)
+			}
+			if nameserver.Port != tt.wantPort {
+				t.Errorf("expected nameserver port %d, got %d", tt.wantPort, nameserver.Port)
+			}
+			if nameserver.TSIGKeyID != "" {
+				t.Errorf("expected empty TSIGKeyID for external nameserver, got %q", nameserver.TSIGKeyID)
+			}
+		})
+	}
+}
+
+func TestGenerateDefaultPoolWithExternalBinds(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+		"bind_address_1": "192.168.1.11",
+	}
+	masterHosts := []string{"192.168.1.20", "192.168.1.21"}
+	nsRecords := []designatev1.DesignateNSRecord{
+		{Hostname: "ns1.example.org.", Priority: 1},
+	}
+	externalBinds := []ExternalBind{
+		{
+			Name:     "bind9-external",
+			Address:  "192.168.100.50",
+			Port:     DNSPort,
+			RndcHost: "192.168.100.50",
+			RndcPort: RNDCPort,
+			RndcFile: "default-rndc-0",
+		},
+	}
+
+	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, externalBinds)
+	if err != nil {
+		t.Fatalf("generateDefaultPool() error = %v", err)
+	}
+
+	if len(pool.Targets) != 3 {
+		t.Fatalf("expected 3 targets (2 internal + 1 external), got %d", len(pool.Targets))
+	}
+	if len(pool.Nameservers) != 3 {
+		t.Fatalf("expected 3 nameservers (2 internal + 1 external), got %d", len(pool.Nameservers))
+	}
+
+	internalTarget := pool.Targets[0]
+	if internalTarget.Options.Host != "192.168.1.10" {
+		t.Errorf("expected first internal target host '192.168.1.10', got %s", internalTarget.Options.Host)
+	}
+	if internalTarget.Options.RNDCKeyFile != "/etc/designate/rndc-keys/rndc-key-0" {
+		t.Errorf("expected internal RNDC key file '/etc/designate/rndc-keys/rndc-key-0', got %s", internalTarget.Options.RNDCKeyFile)
+	}
+
+	externalTarget := pool.Targets[2]
+	if externalTarget.Description != "External BIND9 Server 0 (bind9-external)" {
+		t.Errorf("expected external target description 'External BIND9 Server 0 (bind9-external)', got %s", externalTarget.Description)
+	}
+	if externalTarget.Options.Host != "192.168.100.50" {
+		t.Errorf("expected external target host '192.168.100.50', got %s", externalTarget.Options.Host)
+	}
+	if externalTarget.Options.RNDCHost != "192.168.100.50" {
+		t.Errorf("expected external RNDC host '192.168.100.50', got %s", externalTarget.Options.RNDCHost)
+	}
+	if externalTarget.Options.RNDCKeyFile != "/etc/designate/rndc-keys/default-rndc-0" {
+		t.Errorf("expected external RNDC key file '/etc/designate/rndc-keys/default-rndc-0', got %s", externalTarget.Options.RNDCKeyFile)
+	}
+	if len(externalTarget.Masters) != 2 {
+		t.Errorf("expected 2 masters on external target, got %d", len(externalTarget.Masters))
+	}
+
+	externalNameserver := pool.Nameservers[2]
+	if externalNameserver.Host != "192.168.100.50" {
+		t.Errorf("expected external nameserver host '192.168.100.50', got %s", externalNameserver.Host)
+	}
+	if externalNameserver.Port != DNSPort {
+		t.Errorf("expected external nameserver port %d, got %d", DNSPort, externalNameserver.Port)
+	}
+}
+
+func TestGenerateDefaultPoolWithMultipleExternalBinds(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+	}
+	masterHosts := []string{"192.168.1.20"}
+	nsRecords := []designatev1.DesignateNSRecord{
+		{Hostname: "ns1.example.org.", Priority: 1},
+	}
+	externalBinds := []ExternalBind{
+		{
+			Name:     "bind9-external-1",
+			Address:  "192.168.100.50",
+			Port:     DNSPort,
+			RndcHost: "192.168.100.50",
+			RndcPort: RNDCPort,
+			RndcFile: "default-rndc-0",
+		},
+		{
+			Name:     "bind9-external-2",
+			Address:  "192.168.100.51",
+			Port:     5353,
+			RndcHost: "10.0.0.99",
+			RndcPort: 1953,
+			RndcFile: "default-rndc-1",
+		},
+	}
+
+	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, externalBinds)
+	if err != nil {
+		t.Fatalf("generateDefaultPool() error = %v", err)
+	}
+
+	if len(pool.Targets) != 3 {
+		t.Fatalf("expected 3 targets (1 internal + 2 external), got %d", len(pool.Targets))
+	}
+
+	firstExternal := pool.Targets[1]
+	if firstExternal.Description != "External BIND9 Server 0 (bind9-external-1)" {
+		t.Errorf("expected first external description 'External BIND9 Server 0 (bind9-external-1)', got %s", firstExternal.Description)
+	}
+	if firstExternal.Options.Host != "192.168.100.50" {
+		t.Errorf("expected first external host '192.168.100.50', got %s", firstExternal.Options.Host)
+	}
+
+	secondExternal := pool.Targets[2]
+	if secondExternal.Description != "External BIND9 Server 1 (bind9-external-2)" {
+		t.Errorf("expected second external description 'External BIND9 Server 1 (bind9-external-2)', got %s", secondExternal.Description)
+	}
+	if secondExternal.Options.Host != "192.168.100.51" {
+		t.Errorf("expected second external host '192.168.100.51', got %s", secondExternal.Options.Host)
+	}
+	if secondExternal.Options.Port != 5353 {
+		t.Errorf("expected second external port 5353, got %d", secondExternal.Options.Port)
+	}
+	if secondExternal.Options.RNDCHost != "10.0.0.99" {
+		t.Errorf("expected second external RNDC host '10.0.0.99', got %s", secondExternal.Options.RNDCHost)
+	}
+	if secondExternal.Options.RNDCPort != 1953 {
+		t.Errorf("expected second external RNDC port 1953, got %d", secondExternal.Options.RNDCPort)
+	}
+	if secondExternal.Options.RNDCKeyFile != "/etc/designate/rndc-keys/default-rndc-1" {
+		t.Errorf("expected second external RNDC key file '/etc/designate/rndc-keys/default-rndc-1', got %s", secondExternal.Options.RNDCKeyFile)
+	}
+}
+
+func TestGenerateDefaultPoolWithExternalBindsFromYAML(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+	}
+	masterHosts := []string{"192.168.1.20"}
+	nsRecords := []designatev1.DesignateNSRecord{
+		{Hostname: "ns1.example.org.", Priority: 1},
+	}
+
+	externalBindsYAML := `
+- name: bind9-external
+  address: 192.168.100.50
+  rndcsecret: c2VjcmV0MTIz
+`
+	parsedBinds, err := ReadExternalBinds([]byte(externalBindsYAML))
+	if err != nil {
+		t.Fatalf("ReadExternalBinds() error = %v", err)
+	}
+	parsedBinds[0].RndcFile = "default-rndc-0"
+
+	pool, err := generateDefaultPool(bindMap, masterHosts, nsRecords, parsedBinds)
+	if err != nil {
+		t.Fatalf("generateDefaultPool() error = %v", err)
+	}
+
+	if len(pool.Targets) != 2 {
+		t.Fatalf("expected 2 targets (1 internal + 1 external), got %d", len(pool.Targets))
+	}
+
+	externalTarget := pool.Targets[1]
+	if externalTarget.Options.Host != "192.168.100.50" {
+		t.Errorf("expected external target host '192.168.100.50', got %s", externalTarget.Options.Host)
+	}
+	if externalTarget.Options.Port != DNSPort {
+		t.Errorf("expected external target port %d, got %d", DNSPort, externalTarget.Options.Port)
+	}
+	if externalTarget.Options.RNDCHost != "192.168.100.50" {
+		t.Errorf("expected external RNDC host defaulted to address, got %s", externalTarget.Options.RNDCHost)
+	}
+	if externalTarget.Options.RNDCPort != RNDCPort {
+		t.Errorf("expected external RNDC port %d, got %d", RNDCPort, externalTarget.Options.RNDCPort)
 	}
 }

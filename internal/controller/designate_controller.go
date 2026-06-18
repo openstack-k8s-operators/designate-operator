@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -419,20 +419,23 @@ const (
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
-	// transportURLSecretFn - Watch for changes made to the secret associated with the RabbitMQ
-	// TransportURL created and used by Designate CRs.  Watch functions return a list of namespace-scoped
-	// CRs that then get fed  to the reconciler.  Hence, in this case, we need to know the name of the
-	// Designate CR associated with the secret we are examining in the function.  We could parse the name
-	// out of the "%s-designate-transport" secret label, which would be faster than getting the list of
-	// the Designate CRs and trying to match on each one.  The downside there, however, is that technically
-	// someone could randomly label a secret "something-designate-transport" where "something" actually
-	// matches the name of an existing Designate CR.  In that case changes to that secret would trigger
-	// reconciliation for a Designate CR that does not need it.
 	//
-	// TODO: We also need a watch func to monitor for changes to the secret referenced by Designate.Spec.Secret
+	// secretWatchFn - Watches for changes to secrets used by Designate CRs. This includes:
+	// - the secret for the RabbitMQ TransportURL owned by a Designate CR, and
+	// - the secret referenced as ExternalBindsSecret in the Designate CR spec.
+	//
+	// Watch functions should return a list of namespace-scoped CRs to reconcile. For TransportURL secrets,
+	// we detect if the secret is owned by a TransportURL resource, and check if the owner name matches a Designate CR.
+	// For ExternalBindsSecret, we check if the secret name is referenced by any Designate CR's Spec.ExternalBindsSecret.
+	//
+	// Note: We could parse the Designate CR name out of the "%s-designate-transport" secret label,
+	// which would be slightly faster than comparing with all Designate CRs, but that risks a false trigger:
+	// a random secret named "something-designate-transport" could match the name of an existing Designate CR,
+	// spuriously triggering reconciliation for a CR that does not own or use that secret.
+	//
 	Log := r.GetLogger(ctx)
 
-	transportURLSecretFn := func(_ context.Context, o client.Object) []reconcile.Request {
+	secretWatchFn := func(ctx context.Context, o client.Object) []reconcile.Request {
 		result := []reconcile.Request{}
 
 		// get all Designate CRs
@@ -440,8 +443,8 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		listOpts := []client.ListOption{
 			client.InNamespace(o.GetNamespace()),
 		}
-		if err := r.List(context.Background(), designates, listOpts...); err != nil {
-			Log.Error(err, "Unable to retrieve Designate CRs %v")
+		if err := r.List(ctx, designates, listOpts...); err != nil {
+			Log.Error(err, "Unable to retrieve Designate CRs")
 			return nil
 		}
 
@@ -460,6 +463,16 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 				}
 			}
 		}
+
+		for _, cr := range designates.Items {
+			if o.GetName() == cr.Spec.ExternalBindsSecret {
+				name := client.ObjectKey{
+					Namespace: o.GetNamespace(),
+					Name:      cr.Name,
+				}
+				result = append(result, reconcile.Request{NamespacedName: name})
+			}
+		}
 		if len(result) > 0 {
 			return result
 		}
@@ -467,12 +480,12 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	}
 
 	// Watch for changes to the Redis CR used by Designate (e.g. TLS config changes)
-	redisWatchFn := func(_ context.Context, o client.Object) []reconcile.Request {
+	redisWatchFn := func(ctx context.Context, o client.Object) []reconcile.Request {
 		designates := &designatev1beta1.DesignateList{}
 		listOpts := []client.ListOption{
 			client.InNamespace(o.GetNamespace()),
 		}
-		if err := r.List(context.Background(), designates, listOpts...); err != nil {
+		if err := r.List(ctx, designates, listOpts...); err != nil {
 			Log.Error(err, "Unable to retrieve Designate CRs")
 			return nil
 		}
@@ -488,36 +501,6 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 			}
 		}
 		return result
-	}
-
-	externalBindsFn := func(_ context.Context, o client.Object) []reconcile.Request {
-		result := []reconcile.Request{}
-
-		var namespace = o.GetNamespace()
-		var secretName = o.GetName()
-
-		designates := &designatev1beta1.DesignateList{}
-		listOpts := []client.ListOption{
-			client.InNamespace(namespace),
-		}
-		if err := r.List(context.Background(), designates, listOpts...); err != nil {
-			Log.Error(err, "Unable to retrieve Designate CRs")
-			return nil
-		}
-
-		for _, cr := range designates.Items {
-			if cr.Spec.ExternalBindsSecret == secretName || secretName == designate.ExternalBindsData {
-				name := client.ObjectKey{
-					Namespace: namespace,
-					Name:      cr.Name,
-				}
-				result = append(result, reconcile.Request{NamespacedName: name})
-			}
-		}
-		if len(result) > 0 {
-			return result
-		}
-		return nil
 	}
 
 	// TODO(beagles):
@@ -546,15 +529,10 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 			&corev1.ConfigMap{},
 			handler.EnqueueRequestsFromMapFunc(r.findDesignatesForMultipoolConfigMap),
 		).
+		// Watch for Secrets of interest like TransportURL related or external binds.
 		Watches(
 			&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(externalBindsFn),
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-		).
-		// Watch for TransportURL Secrets which belong to any TransportURLs created by Designate CRs
-		Watches(
-			&corev1.Secret{},
-			handler.EnqueueRequestsFromMapFunc(transportURLSecretFn),
+			handler.EnqueueRequestsFromMapFunc(secretWatchFn),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
 		// Watch for Redis CR changes (e.g. TLS configuration)
@@ -1016,20 +994,18 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 	Log.Info("Deployment API task reconciled")
 
-	// Check for external BIND9 configurations.
-	// Note: We can't use getSecret() here as the absence of the secret just means there are
-	// no external binds defined, which is not an error. We need this secret's data
-	// for the pool generator and to create an extra secret for the RNDC keys.
-	// Also note: This is a little problematic with respect to optimization. Any time this
-	// changes we need to:
-	// - rebuild the mountable rndc secret for the workers
-	// - restart the workers ... we should really be starting workers along with mDNS before
-	//   any other designate component.
-	// - regenerate the pools
+	// Handle external BIND9 configurations.
+	// We need the external binds secret data for both the pool generator and to
+	// create an extra secret containing the RNDC keys.
+	//
+	// Note: Any change to this secret requires careful handling:
+	// - Rebuild the mountable RNDC secret for the workers.
+	// - Restart the workers (ideally, workers and mDNS should start before other Designate components).
+	// - Regenerate the pools.
 
 	externalBindData := make(map[string][]designate.ExternalBind)
 	externalRndcSecretData := make(map[string]string)
-	updateRndcSecret := true
+	updateRndcSecret := false
 
 	if instance.Spec.ExternalBindsSecret != "" {
 		externalBindsSecret, hash, err := oko_secret.GetSecret(ctx, helper, instance.Spec.ExternalBindsSecret, instance.Namespace)
@@ -1051,41 +1027,56 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 				err.Error()))
 			return ctrl.Result{}, err
 		}
-
-		if hash != instance.Status.Hash[designate.ExternalBindsData] {
-			// We only care about the data for the default pool at the moment,
-			// but let's accommodate all for the BYOB case in the future.
-			for poolName, data := range externalBindsSecret.Data {
-				externalBinds, err := designate.ReadExternalBinds(data)
-				if err != nil {
-					instance.Status.Conditions.Set(condition.FalseCondition(
-						condition.InputReadyCondition,
-						condition.ErrorReason,
-						condition.SeverityWarning,
-						condition.InputReadyErrorMessage,
-						err.Error()))
-					return ctrl.Result{}, err
-				}
-				externalBindData[poolName] = externalBinds
-				for i, bind := range externalBinds {
-					rndcBlock := fmt.Sprintf(
-						"key \"%s\" {\n\talgorithm %s;\n\tsecret \"%s\";\n};",
-						bind.RndcKeyName, bind.RndcAlgorithm, bind.RndcSecret,
-					)
-					externalRndcSecretData[fmt.Sprintf("%s-rndc-%d", poolName, i)] = rndcBlock
-				}
+		// We only care about the data for the default pool at the moment,
+		// but let's accommodate all for the BYOB case in the future.
+		for poolName, data := range externalBindsSecret.Data {
+			externalBinds, err := designate.ReadExternalBinds(data)
+			if err != nil {
+				instance.Status.Conditions.Set(condition.FalseCondition(
+					condition.InputReadyCondition,
+					condition.ErrorReason,
+					condition.SeverityWarning,
+					condition.InputReadyErrorMessage,
+					err.Error()))
+				return ctrl.Result{}, err
 			}
-			instance.Status.Hash[designate.ExternalBindsData] = hash
-		} else {
-			// if the hash is the same, we don't need to update the rndc secret
-			updateRndcSecret = false
+			externalBindData[poolName] = externalBinds
+			for i, bind := range externalBinds {
+				rndcBlock := fmt.Sprintf("key \"%s\" {\n\talgorithm %s;\n\tsecret \"%s\";\n};",
+					bind.RndcKeyName, bind.RndcAlgorithm, bind.RndcSecret)
+				rndcFilename := fmt.Sprintf("%s-rndc-%d", poolName, i)
+				externalBindData[poolName][i].RndcFile = rndcFilename
+				externalRndcSecretData[rndcFilename] = rndcBlock
+			}
 		}
+		updateRndcSecret = hash != instance.Status.Hash[designate.ExternalBindsData]
+		instance.Status.Hash[designate.ExternalBindsData] = hash
 	} else {
-		instance.Status.Hash[designate.ExternalBindsData] = ""
+		// No external binds secret, so we need to check if the external rndc secret data is present
+		// and if it is - remove the contents so the workers have up to date.
+		_, _, err := oko_secret.GetSecret(ctx, helper, designate.ExternalRndcData, instance.Namespace)
+		// Triggers initial setup if the external rndc secret data is not found.
+		if err != nil {
+			if k8s_errors.IsNotFound(err) {
+				// Initially this is to make sure an empty rndc secret is created because the workers
+				// mount it. This may no longer be true as the workers mount it via projected volumes
+				// and mount the secret as "optional: true", but we'll keep it for now in case there
+				// is some unexpected behaviour there.
+				updateRndcSecret = true
+			} else {
+				return ctrl.Result{}, err
+			}
+		} else if instance.Status.Hash[designate.ExternalBindsData] != "" {
+			updateRndcSecret = true
+			instance.Status.Hash[designate.ExternalBindsData] = ""
+		}
 	}
 
 	if updateRndcSecret {
-		// Update the rndc secret data
+		// Update the rndc secret data - We don't worry about the hash here as this is derived data.
+		// If it's being updated by a change to the ExternalBindsSecret, we update the secret here
+		// and let the controllers for resources that NEED the rndc secret data trigger a reconcile
+		// if needed.
 		labels := labels.GetLabels(instance, labels.GetGroupLabel(instance.Name), map[string]string{})
 		rndcKeySecretData := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1274,7 +1265,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Data: make(map[string]string),
 		}
 
-		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(updatedBindMap, mdnsConfigMap.Data, nsRecords, multipoolConfig)
+		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(updatedBindMap, mdnsConfigMap.Data, nsRecords, multipoolConfig, externalBindData)
 		if err != nil {
 			return ctrl.Result{}, err
 		}

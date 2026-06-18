@@ -26,7 +26,7 @@ import (
 	"sort"
 	"text/template"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
@@ -229,7 +229,7 @@ func validateMultipoolConfig(config *MultipoolConfig, azAwareMode designatev1.De
 }
 
 // GeneratePoolsYamlDataAndHash sorts all pool resources to get the correct hash every time
-func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord, multipoolConfig *MultipoolConfig) (string, string, error) {
+func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord, multipoolConfig *MultipoolConfig, externalBinds map[string][]ExternalBind) (string, string, error) {
 	masterHosts := make([]string, 0, len(MdnsMap))
 	for _, host := range MdnsMap {
 		masterHosts = append(masterHosts, host)
@@ -239,7 +239,7 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 	var pools []Pool
 
 	if multipoolConfig == nil {
-		pool, err := generateDefaultPool(BindMap, masterHosts, nsRecords)
+		pool, err := generateDefaultPool(BindMap, masterHosts, nsRecords, externalBinds["default"])
 		if err != nil {
 			return "", "", err
 		}
@@ -328,7 +328,27 @@ func createTargetAndNameserver(bindIP string, globalIndex int, masters []Master,
 	return target, nameserver
 }
 
-func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsRecords []designatev1.DesignateNSRecord) (Pool, error) {
+func createExternalTargetAndNameserver(bindInfo ExternalBind, masters []Master, description string) (Target, Nameserver) {
+	nameserver := Nameserver{
+		Host: bindInfo.Address,
+		Port: bindInfo.Port,
+	}
+	target := Target{
+		Type:        "bind9",
+		Description: description,
+		Masters:     masters,
+		Options: Options{
+			Host:        bindInfo.Address,
+			Port:        bindInfo.Port,
+			RNDCHost:    bindInfo.RndcHost,
+			RNDCPort:    bindInfo.RndcPort,
+			RNDCKeyFile: fmt.Sprintf("%s/%s", RndcConfDir, bindInfo.RndcFile),
+		},
+	}
+	return target, nameserver
+}
+
+func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsRecords []designatev1.DesignateNSRecord, externalBinds []ExternalBind) (Pool, error) {
 	sortNSRecords(nsRecords)
 
 	bindIPs := make([]string, len(BindMap))
@@ -343,6 +363,18 @@ func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsReco
 		description := fmt.Sprintf("BIND9 Server %d (%s)", i, bindIPs[i])
 		targets[i], nameservers[i] = createTargetAndNameserver(bindIPs[i], i, masters, description, "", "")
 	}
+
+	// NOTE: external BIND9 servers inherit the internal mDNS masters list. These masters may not be
+	// reachable from an external network — the deployer must ensure connectivity (e.g. via NAT, an
+	// exposed mDNS endpoint, or custom master addresses in a future iteration of this feature).
+	externalTargets := make([]Target, len(externalBinds))
+	externalNameservers := make([]Nameserver, len(externalBinds))
+	for i := range externalBinds {
+		description := fmt.Sprintf("External BIND9 Server %d (%s)", i, externalBinds[i].Name)
+		externalTargets[i], externalNameservers[i] = createExternalTargetAndNameserver(externalBinds[i], masters, description)
+	}
+	targets = append(targets, externalTargets...)
+	nameservers = append(nameservers, externalNameservers...)
 
 	// Catalog zone is an optional section
 	// catalogZone := &CatalogZone{
