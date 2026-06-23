@@ -50,7 +50,9 @@ const (
 	ExternalBindAddress         = "192.168.100.50"
 	ExternalBindName            = "bind9-external"
 	// Fake RNDC secret for functional tests only; not a real credential.
-	ExternalRndcSecretValue = "c2VjcmV0MTIz" // #nosec G101
+	ExternalRndcSecretValue    = "c2VjcmV0MTIz" // #nosec G101
+	ExternalMasterServiceIP    = "10.0.0.100"
+	ExternalMasterServiceAltIP = "10.0.0.101"
 
 	PublicCertSecretName   = "public-tls-certs"   // #nosec G101
 	InternalCertSecretName = "internal-tls-certs" // #nosec G101
@@ -636,6 +638,44 @@ func CreateExternalBindsSecret(name types.NamespacedName) *corev1.Secret {
 func createAndSimulateExternalBinds(secretName types.NamespacedName) {
 	secret := CreateExternalBindsSecret(secretName)
 	DeferCleanup(k8sClient.Delete, ctx, secret)
+}
+
+func createExternalMasterService(ns, name, poolAnnotation, ingressIP string) *corev1.Service {
+	labels := map[string]string{
+		designate.ExternalMasterServiceLabel: "true",
+		"service":                            "designate-mdns",
+	}
+	annotations := map[string]string{}
+	if poolAnnotation != "" {
+		annotations[designate.ExternalPoolServiceAnnotation] = poolAnnotation
+	}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   ns,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeLoadBalancer,
+			Ports: []corev1.ServicePort{
+				{Name: "mdns", Port: 5354},
+			},
+		},
+	}
+	Expect(k8sClient.Create(ctx, svc)).Should(Succeed())
+
+	if ingressIP != "" {
+		Eventually(func(g Gomega) {
+			current := &corev1.Service{}
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(svc), current)).Should(Succeed())
+			current.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: ingressIP}}
+			g.Expect(k8sClient.Status().Update(ctx, current)).Should(Succeed())
+		}, timeout, interval).Should(Succeed())
+	}
+
+	DeferCleanup(k8sClient.Delete, ctx, svc)
+	return svc
 }
 
 func CreateDesignateNSRecordsConfigMap(name types.NamespacedName) client.Object {
