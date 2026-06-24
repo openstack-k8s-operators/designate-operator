@@ -848,12 +848,12 @@ var _ = Describe("Designate controller", func() {
 				allNSRecords = append(allNSRecords, nsRecords...)
 			}
 
-			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind))
+			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind), make(map[string][]string))
 			Expect(err).ToNot(HaveOccurred())
 
 			// we used to have inconsistent ordering, so generate the pools.yaml 10 times and make sure it is has exactly the same content
 			for range 10 {
-				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind))
+				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind), make(map[string][]string))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(poolsYamlHash).Should(Equal(newPoolsYamlHash))
 			}
@@ -1120,6 +1120,192 @@ var _ = Describe("Designate controller", func() {
 
 				designateCR := GetDesignate(designateName)
 				g.Expect(designateCR.Status.Hash[designate.ExternalBindsData]).To(BeEmpty())
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	When("Designate has external BIND9 with external master services", func() {
+		var externalBindsSecretName types.NamespacedName
+
+		BeforeEach(func() {
+			externalBindsSecretName = types.NamespacedName{
+				Namespace: namespace,
+				Name:      ExternalBindsSecretTestName,
+			}
+			spec["externalBindsSecret"] = ExternalBindsSecretTestName
+
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			createAndSimulateDB(spec)
+			createAndSimulateExternalBinds(externalBindsSecretName)
+
+			DeferCleanup(k8sClient.Delete, ctx, CreateNAD(types.NamespacedName{
+				Name:      spec["designateNetworkAttachment"].(string),
+				Namespace: namespace,
+			}))
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+			th.SimulateJobSuccess(designateDBSyncName)
+
+			createAndSimulateBind9(designateBind9Name)
+			createAndSimulateMdns(designateMdnsName)
+			createAndSimulateNSRecordsConfigMap(designateNSRecordConfigMapName)
+			simulateCentralReadyCount(designateName, 1)
+		})
+
+		It("uses external master service IPs as masters for external targets in pools.yaml", func() {
+			createExternalMasterService(namespace, "mdns-external-lb", "default", ExternalMasterServiceIP)
+
+			Eventually(func(g Gomega) {
+				poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
+					Name:      designate.PoolsYamlConfigMap,
+					Namespace: namespace,
+				})
+				g.Expect(poolsYamlConfigMap).ToNot(BeNil())
+
+				var pools []designate.Pool
+				err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(pools).To(HaveLen(1))
+
+				pool := pools[0]
+				g.Expect(pool.Targets).To(HaveLen(bind9ReplicaCount + 1))
+
+				externalTarget := pool.Targets[len(pool.Targets)-1]
+				g.Expect(externalTarget.Description).To(ContainSubstring("External BIND9 Server"))
+				g.Expect(externalTarget.Masters).To(HaveLen(1))
+				g.Expect(externalTarget.Masters[0].Host).To(Equal(ExternalMasterServiceIP))
+
+				// Internal targets should still use internal mDNS masters
+				internalTarget := pool.Targets[0]
+				g.Expect(internalTarget.Masters).To(HaveLen(mdnsReplicaCount))
+				for _, master := range internalTarget.Masters {
+					g.Expect(master.Host).ToNot(Equal(ExternalMasterServiceIP))
+				}
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("requeues and then uses external master service IP once ingress is assigned", func() {
+			svc := createExternalMasterService(namespace, "mdns-external-lb-no-ip", "default", "")
+
+			// While the service has no ingress IP the controller requeues without updating
+			// pools.yaml, so the configmap either doesn't exist yet or must not
+			// contain the external master service IP.
+			Consistently(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      designate.PoolsYamlConfigMap,
+					Namespace: namespace,
+				}, cm)
+				if k8s_errors.IsNotFound(err) {
+					return
+				}
+				g.Expect(err).ToNot(HaveOccurred())
+				var pools []designate.Pool
+				err = yaml.Unmarshal([]byte(cm.Data[designate.PoolsYamlContent]), &pools)
+				if err != nil || len(pools) == 0 {
+					return
+				}
+				externalTarget := pools[0].Targets[len(pools[0].Targets)-1]
+				for _, master := range externalTarget.Masters {
+					g.Expect(master.Host).ToNot(Equal(ExternalMasterServiceIP))
+				}
+			}, timeout, interval).Should(Succeed())
+
+			// Now assign the ingress IP — the service watch triggers reconciliation.
+			Eventually(func(g Gomega) {
+				current := &corev1.Service{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, current)).Should(Succeed())
+				current.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: ExternalMasterServiceIP}}
+				g.Expect(k8sClient.Status().Update(ctx, current)).Should(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
+					Name:      designate.PoolsYamlConfigMap,
+					Namespace: namespace,
+				})
+				g.Expect(poolsYamlConfigMap).ToNot(BeNil())
+
+				var pools []designate.Pool
+				err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(pools).To(HaveLen(1))
+
+				externalTarget := pools[0].Targets[len(pools[0].Targets)-1]
+				g.Expect(externalTarget.Description).To(ContainSubstring("External BIND9 Server"))
+				g.Expect(externalTarget.Masters).To(HaveLen(1))
+				g.Expect(externalTarget.Masters[0].Host).To(Equal(ExternalMasterServiceIP))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("only uses services matching the pool annotation", func() {
+			createExternalMasterService(namespace, "mdns-lb-default", "default", ExternalMasterServiceIP)
+			createExternalMasterService(namespace, "mdns-lb-other", "other-pool", ExternalMasterServiceAltIP)
+
+			Eventually(func(g Gomega) {
+				poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
+					Name:      designate.PoolsYamlConfigMap,
+					Namespace: namespace,
+				})
+				g.Expect(poolsYamlConfigMap).ToNot(BeNil())
+
+				var pools []designate.Pool
+				err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(pools).To(HaveLen(1))
+
+				pool := pools[0]
+				externalTarget := pool.Targets[len(pool.Targets)-1]
+				g.Expect(externalTarget.Masters).To(HaveLen(1))
+				g.Expect(externalTarget.Masters[0].Host).To(Equal(ExternalMasterServiceIP))
+				// The "other-pool" service IP should NOT appear
+				for _, master := range externalTarget.Masters {
+					g.Expect(master.Host).ToNot(Equal(ExternalMasterServiceAltIP))
+				}
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("updates pools.yaml when external master service appears after initial reconciliation", func() {
+			// First, verify external targets use internal mDNS masters (no service present yet)
+			Eventually(func(g Gomega) {
+				poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
+					Name:      designate.PoolsYamlConfigMap,
+					Namespace: namespace,
+				})
+				g.Expect(poolsYamlConfigMap).ToNot(BeNil())
+
+				var pools []designate.Pool
+				err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				pool := pools[0]
+				externalTarget := pool.Targets[len(pool.Targets)-1]
+				g.Expect(externalTarget.Description).To(ContainSubstring("External BIND9 Server"))
+				g.Expect(externalTarget.Masters).To(HaveLen(mdnsReplicaCount))
+			}, timeout, interval).Should(Succeed())
+
+			// Now create the external master service — the controller watch should trigger reconciliation
+			createExternalMasterService(namespace, "mdns-external-late", "default", ExternalMasterServiceIP)
+
+			simulateCentralReadyCount(designateName, 1)
+
+			Eventually(func(g Gomega) {
+				poolsYamlConfigMap := th.GetConfigMap(types.NamespacedName{
+					Name:      designate.PoolsYamlConfigMap,
+					Namespace: namespace,
+				})
+				g.Expect(poolsYamlConfigMap).ToNot(BeNil())
+
+				var pools []designate.Pool
+				err := yaml.Unmarshal([]byte(poolsYamlConfigMap.Data[designate.PoolsYamlContent]), &pools)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				pool := pools[0]
+				externalTarget := pool.Targets[len(pool.Targets)-1]
+				g.Expect(externalTarget.Masters).To(HaveLen(1))
+				g.Expect(externalTarget.Masters[0].Host).To(Equal(ExternalMasterServiceIP))
 			}, timeout, interval).Should(Succeed())
 		})
 	})
