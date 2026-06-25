@@ -216,7 +216,8 @@ func validateMultipoolConfig(config *MultipoolConfig, azAwareMode designatev1.De
 			if pool.View == "" {
 				return fmt.Errorf("%w: pool %s", ErrPoolMissingView, pool.Name)
 			}
-			// TODO: Validate pool TSIGKeyID is non-empty once per-pool TSIG keys are implemented
+			// TSIGKeyID validation is handled at runtime — keys are created after pools
+			// are registered in Designate (two-pass flow in reconcileTSIGSecrets).
 		}
 	}
 
@@ -228,8 +229,9 @@ func validateMultipoolConfig(config *MultipoolConfig, azAwareMode designatev1.De
 	return nil
 }
 
-// GeneratePoolsYamlDataAndHash sorts all pool resources to get the correct hash every time
-func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord, multipoolConfig *MultipoolConfig, externalBinds map[string][]ExternalBind, externalMasterServiceIPs map[string][]string) (string, string, error) {
+// GeneratePoolsYamlDataAndHash sorts all pool resources to get the correct hash every time.
+// tsigKeyIDs is a map of pool-name -> Designate TSIG key UUID for per-pool TSIG mode (nil if not used).
+func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords []designatev1.DesignateNSRecord, multipoolConfig *MultipoolConfig, externalBinds map[string][]ExternalBind, externalMasterServiceIPs map[string][]string, tsigKeyIDs map[string]string) (string, string, error) {
 	masterHosts := make([]string, 0, len(MdnsMap))
 	for _, host := range MdnsMap {
 		masterHosts = append(masterHosts, host)
@@ -246,7 +248,7 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 		pools = []Pool{pool}
 	} else {
 		var err error
-		pools, err = generateMultiplePools(BindMap, masterHosts, multipoolConfig)
+		pools, err = generateMultiplePools(BindMap, masterHosts, multipoolConfig, tsigKeyIDs)
 		if err != nil {
 			return "", "", err
 		}
@@ -398,7 +400,7 @@ func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsReco
 	return pool, nil
 }
 
-func generateMultiplePools(BindMap map[string]string, masterHosts []string, multipoolConfig *MultipoolConfig) ([]Pool, error) {
+func generateMultiplePools(BindMap map[string]string, masterHosts []string, multipoolConfig *MultipoolConfig, tsigKeyIDs map[string]string) ([]Pool, error) {
 	// Sort pools by name for stable ordering
 	sortedPools := make([]PoolConfig, len(multipoolConfig.Pools))
 	copy(sortedPools, multipoolConfig.Pools)
@@ -431,10 +433,16 @@ func generateMultiplePools(BindMap map[string]string, masterHosts []string, mult
 		masters := createMasters(masterHosts)
 		targets := make([]Target, poolConfig.BindReplicas)
 		nameservers := make([]Nameserver, poolConfig.BindReplicas)
+
+		var tsigKeyID string
+		if tsigKeyIDs != nil {
+			tsigKeyID = tsigKeyIDs[poolConfig.Name]
+		}
+
 		for i := int32(0); i < poolConfig.BindReplicas; i++ {
 			globalIndex := bindIndex - int(poolConfig.BindReplicas) + int(i)
 			description := fmt.Sprintf("BIND9 Server for pool %s (%s)", poolConfig.Name, poolBindIPs[i])
-			targets[i], nameservers[i] = createTargetAndNameserver(poolBindIPs[i], globalIndex, masters, description, poolConfig.View, "")
+			targets[i], nameservers[i] = createTargetAndNameserver(poolBindIPs[i], globalIndex, masters, description, poolConfig.View, tsigKeyID)
 		}
 
 		attributes := poolConfig.Attributes
