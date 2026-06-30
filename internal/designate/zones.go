@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/dns/v2/zones"
 	"github.com/openstack-k8s-operators/lib-common/modules/openstack"
 )
@@ -82,41 +81,4 @@ func HasZonesInPool(
 	}
 
 	return len(zoneList) > 0, nil
-}
-
-// CountZonesInPool returns the number of zones in a specific pool
-func CountZonesInPool(
-	ctx context.Context,
-	osclient *openstack.OpenStack,
-	poolID string,
-) (int, error) {
-	zoneList, err := ListZonesInPool(ctx, osclient, poolID)
-	if err != nil {
-		return 0, err
-	}
-
-	return len(zoneList), nil
-}
-
-// GetZone retrieves a specific zone by ID
-func GetZone(
-	ctx context.Context,
-	osclient *openstack.OpenStack,
-	zoneID string,
-) (*zones.Zone, error) {
-	dnsClient, err := GetDNSClient(osclient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get DNS client: %w", err)
-	}
-
-	zone, err := zones.Get(ctx, dnsClient, zoneID).Extract()
-	if err != nil {
-		// Check if it's a 404 error
-		if gophercloud.ResponseCodeIs(err, 404) {
-			return nil, fmt.Errorf("%w: %s", ErrZoneNotFound, zoneID)
-		}
-		return nil, fmt.Errorf("failed to get zone %s: %w", zoneID, err)
-	}
-
-	return zone, nil
 }
