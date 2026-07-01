@@ -1,6 +1,6 @@
 module github.com/openstack-k8s-operators/designate-operator/api
 
-go 1.24.4
+go 1.25.0
 
 require (
 	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260618172644-5a4764bdaa36

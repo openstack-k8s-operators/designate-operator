@@ -43,6 +43,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/dns/v2/tsigkeys"
+
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
 	designatebackendbind9 "github.com/openstack-k8s-operators/designate-operator/internal/designatebackendbind9"
@@ -873,7 +875,7 @@ func (r *DesignateBackendbind9Reconciler) ensureSharedTSIGKey(
 	ctx context.Context,
 	helper *helper.Helper,
 	namespace string,
-) (*designate.TSIGKey, error) {
+) (*tsigkeys.TSIGKey, error) {
 	Log := r.GetLogger(ctx)
 
 	osclient, err := designate.GetOpenstackClient(ctx, namespace, helper)
@@ -902,7 +904,7 @@ func (r *DesignateBackendbind9Reconciler) ensureSharedTSIGKey(
 		return nil, fmt.Errorf("failed to generate TSIG secret: %w", err)
 	}
 
-	tsigKey, err = designate.CreateTSIGKey(ctx, osclient, designate.CreateTSIGKeyOpts{
+	tsigKey, err = designate.CreateTSIGKey(ctx, osclient, tsigkeys.CreateOpts{
 		Name:      designate.SharedTSIGKeyName,
 		Algorithm: "hmac-sha256",
 		Secret:    secret,
@@ -922,7 +924,7 @@ func (r *DesignateBackendbind9Reconciler) ensureSharedTSIGKey(
 
 // generateTSIGConfig builds the BIND TSIG configuration file content
 func (r *DesignateBackendbind9Reconciler) generateTSIGConfig(
-	tsigKey *designate.TSIGKey,
+	tsigKey *tsigkeys.TSIGKey,
 	mdnsIPs []string,
 ) string {
 	var config strings.Builder
