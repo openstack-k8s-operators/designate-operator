@@ -848,12 +848,12 @@ var _ = Describe("Designate controller", func() {
 				allNSRecords = append(allNSRecords, nsRecords...)
 			}
 
-			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind), make(map[string][]string))
+			_, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind), make(map[string][]string), nil)
 			Expect(err).ToNot(HaveOccurred())
 
 			// we used to have inconsistent ordering, so generate the pools.yaml 10 times and make sure it is has exactly the same content
 			for range 10 {
-				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind), make(map[string][]string))
+				_, newPoolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(bindConfigMap.Data, mdnsConfigMap.Data, allNSRecords, nil, make(map[string][]designate.ExternalBind), make(map[string][]string), nil)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(poolsYamlHash).Should(Equal(newPoolsYamlHash))
 			}

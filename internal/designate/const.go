@@ -105,6 +105,12 @@ const (
 	// SharedTSIGKeyName is the name of the shared TSIG key used for all non-default pools
 	SharedTSIGKeyName = "multipool-shared-key"
 
+	// PerPoolTSIGKeySuffix is the suffix appended to pool names for per-pool TSIG keys
+	PerPoolTSIGKeySuffix = "-tsig-key"
+
+	// TSIGKeyIDsDataKey is the key in the TSIG Secret that stores the pool-name to tsigkey-id JSON mapping
+	TSIGKeyIDsDataKey = "tsigkey-ids.json"
+
 	// ACConsumerFinalizer is added to AC secrets that designate is actively consuming
 	ACConsumerFinalizer = "openstack.org/designateapi-ac-consumer"
 

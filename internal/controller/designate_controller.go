@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -1337,7 +1338,29 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Data: make(map[string]string),
 		}
 
-		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(updatedBindMap, mdnsConfigMap.Data, nsRecords, multipoolConfig, externalBindData, externalMasterServiceIPs)
+		// Read per-pool TSIG key ID mapping if AZ-aware mode is enabled
+		var tsigKeyIDs map[string]string
+		if instance.Spec.AZAwareMode == designatev1beta1.AZModeEnabled && multipoolConfig != nil {
+			tsigSecretName := fmt.Sprintf("%s-backendbind9%s", instance.Name, designate.TsigSecretSuffix)
+			tsigSecret := &corev1.Secret{}
+			err := helper.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretName, Namespace: instance.GetNamespace()}, tsigSecret)
+			if err != nil && !k8s_errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("failed to get TSIG secret %s: %w", tsigSecretName, err)
+			}
+			if err == nil {
+				if data, exists := tsigSecret.Data[designate.TSIGKeyIDsDataKey]; exists {
+					if jsonErr := json.Unmarshal(data, &tsigKeyIDs); jsonErr != nil {
+						Log.Info(fmt.Sprintf("Failed to parse TSIG key ID mapping from secret, pools.yaml will be generated without tsigkey_ids: %v", jsonErr))
+					}
+				}
+			}
+			if len(tsigKeyIDs) == 0 {
+				Log.Info("TSIG key IDs not available yet, requeueing")
+				return ctrl.Result{RequeueAfter: time.Second * 30}, nil
+			}
+		}
+
+		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(updatedBindMap, mdnsConfigMap.Data, nsRecords, multipoolConfig, externalBindData, externalMasterServiceIPs, tsigKeyIDs)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
