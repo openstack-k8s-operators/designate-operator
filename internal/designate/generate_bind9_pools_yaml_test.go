@@ -353,7 +353,7 @@ func TestGenerateMultiplePools(t *testing.T) {
 		},
 	}
 
-	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig)
+	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig, nil)
 	if err != nil {
 		t.Fatalf("generateMultiplePools() error = %v", err)
 	}
@@ -434,7 +434,7 @@ func TestMultipoolRequiresNSRecordsPerPool(t *testing.T) {
 		},
 	}
 
-	_, err := generateMultiplePools(bindMap, masterHosts, multipoolConfigMissingNS)
+	_, err := generateMultiplePools(bindMap, masterHosts, multipoolConfigMissingNS, nil)
 	if err == nil {
 		t.Fatal("expected error when pool is missing NS records in multipool mode, got nil")
 	}
@@ -790,7 +790,7 @@ func TestGenerateMultiplePoolsWithView(t *testing.T) {
 		},
 	}
 
-	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig)
+	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig, nil)
 	if err != nil {
 		t.Fatalf("generateMultiplePools() error = %v", err)
 	}
@@ -842,7 +842,7 @@ func TestGenerateMultiplePoolsViewOmittedWhenEmpty(t *testing.T) {
 		},
 	}
 
-	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig)
+	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig, nil)
 	if err != nil {
 		t.Fatalf("generateMultiplePools() error = %v", err)
 	}
@@ -1073,5 +1073,223 @@ func TestTemplateRenderingOmitsEmptyViewAndTSIG(t *testing.T) {
 
 	if strings.Contains(output, "tsigkey_id:") {
 		t.Errorf("expected rendered output to NOT contain 'tsigkey_id:' when TSIGKeyID is empty, got:\n%s", output)
+	}
+}
+
+func TestGenerateMultiplePoolsWithTSIGKeyIDs(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+		"bind_address_1": "192.168.1.11",
+		"bind_address_2": "192.168.1.12",
+		"bind_address_3": "192.168.1.13",
+	}
+	masterHosts := []string{"192.168.1.20"}
+
+	multipoolConfig := &MultipoolConfig{
+		Pools: []PoolConfig{
+			{
+				Name:         "default",
+				Description:  "Default Pool",
+				BindReplicas: 2,
+				View:         "default-view",
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns1.example.org.", Priority: 1},
+				},
+			},
+			{
+				Name:         "pool1",
+				Description:  "Pool 1",
+				BindReplicas: 2,
+				View:         "az1-view",
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns2.example.org.", Priority: 1},
+				},
+			},
+		},
+	}
+
+	tsigKeyIDs := map[string]string{
+		"default": "aaaaaaaa-1111-2222-3333-444444444444",
+		"pool1":   "bbbbbbbb-1111-2222-3333-444444444444",
+	}
+
+	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig, tsigKeyIDs)
+	if err != nil {
+		t.Fatalf("generateMultiplePools() error = %v", err)
+	}
+
+	if len(pools) != 2 {
+		t.Fatalf("expected 2 pools, got %d", len(pools))
+	}
+
+	// Verify tsigkey_id is set on default pool targets and nameservers
+	for _, target := range pools[0].Targets {
+		if target.TSIGKeyID != "aaaaaaaa-1111-2222-3333-444444444444" {
+			t.Errorf("expected default pool target TSIGKeyID 'aaaaaaaa-...', got '%s'", target.TSIGKeyID)
+		}
+	}
+	for _, ns := range pools[0].Nameservers {
+		if ns.TSIGKeyID != "aaaaaaaa-1111-2222-3333-444444444444" {
+			t.Errorf("expected default pool nameserver TSIGKeyID 'aaaaaaaa-...', got '%s'", ns.TSIGKeyID)
+		}
+	}
+
+	// Verify tsigkey_id is set on pool1 targets and nameservers
+	for _, target := range pools[1].Targets {
+		if target.TSIGKeyID != "bbbbbbbb-1111-2222-3333-444444444444" {
+			t.Errorf("expected pool1 target TSIGKeyID 'bbbbbbbb-...', got '%s'", target.TSIGKeyID)
+		}
+	}
+	for _, ns := range pools[1].Nameservers {
+		if ns.TSIGKeyID != "bbbbbbbb-1111-2222-3333-444444444444" {
+			t.Errorf("expected pool1 nameserver TSIGKeyID 'bbbbbbbb-...', got '%s'", ns.TSIGKeyID)
+		}
+	}
+}
+
+func TestGenerateMultiplePoolsPartialTSIGKeyIDs(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+		"bind_address_1": "192.168.1.11",
+	}
+	masterHosts := []string{"192.168.1.20"}
+
+	multipoolConfig := &MultipoolConfig{
+		Pools: []PoolConfig{
+			{
+				Name:         "default",
+				Description:  "Default Pool",
+				BindReplicas: 1,
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns1.example.org.", Priority: 1},
+				},
+			},
+			{
+				Name:         "pool1",
+				Description:  "Pool 1",
+				BindReplicas: 1,
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns2.example.org.", Priority: 1},
+				},
+			},
+		},
+	}
+
+	// Only default has a tsigkey_id (pool1 not yet registered)
+	tsigKeyIDs := map[string]string{
+		"default": "aaaaaaaa-1111-2222-3333-444444444444",
+	}
+
+	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig, tsigKeyIDs)
+	if err != nil {
+		t.Fatalf("generateMultiplePools() error = %v", err)
+	}
+
+	// Default pool should have tsigkey_id
+	for _, target := range pools[0].Targets {
+		if target.TSIGKeyID != "aaaaaaaa-1111-2222-3333-444444444444" {
+			t.Errorf("expected default pool target TSIGKeyID set, got '%s'", target.TSIGKeyID)
+		}
+	}
+
+	// Pool1 should have empty tsigkey_id (not yet in mapping)
+	for _, target := range pools[1].Targets {
+		if target.TSIGKeyID != "" {
+			t.Errorf("expected pool1 target TSIGKeyID empty when not in mapping, got '%s'", target.TSIGKeyID)
+		}
+	}
+}
+
+func TestTemplateRenderingWithPerPoolTSIGKeyIDs(t *testing.T) {
+	pools := []Pool{
+		{
+			Name:        "default",
+			Description: "Default Pool",
+			Attributes:  map[string]string{},
+			NSRecords: []designatev1.DesignateNSRecord{
+				{Hostname: "ns1.example.org.", Priority: 1},
+			},
+			Nameservers: []Nameserver{
+				{Host: "192.168.1.10", Port: 53, TSIGKeyID: "default-key-uuid"},
+			},
+			Targets: []Target{
+				{
+					Type:        "bind9",
+					Description: "BIND9 Server",
+					TSIGKeyID:   "default-key-uuid",
+					Masters:     []Master{{Host: "192.168.1.20", Port: 5354}},
+					Options: Options{
+						Host:        "192.168.1.10",
+						Port:        53,
+						RNDCHost:    "192.168.1.10",
+						RNDCPort:    953,
+						RNDCKeyFile: "/etc/designate/rndc-keys/rndc-key-0",
+						View:        "default-view",
+					},
+				},
+			},
+		},
+		{
+			Name:        "pool1",
+			Description: "Pool 1",
+			Attributes:  map[string]string{"az": "1"},
+			NSRecords: []designatev1.DesignateNSRecord{
+				{Hostname: "ns2.example.org.", Priority: 1},
+			},
+			Nameservers: []Nameserver{
+				{Host: "192.168.1.11", Port: 53, TSIGKeyID: "pool1-key-uuid"},
+			},
+			Targets: []Target{
+				{
+					Type:        "bind9",
+					Description: "BIND9 Server",
+					TSIGKeyID:   "pool1-key-uuid",
+					Masters:     []Master{{Host: "192.168.1.20", Port: 5354}},
+					Options: Options{
+						Host:        "192.168.1.11",
+						Port:        53,
+						RNDCHost:    "192.168.1.11",
+						RNDCPort:    953,
+						RNDCKeyFile: "/etc/designate/rndc-keys/rndc-key-1",
+						View:        "az1-view",
+					},
+				},
+			},
+		},
+	}
+
+	tmpl, err := template.ParseFiles("../../templates/designatepoolmanager/config/pools.yaml.tmpl")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
+	}
+
+	var buf strings.Builder
+	err = tmpl.Execute(&buf, pools)
+	if err != nil {
+		t.Fatalf("failed to execute template: %v", err)
+	}
+
+	output := buf.String()
+
+	// Both pools should have tsigkey_id rendered
+	if !strings.Contains(output, "tsigkey_id: default-key-uuid") {
+		t.Errorf("expected rendered output to contain 'tsigkey_id: default-key-uuid', got:\n%s", output)
+	}
+	if !strings.Contains(output, "tsigkey_id: pool1-key-uuid") {
+		t.Errorf("expected rendered output to contain 'tsigkey_id: pool1-key-uuid', got:\n%s", output)
+	}
+
+	// Both pools should have view rendered
+	if !strings.Contains(output, "view: default-view") {
+		t.Errorf("expected rendered output to contain 'view: default-view', got:\n%s", output)
+	}
+	if !strings.Contains(output, "view: az1-view") {
+		t.Errorf("expected rendered output to contain 'view: az1-view', got:\n%s", output)
+	}
+
+	// tsigkey_id should appear in both nameservers and targets for each pool (4 total)
+	if strings.Count(output, "tsigkey_id:") < 4 {
+		t.Errorf("expected at least 4 tsigkey_id entries (nameserver+target for 2 pools), got %d in:\n%s",
+			strings.Count(output, "tsigkey_id:"), output)
 	}
 }

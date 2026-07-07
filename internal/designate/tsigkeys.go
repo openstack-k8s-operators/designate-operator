@@ -17,9 +17,17 @@ package designate
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/openstack"
 )
+
+var validTSIGKeyName = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// IsValidTSIGKeyName checks that a TSIG key name is safe for injection into BIND config files.
+func IsValidTSIGKeyName(name string) bool {
+	return len(name) > 0 && validTSIGKeyName.MatchString(name)
+}
 
 // TODO: Replace this custom implementation with upstream Gophercloud support when available.
 // This package implements TSIG key operations that are currently missing from Gophercloud.
@@ -28,12 +36,13 @@ import (
 
 // TSIGKey represents a TSIG (Transaction Signature) key for DNS authentication
 type TSIGKey struct {
+	ID        string `json:"id"`
 	Name      string `json:"name"`
 	Algorithm string `json:"algorithm"` // e.g., "hmac-sha256"
 	Secret    string `json:"secret"`    // Base64-encoded key
 }
 
-// ListAllTSIGKeys retrieves all TSIG keys (no filtering)
+// ListAllTSIGKeys retrieves all TSIG keys with full details including ID
 func ListAllTSIGKeys(
 	ctx context.Context,
 	osclient *openstack.OpenStack,
@@ -88,29 +97,23 @@ func DeleteTSIGKeyByName(
 		return fmt.Errorf("failed to get DNS client: %w", err)
 	}
 
-	// Get all TSIG keys with full details including ID
-	allKeys, err := ListAllTSIGKeysWithID(ctx, osclient)
+	allKeys, err := ListAllTSIGKeys(ctx, osclient)
 	if err != nil {
 		return fmt.Errorf("failed to list TSIG keys: %w", err)
 	}
 
-	// Find the key with matching name
 	var keyID string
 	for _, key := range allKeys {
-		if keyName, ok := key["name"].(string); ok && keyName == name {
-			if id, ok := key["id"].(string); ok {
-				keyID = id
-				break
-			}
+		if key.Name == name {
+			keyID = key.ID
+			break
 		}
 	}
 
 	if keyID == "" {
-		// Key not found, nothing to delete
 		return nil
 	}
 
-	// Delete the TSIG key
 	url := dnsClient.ServiceURL("tsigkeys", keyID)
 	_, err = dnsClient.Delete(ctx, url, nil)
 	if err != nil {
@@ -118,30 +121,6 @@ func DeleteTSIGKeyByName(
 	}
 
 	return nil
-}
-
-// ListAllTSIGKeysWithID retrieves all TSIG keys with full details including ID
-func ListAllTSIGKeysWithID(
-	ctx context.Context,
-	osclient *openstack.OpenStack,
-) ([]map[string]interface{}, error) {
-	dnsClient, err := GetDNSClient(osclient)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get DNS client: %w", err)
-	}
-
-	url := dnsClient.ServiceURL("tsigkeys")
-
-	var result struct {
-		TSIGKeys []map[string]interface{} `json:"tsigkeys"`
-	}
-
-	_, err = dnsClient.Get(ctx, url, &result, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list TSIG keys: %w", err)
-	}
-
-	return result.TSIGKeys, nil
 }
 
 // CreateTSIGKeyOpts represents options for creating a TSIG key
@@ -185,11 +164,16 @@ func CreateTSIGKey(
 		return nil, fmt.Errorf("failed to create TSIG key: %w", err)
 	}
 
-	// Extract TSIGKey fields from response
+	id, _ := result["id"].(string)
+	name, _ := result["name"].(string)
+	algorithm, _ := result["algorithm"].(string)
+	secret, _ := result["secret"].(string)
+
 	tsigKey := &TSIGKey{
-		Name:      result["name"].(string),
-		Algorithm: result["algorithm"].(string),
-		Secret:    result["secret"].(string),
+		ID:        id,
+		Name:      name,
+		Algorithm: algorithm,
+		Secret:    secret,
 	}
 
 	return tsigKey, nil
