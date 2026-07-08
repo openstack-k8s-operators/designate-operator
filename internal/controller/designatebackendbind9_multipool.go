@@ -384,6 +384,10 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
 	var requeueNeeded bool
 	var requeueResult ctrl.Result
 
+	// Check AZ-aware mode — pool0 needs TSIG in AZ-aware mode
+	designateInstance, azErr := r.getDesignateCR(ctx, helper, instance)
+	azAwareMode := azErr == nil && designateInstance.Spec.AZAwareMode == designatev1beta1.AZModeEnabled
+
 	// Track expected StatefulSet names for cleanup
 	expectedStatefulSets := make(map[string]bool)
 
@@ -407,13 +411,17 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
 		// selector immutability issues during single-pool to multipool migrations and vice versa.
 		// Pools are identified by StatefulSet name pattern instead (pool0=instance.Name, pool1+=instance.Name-pool1, etc.)
 
-		// Add TSIG secret resourceVersion to annotations for non-default pools, so pods restart
-		// when their own pool's TSIG secret changes. Each pool has its own secret.
+		// In AZ-aware mode all pools need TSIG (each pool gets its own Secret); otherwise only
+		// non-default pools.
+		includeTSIG := azAwareMode || poolIdx > 0
+
+		// Add TSIG secret resourceVersion to annotations, so pods restart when their own pool's
+		// TSIG secret changes. Each pool has its own secret.
 		poolAnnotations := make(map[string]string)
 		for k, v := range serviceAnnotations {
 			poolAnnotations[k] = v
 		}
-		if poolIdx > 0 {
+		if includeTSIG {
 			tsigSecret := &corev1.Secret{}
 			err := helper.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretNameForPool(instance.Name, poolIdx), Namespace: instance.Namespace}, tsigSecret)
 			if err == nil {
@@ -434,7 +442,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolStatefulSets(
 		} else {
 			poolBindIPConfigMap = fmt.Sprintf("%s-pool%d", designate.BindPredIPConfigMap, poolIdx)
 		}
-		deplDef, err := designatebackendbind9.StatefulSet(poolInstance, inputHash, serviceLabels, poolAnnotations, topology, poolStatefulSetName, poolBindIPConfigMap)
+		deplDef, err := designatebackendbind9.StatefulSet(poolInstance, inputHash, serviceLabels, poolAnnotations, topology, poolStatefulSetName, poolBindIPConfigMap, includeTSIG)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
