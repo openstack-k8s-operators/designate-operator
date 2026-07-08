@@ -42,9 +42,11 @@ commands:
       fi
 
       # Verify TSIG secret is mounted from correct secret name
+      # Each pool gets its own TSIG secret (named after its own StatefulSet), since each pool
+      # is a separate BIND process that only ever needs its own key.
       pool1_tsig_secret=$(oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[?(@.name=="designatebackendbind9-tsig")].secret.secretName}')
-      if [ "$pool1_tsig_secret" != "designate-backendbind9-tsig" ]; then
-        echo "ERROR: Pool1 TSIG volume does not reference correct secret. Expected: designate-backendbind9-tsig, Got: $pool1_tsig_secret"
+      if [ "$pool1_tsig_secret" != "designate-backendbind9-pool1-tsig" ]; then
+        echo "ERROR: Pool1 TSIG volume does not reference correct secret. Expected: designate-backendbind9-pool1-tsig, Got: $pool1_tsig_secret"
         exit 1
       fi
 

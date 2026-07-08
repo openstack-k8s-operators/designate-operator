@@ -96,9 +96,11 @@ func StatefulSet(
 	var tsigSecretName string
 	var includeTSIG bool
 	if statefulSetName != instance.Name && !strings.Contains(statefulSetName, "-pool0") {
-		// This is a non-default pool StatefulSet, add TSIG support
-		// Note: All pools share the same TSIG secret (instance.Name + "-tsig")
-		tsigSecretName = instance.Name + designate.TsigSecretSuffix
+		// This is a non-default pool StatefulSet, add TSIG support.
+		// Each pool gets its own TSIG secret, named after its own StatefulSet, since each pool
+		// is a separate BIND process that only ever needs its own key (see
+		// tsigSecretNameForPool in designatebackendbind9_multipool.go).
+		tsigSecretName = statefulSetName + designate.TsigSecretSuffix
 		includeTSIG = true
 	}
 
