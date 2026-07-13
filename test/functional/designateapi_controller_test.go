@@ -213,6 +213,9 @@ var _ = Describe("DesignateAPI controller", func() {
 			Expect(conf).Should(
 				ContainSubstring(fmt.Sprintf(
 					"region_name=%s", keystoneAPI.Status.Region)))
+
+			Expect(conf).Should(
+				ContainSubstring("service_type=dns"))
 		})
 
 		It("should create a Secret with customServiceConfig input", func() {
