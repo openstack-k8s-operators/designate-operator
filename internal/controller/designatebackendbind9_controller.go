@@ -646,7 +646,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileSingleStatefulSet(
 
 	// Define a new StatefulSet object
 	// Use default bind IP ConfigMap for single-pool mode
-	deplDef, err := designatebackendbind9.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations, topology, instance.Name, designate.BindPredIPConfigMap)
+	deplDef, err := designatebackendbind9.StatefulSet(instance, inputHash, serviceLabels, serviceAnnotations, topology, instance.Name, designate.BindPredIPConfigMap, false)
 	if err != nil {
 		return ctrl.Result{}, err
 	}

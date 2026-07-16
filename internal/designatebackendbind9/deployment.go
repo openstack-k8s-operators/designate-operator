@@ -17,7 +17,6 @@ package designatebackendbind9
 
 import (
 	"fmt"
-	"strings"
 
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	designate "github.com/openstack-k8s-operators/designate-operator/internal/designate"
@@ -53,6 +52,7 @@ func StatefulSet(
 	topology *topologyv1.Topology,
 	statefulSetName string,
 	bindIPConfigMapName string,
+	includeTSIG bool,
 ) (*appsv1.StatefulSet, error) {
 
 	// TODO(beagles): Dbl check that running as the default kolla/tcib user works okay here. Permissions on some of the
@@ -91,17 +91,12 @@ func StatefulSet(
 	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
-	// Determine if TSIG is needed based on StatefulSet name
-	// Only non-default pools (pool1, pool2, etc.) need TSIG, not pool0 (default pool)
+	// Each pool gets its own TSIG secret, named after its own StatefulSet, since each pool is a
+	// separate BIND process that only ever needs its own key (see tsigSecretNameForPool in
+	// designatebackendbind9_multipool.go, which the caller uses to decide includeTSIG).
 	var tsigSecretName string
-	var includeTSIG bool
-	if statefulSetName != instance.Name && !strings.Contains(statefulSetName, "-pool0") {
-		// This is a non-default pool StatefulSet, add TSIG support.
-		// Each pool gets its own TSIG secret, named after its own StatefulSet, since each pool
-		// is a separate BIND process that only ever needs its own key (see
-		// tsigSecretNameForPool in designatebackendbind9_multipool.go).
+	if includeTSIG {
 		tsigSecretName = statefulSetName + designate.TsigSecretSuffix
-		includeTSIG = true
 	}
 
 	// Use instance.Name for secret references (shared across pools in multipool mode)
