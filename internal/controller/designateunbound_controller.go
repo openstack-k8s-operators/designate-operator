@@ -91,6 +91,7 @@ func getCIDRsFromNADs(nadList []networkv1.NetworkAttachmentDefinition) ([]string
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=designate.openstack.org,resources=designateunbounds/finalizers,verbs=update;patch
 //+kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
+//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;update
 //+kubebuilder:rbac:groups=topology.openstack.org,resources=topologies,verbs=get;list;watch;update
 //+kubebuilder:rbac:groups=operator.openshift.io,resources=networks,verbs=get;list;watch
 
