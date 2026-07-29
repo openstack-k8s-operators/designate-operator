@@ -90,6 +90,19 @@ func createAndSimulateNSRecordsConfigMap(
 	DeferCleanup(k8sClient.Delete, ctx, configMap)
 }
 func simulateCentralReadyCount(designateName types.NamespacedName, readyCount int32) {
+	// Patching Designate.Status.DesignateCentralReadyCount directly only sticks for one
+	// reconcile: the Designate controller re-derives this field from the real
+	// DesignateCentral CR's Status.ReadyCount on every pass, so a bare status patch here
+	// gets clobbered back as soon as the next reconcile runs. Simulate readiness on the
+	// actual backing Deployment instead, so it flows durably through
+	// DesignateCentral.Status.ReadyCount -> Designate.Status.DesignateCentralReadyCount on
+	// every reconcile, the same way the rest of the suite simulates readiness elsewhere.
+	if readyCount > 0 {
+		th.SimulateDeploymentReplicaReady(types.NamespacedName{
+			Namespace: designateName.Namespace,
+			Name:      fmt.Sprintf("%s-central", designateName.Name),
+		})
+	}
 	Eventually(func(g Gomega) {
 		designate := GetDesignate(designateName)
 		designate.Status.DesignateCentralReadyCount = readyCount
