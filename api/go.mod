@@ -3,7 +3,7 @@ module github.com/openstack-k8s-operators/designate-operator/api
 go 1.26.3
 
 require (
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260728060314-517307d86dd9
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260729092301-87ca0050f753
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260725150835-623a52fe0391
 	github.com/openstack-k8s-operators/lib-common/modules/storage v0.6.1-0.20260725150835-623a52fe0391
 	k8s.io/api v0.33.13
