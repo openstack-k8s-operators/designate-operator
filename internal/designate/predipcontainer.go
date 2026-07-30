@@ -36,16 +36,27 @@ func PredictableIPContainer(init PredIPContainerDetails) corev1.Container {
 		init.Command,
 	}
 
-	capabilities := []corev1.Capability{"NET_ADMIN", "SYS_ADMIN", "SYS_NICE"}
+	// Setting the predictable IP alias only requires NET_ADMIN (netlink
+	// address add). SYS_ADMIN/SYS_NICE were previously added here but are
+	// unused by setipalias.py and unnecessarily widen the escape surface
+	// of an init container whose image comes from the untrusted
+	// NetUtilsImage CR field. CAP_CHOWN is needed because some callers
+	// (mdns) additionally run crudini against the merged config, which
+	// preserves the root:<service> group ownership of the file it rewrites.
+	capabilities := []corev1.Capability{"NET_ADMIN", "CHOWN"}
 	return corev1.Container{
 		Name:  "predictableips",
 		Image: init.ContainerImage,
 		SecurityContext: &corev1.SecurityContext{
 			Capabilities: &corev1.Capabilities{
 				Add:  capabilities,
-				Drop: []corev1.Capability{},
+				Drop: []corev1.Capability{"ALL"},
 			},
-			RunAsUser: ptr.To(int64(0)),
+			RunAsUser:                ptr.To(int64(0)),
+			AllowPrivilegeEscalation: ptr.To(false),
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
 		},
 		Command: []string{
 			"/bin/bash",
