@@ -6,9 +6,12 @@ import (
 	"time"
 
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/serviceuser"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -28,8 +31,6 @@ func PoolUpdateJob(
 	labels map[string]string,
 	annotations map[string]string,
 ) *batchv1.Job {
-	runAsUser := int64(0)
-
 	volumeDefs := []VolumeMapping{
 		{Name: ScriptsVolumeName(instance.Name), Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
 		{Name: ConfigVolumeName(instance.Name), Type: SecretMount, MountPath: "/var/lib/config-data/default"},
@@ -59,7 +60,8 @@ func PoolUpdateJob(
 		Name: DesignateConfigVolume,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: ConfigVolumeName("designate-central"),
+				DefaultMode: ptr.To(int32(0440)),
+				SecretName:  ConfigVolumeName("designate-central"),
 				Items: []corev1.KeyToPath{
 					{
 						Key:  "designate.conf",
@@ -116,8 +118,10 @@ func PoolUpdateJob(
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy:      corev1.RestartPolicyNever,
-					ServiceAccountName: instance.RbacResourceName(),
+					RestartPolicy:                corev1.RestartPolicyNever,
+					ServiceAccountName:           instance.RbacResourceName(),
+					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              pod.RestrictivePodSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
 					Containers: []corev1.Container{
 						{
 							Name:  jobName,
@@ -128,10 +132,8 @@ func PoolUpdateJob(
 								"-c",
 								cmdLine,
 							},
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: &runAsUser,
-							},
-							VolumeMounts: volumeMounts,
+							SecurityContext: pod.RestrictiveSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
+							VolumeMounts:    volumeMounts,
 						},
 					},
 					Volumes: volumes,
@@ -148,8 +150,6 @@ func PoolListJob(
 	labels map[string]string,
 	annotations map[string]string,
 ) *batchv1.Job {
-	runAsUser := int64(0)
-
 	volumeDefs := []VolumeMapping{
 		{Name: ScriptsVolumeName(instance.Name), Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
 		{Name: ConfigVolumeName(instance.Name), Type: SecretMount, MountPath: "/var/lib/config-data/default"},
@@ -179,7 +179,8 @@ func PoolListJob(
 		Name: DesignateConfigVolume,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: ConfigVolumeName("designate-central"),
+				DefaultMode: ptr.To(int32(0440)),
+				SecretName:  ConfigVolumeName("designate-central"),
 				Items: []corev1.KeyToPath{
 					{
 						Key:  "designate.conf",
@@ -240,8 +241,10 @@ func PoolListJob(
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy:      corev1.RestartPolicyNever,
-					ServiceAccountName: instance.RbacResourceName(),
+					RestartPolicy:                corev1.RestartPolicyNever,
+					ServiceAccountName:           instance.RbacResourceName(),
+					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              pod.RestrictivePodSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
 					Containers: []corev1.Container{
 						{
 							Name:  jobName,
@@ -252,10 +255,8 @@ func PoolListJob(
 								"-c",
 								cmdLine,
 							},
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: &runAsUser,
-							},
-							VolumeMounts: volumeMounts,
+							SecurityContext: pod.RestrictiveSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
+							VolumeMounts:    volumeMounts,
 						},
 					},
 					Volumes: volumes,

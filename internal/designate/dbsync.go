@@ -18,14 +18,12 @@ package designate
 import (
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/serviceuser"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
-
-const (
-	// DBSyncCommand -
-	DBSyncCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
+	"k8s.io/utils/ptr"
 )
 
 // DbSyncJob func
@@ -34,8 +32,6 @@ func DbSyncJob(
 	labels map[string]string,
 	annotations map[string]string,
 ) *batchv1.Job {
-	runAsUser := int64(0)
-
 	volumeDefs := []VolumeMapping{
 		{Name: ScriptsVolumeName(ServiceName), Type: ScriptMount, MountPath: "/usr/local/bin/container-scripts"},
 		{Name: ConfigVolumeName(ServiceName), Type: SecretMount, MountPath: "/var/lib/config-data/default"},
@@ -44,17 +40,10 @@ func DbSyncJob(
 
 	volumes, initVolumeMounts := ProcessVolumes(volumeDefs)
 
-	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
-		Name:      "db-sync-config-data-merged",
-		MountPath: "/var/lib/kolla/config_files/config.json",
-		SubPath:   "db-sync-config.json",
-		ReadOnly:  true,
-	})
-
-	args := []string{"-c", DBSyncCommand}
+	volumeMounts := append(initVolumeMounts,
+		GetConfVolumeMounts("db-sync-config-data-merged")...)
 
 	envVars := map[string]env.Setter{}
-	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 
 	// add CA cert if defined
 	if instance.Spec.DesignateAPI.TLS.CaBundleSecretName != "" {
@@ -74,21 +63,21 @@ func DbSyncJob(
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy:      corev1.RestartPolicyOnFailure,
-					ServiceAccountName: instance.RbacResourceName(),
+					RestartPolicy:                corev1.RestartPolicyOnFailure,
+					ServiceAccountName:           instance.RbacResourceName(),
+					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              pod.RestrictivePodSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
 					Containers: []corev1.Container{
 						{
 							Name: instance.Name + "-db-sync",
 							Command: []string{
 								"/bin/bash",
+								"/usr/local/bin/container-scripts/bootstrap.sh",
 							},
-							Args:  args,
-							Image: instance.Spec.DesignateAPI.ContainerImage,
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: &runAsUser,
-							},
-							Env:          env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts: volumeMounts,
+							Image:           instance.Spec.DesignateAPI.ContainerImage,
+							SecurityContext: pod.RestrictiveSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
+							Env:             env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:    volumeMounts,
 						},
 					},
 					Volumes: volumes,

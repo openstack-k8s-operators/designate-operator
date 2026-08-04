@@ -18,6 +18,7 @@ package designatebackendbind9
 
 import (
 	designate "github.com/openstack-k8s-operators/designate-operator/internal/designate"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/volume"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -27,6 +28,7 @@ const (
 	namedConfigVolume  = "designatebackendbind9-config-named"
 	mergedConfigVolume = "designatebackendbind9-config-data-merged"
 	logVolume          = "designatebackendbind9-log-volume"
+	runVolume          = "designatebackendbind9-run"
 	rndcKeys           = "designatebackendbind9-keys"
 	bindIPs            = "designate-bind-ips"
 	tsigKeys           = "designatebackendbind9-tsig"
@@ -38,7 +40,7 @@ const (
 
 func getServicePodVolumes(baseConfigMapName string, bindIPConfigMapName string, tsigSecretName string) []corev1.Volume {
 	var scriptMode int32 = 0755
-	var configMode int32 = 0640
+	var configMode int32 = 0440
 	volumes := []corev1.Volume{
 		{
 			Name: scriptVolume,
@@ -67,18 +69,9 @@ func getServicePodVolumes(baseConfigMapName string, bindIPConfigMapName string, 
 				},
 			},
 		},
-		{
-			Name: mergedConfigVolume,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{Medium: ""},
-			},
-		},
-		{
-			Name: logVolume,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{Medium: ""},
-			},
-		},
+		volume.WritableDirVolume(mergedConfigVolume),
+		volume.WritableDirVolume(logVolume),
+		volume.WritableDirVolume(runVolume),
 		{
 			Name: rndcKeys,
 			VolumeSource: corev1.VolumeSource{
@@ -118,11 +111,10 @@ func getServicePodVolumes(baseConfigMapName string, bindIPConfigMapName string, 
 	return volumes
 }
 
-// TODO(beagles): we follow the old TripleO/kolla naming of these mounts, but do they really make sense here?
-
-// getInitVolumesMounts - the init container will use the scripts mounted in the scriptVolume and create completed named
-// configuration from the files in configVolume. The modified files will be stored in the mergedConfigVolume
-func getInitVolumeMounts(includeTSIG bool) []corev1.VolumeMount {
+// getInitVolumeMounts returns volume mounts for the init container which
+// merges config from configVolume into mergedConfigVolume and chowns
+// runtime directories for the named process.
+func getInitVolumeMounts(includeTSIG bool, persistentVolumeName string) []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		{
 			Name:      configVolume,
@@ -154,6 +146,18 @@ func getInitVolumeMounts(includeTSIG bool) []corev1.VolumeMount {
 			MountPath: "/var/lib/predictableips",
 			ReadOnly:  true,
 		},
+		{
+			Name:      logVolume,
+			MountPath: "/var/log/bind",
+		},
+		{
+			Name:      runVolume,
+			MountPath: "/run/named",
+		},
+		{
+			Name:      persistentVolumeName,
+			MountPath: "/var/named-persistent",
+		},
 	}
 
 	if includeTSIG {
@@ -183,18 +187,17 @@ func getPredIPVolumeMounts() []corev1.VolumeMount {
 }
 
 func getServicePodVolumeMounts(persistentData string) []corev1.VolumeMount {
-	// Note: TSIG secret volume is defined in getServicePodVolumes(), but only the init container
-	// mounts the actual file via getInitVolumeMounts(). Init container copies it to merged config.
 	return []corev1.VolumeMount{
 		{
 			Name:      mergedConfigVolume,
-			MountPath: "/var/lib/config-data/merged",
+			MountPath: "/etc/named.conf",
+			SubPath:   "named.conf",
 			ReadOnly:  true,
 		},
 		{
 			Name:      mergedConfigVolume,
-			MountPath: "/var/lib/kolla/config_files/config.json",
-			SubPath:   "designate-bind9-config.json",
+			MountPath: "/etc/named",
+			SubPath:   "named",
 			ReadOnly:  true,
 		},
 		{
@@ -205,12 +208,14 @@ func getServicePodVolumeMounts(persistentData string) []corev1.VolumeMount {
 		{
 			Name:      persistentData,
 			MountPath: "/var/named-persistent",
-			ReadOnly:  false,
 		},
 		{
 			Name:      logVolume,
 			MountPath: "/var/log/bind",
-			ReadOnly:  false,
+		},
+		{
+			Name:      runVolume,
+			MountPath: "/run/named",
 		},
 	}
 }

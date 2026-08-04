@@ -47,8 +47,6 @@ var (
 )
 
 const (
-	// KollaServiceCommand - the command to start the service binary in the kolla container
-	KollaServiceCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
 	// DesignateDatabaseName - the name of the DB to store tha API schema
 	DesignateDatabaseName = "designate"
 )

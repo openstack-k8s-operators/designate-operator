@@ -24,10 +24,13 @@ import (
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/serviceuser"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 )
 
 // Deployment func
@@ -38,7 +41,6 @@ func Deployment(
 	annotations map[string]string,
 	topology *topologyv1.Topology,
 ) *appsv1.Deployment {
-	rootUser := int64(0)
 	serviceName := fmt.Sprintf("%s-central", designate.ServiceName)
 
 	// Includes a r/w /var/run/designate for the concurrency lock path
@@ -47,12 +49,14 @@ func Deployment(
 
 	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
 
-	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
-		Name:      designate.MergedVolumeName(instance.Name),
-		MountPath: "/var/lib/kolla/config_files/config.json",
-		SubPath:   serviceName + "-config.json",
-		ReadOnly:  true,
-	})
+	volumeMounts := append(initVolumeMounts,
+		designate.GetConfVolumeMounts(designate.MergedVolumeName(instance.Name))...)
+	overwriteKeys := make([]string, 0, len(instance.Spec.DefaultConfigOverwrite))
+	for key := range instance.Spec.DefaultConfigOverwrite {
+		overwriteKeys = append(overwriteKeys, key)
+	}
+	volumeMounts = append(volumeMounts,
+		designate.GetConfigOverwriteVolumeMounts(designate.MergedDefaultsVolumeName(instance.Name), overwriteKeys, "/etc/designate")...)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -74,7 +78,6 @@ func Deployment(
 	startupProbe.Exec = livenessProbe.Exec
 
 	envVars := map[string]env.Setter{}
-	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
 	// Add the CA bundle
@@ -100,20 +103,25 @@ func Deployment(
 					Labels:      labels,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: instance.Spec.ServiceAccount,
-					Volumes:            volumes,
+					ServiceAccountName:           instance.Spec.ServiceAccount,
+					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              pod.RestrictivePodSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
+					Volumes:                      volumes,
 					Containers: []corev1.Container{
 						{
 							Name:  serviceName,
 							Image: instance.Spec.ContainerImage,
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: &rootUser,
+							Command: []string{
+								"/usr/bin/designate-central",
+								"--config-file", "/etc/designate/designate.conf",
+								"--config-dir", "/etc/designate/designate.conf.d",
 							},
-							Env:           env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:  volumeMounts,
-							Resources:     instance.Spec.Resources,
-							StartupProbe:  startupProbe,
-							LivenessProbe: livenessProbe,
+							SecurityContext: pod.RestrictiveSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
+							Env:             env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:    volumeMounts,
+							Resources:       instance.Spec.Resources,
+							StartupProbe:    startupProbe,
+							LivenessProbe:   livenessProbe,
 						},
 					},
 				},
