@@ -16,6 +16,8 @@ limitations under the License.
 package designate
 
 import (
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/users"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -45,19 +47,15 @@ const (
 
 // SimpleInitContainer creates a simple init container with the provided details
 func SimpleInitContainer(init InitContainerDetails) corev1.Container {
-	runAsUser := int64(0)
-
 	args := []string{
 		"-c",
 		InitContainerCommand,
 	}
 
 	return corev1.Container{
-		Name:  "init",
-		Image: init.ContainerImage,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser: &runAsUser,
-		},
+		Name:            "init",
+		Image:           init.ContainerImage,
+		SecurityContext: pod.RestrictiveSecurityContext(users.DesignateUID, users.DesignateGID),
 		Command: []string{
 			"/bin/bash",
 		},
@@ -69,8 +67,6 @@ func SimpleInitContainer(init InitContainerDetails) corev1.Container {
 
 // InitContainer - init container for designate api pods
 func InitContainer(init APIDetails) []corev1.Container {
-	runAsUser := int64(0)
-
 	args := []string{
 		"-c",
 		InitContainerCommand,
@@ -78,11 +74,9 @@ func InitContainer(init APIDetails) []corev1.Container {
 
 	return []corev1.Container{
 		{
-			Name:  "init",
-			Image: init.ContainerImage,
-			SecurityContext: &corev1.SecurityContext{
-				RunAsUser: &runAsUser,
-			},
+			Name:            "init",
+			Image:           init.ContainerImage,
+			SecurityContext: pod.RestrictiveSecurityContext(users.DesignateUID, users.DesignateGID),
 			Command: []string{
 				"/bin/bash",
 			},

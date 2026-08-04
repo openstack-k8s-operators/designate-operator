@@ -24,19 +24,16 @@ import (
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
+	"github.com/openstack-k8s-operators/lib-common/modules/users"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
-)
-
-const (
-	// ServiceCommand -
-	ServiceCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
 )
 
 // Deployment func
@@ -47,21 +44,28 @@ func Deployment(
 	annotations map[string]string,
 	topology *topologyv1.Topology,
 ) (*appsv1.Deployment, error) {
-	runAsUser := int64(0)
 	serviceName := fmt.Sprintf("%s-api", designate.ServiceName)
 
-	// Includes a r/w /var/run/designate for the concurrency lock path
+	// Includes a r/w /var/run/designate for the concurrency lock path, plus
+	// r/w emptyDirs for httpd's PID file and its default error log path
+	// (both required now that httpd runs as a non-root, FSGroup-only user).
 	volumeDefs := append(designate.GetStandardVolumeMapping(instance),
-		designate.VolumeMapping{Name: instance.Name + "-run", Type: designate.MergeMount, MountPath: "/var/run/designate"})
+		designate.VolumeMapping{Name: instance.Name + "-run", Type: designate.MergeMount, MountPath: "/var/run/designate"},
+		designate.VolumeMapping{Name: instance.Name + "-run-httpd", Type: designate.MergeMount, MountPath: "/run/httpd"},
+		designate.VolumeMapping{Name: instance.Name + "-var-log-httpd", Type: designate.MergeMount, MountPath: "/var/log/httpd"})
 
 	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
 
-	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
-		Name:      designate.MergedVolumeName(instance.Name),
-		MountPath: "/var/lib/kolla/config_files/config.json",
-		SubPath:   serviceName + "-config.json",
-		ReadOnly:  true,
-	})
+	volumeMounts := append(initVolumeMounts,
+		designate.GetConfVolumeMounts(designate.MergedVolumeName(instance.Name))...)
+	volumeMounts = append(volumeMounts,
+		designate.GetHttpdConfVolumeMounts(designate.MergedVolumeName(instance.Name))...)
+	overwriteKeys := make([]string, 0, len(instance.Spec.DefaultConfigOverwrite))
+	for key := range instance.Spec.DefaultConfigOverwrite {
+		overwriteKeys = append(overwriteKeys, key)
+	}
+	volumeMounts = append(volumeMounts,
+		designate.GetConfigOverwriteVolumeMounts(designate.MergedDefaultsVolumeName(instance.Name), overwriteKeys, "/etc/designate")...)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -75,8 +79,6 @@ func Deployment(
 		PeriodSeconds:       15,
 		InitialDelaySeconds: 5,
 	}
-
-	args := []string{"-c", ServiceCommand}
 
 	livenessProbe.HTTPGet = &corev1.HTTPGetAction{
 		Path: "/healthcheck",
@@ -110,13 +112,16 @@ func Deployment(
 			if err != nil {
 				return nil, err
 			}
+			certMount := fmt.Sprintf("/etc/pki/tls/certs/%s.crt", endpt.String())
+			keyMount := fmt.Sprintf("/etc/pki/tls/private/%s.key", endpt.String())
+			svc.CertMount = &certMount
+			svc.KeyMount = &keyMount
 			volumes = append(volumes, svc.CreateVolume(endpt.String()))
 			volumeMounts = append(volumeMounts, svc.CreateVolumeMounts(endpt.String())...)
 		}
 	}
 
 	envVars := map[string]env.Setter{}
-	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
 	deployment := &appsv1.Deployment{
@@ -138,23 +143,22 @@ func Deployment(
 				Spec: corev1.PodSpec{
 					ServiceAccountName:           instance.Spec.ServiceAccount,
 					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              pod.RestrictivePodSecurityContext(users.DesignateUID, users.DesignateGID),
 					Volumes:                      volumes,
 					Containers: []corev1.Container{
 						{
 							Name: serviceName,
 							Command: []string{
-								"/bin/bash",
+								"/usr/sbin/httpd",
 							},
-							Args:  args,
-							Image: instance.Spec.ContainerImage,
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: &runAsUser,
-							},
-							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:   volumeMounts,
-							Resources:      instance.Spec.Resources,
-							ReadinessProbe: readinessProbe,
-							LivenessProbe:  livenessProbe,
+							Args:            []string{"-DFOREGROUND"},
+							Image:           instance.Spec.ContainerImage,
+							SecurityContext: pod.RestrictiveSecurityContext(users.DesignateUID, users.DesignateGID),
+							Env:             env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:    volumeMounts,
+							Resources:       instance.Spec.Resources,
+							ReadinessProbe:  readinessProbe,
+							LivenessProbe:   livenessProbe,
 						},
 					},
 				},
