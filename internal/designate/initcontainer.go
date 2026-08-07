@@ -16,6 +16,8 @@ limitations under the License.
 package designate
 
 import (
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/serviceuser"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -33,9 +35,10 @@ type APIDetails struct {
 
 // InitContainerDetails contains configuration for init containers
 type InitContainerDetails struct {
-	ContainerImage string
-	VolumeMounts   []corev1.VolumeMount
-	EnvVars        []corev1.EnvVar
+	ContainerImage  string
+	VolumeMounts    []corev1.VolumeMount
+	EnvVars         []corev1.EnvVar
+	SecurityContext *corev1.SecurityContext
 }
 
 const (
@@ -45,7 +48,10 @@ const (
 
 // SimpleInitContainer creates a simple init container with the provided details
 func SimpleInitContainer(init InitContainerDetails) corev1.Container {
-	runAsUser := int64(0)
+	sc := init.SecurityContext
+	if sc == nil {
+		sc = pod.RestrictiveSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID)
+	}
 
 	args := []string{
 		"-c",
@@ -53,11 +59,9 @@ func SimpleInitContainer(init InitContainerDetails) corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:  "init",
-		Image: init.ContainerImage,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser: &runAsUser,
-		},
+		Name:            "init",
+		Image:           init.ContainerImage,
+		SecurityContext: sc,
 		Command: []string{
 			"/bin/bash",
 		},
@@ -69,8 +73,6 @@ func SimpleInitContainer(init InitContainerDetails) corev1.Container {
 
 // InitContainer - init container for designate api pods
 func InitContainer(init APIDetails) []corev1.Container {
-	runAsUser := int64(0)
-
 	args := []string{
 		"-c",
 		InitContainerCommand,
@@ -78,11 +80,9 @@ func InitContainer(init APIDetails) []corev1.Container {
 
 	return []corev1.Container{
 		{
-			Name:  "init",
-			Image: init.ContainerImage,
-			SecurityContext: &corev1.SecurityContext{
-				RunAsUser: &runAsUser,
-			},
+			Name:            "init",
+			Image:           init.ContainerImage,
+			SecurityContext: pod.RestrictiveSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
 			Command: []string{
 				"/bin/bash",
 			},

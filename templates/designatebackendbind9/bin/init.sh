@@ -70,3 +70,12 @@ else
     echo "ERROR: rndc key not found at ${rndc_key_filename}!"
     exit 1
 fi
+
+# Set ownership on runtime directories so named (which self-drops
+# to the "named" user via -u) can write PID files and logs.
+chown -R root:named /var/log/bind
+chmod -R 0775 /var/log/bind
+chown -R root:named /run/named
+chmod -R 0775 /run/named
+chown root:named /var/named-persistent
+chmod 0770 /var/named-persistent

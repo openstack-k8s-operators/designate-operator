@@ -24,6 +24,8 @@ import (
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/serviceuser"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -76,7 +78,6 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 	readinessProbe.Exec = livenessProbe.Exec
 
 	envVars := map[string]env.Setter{}
-	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
 	serviceName := fmt.Sprintf("%s-unbound", designate.ServiceName)
@@ -96,7 +97,9 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 					Labels:      labels,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: instance.Spec.ServiceAccount,
+					ServiceAccountName:           instance.Spec.ServiceAccount,
+					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              pod.RestrictivePodSecurityContext(serviceuser.DesignateUID, serviceuser.DesignateGID),
 					// Unbound doesn't use any config in common with the other
 					// designate services so just give it it's own config
 					// volume.
@@ -111,7 +114,8 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 							"-p",
 						},
 						SecurityContext: &corev1.SecurityContext{
-							RunAsUser: ptr.To[int64](0),
+							RunAsUser:    ptr.To[int64](0),
+							RunAsNonRoot: ptr.To(false),
 						},
 						Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
 						VolumeMounts:   initVolumeMounts,
