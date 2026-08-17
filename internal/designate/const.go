@@ -114,6 +114,10 @@ const (
 	// ACConsumerFinalizer is added to AC secrets that designate is actively consuming
 	ACConsumerFinalizer = "openstack.org/designateapi-ac-consumer"
 
+	// TransportConsumerFinalizer is added to transport secrets that designate is
+	// actively consuming, preventing premature deletion during credential rotation
+	TransportConsumerFinalizer = "openstack.org/designate-transport-consumer"
+
 	// ExternalBindsData is the name of the secret containing external BIND9 configurations
 	ExternalBindsData = "designate-external-binds"
 
