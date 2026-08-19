@@ -24,16 +24,13 @@ import (
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/users"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
-)
-
-const (
-	// ServiceCommand -
-	ServiceCommand = "/usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start"
 )
 
 // Deployment func
@@ -44,7 +41,6 @@ func Deployment(
 	annotations map[string]string,
 	topology *topologyv1.Topology,
 ) *appsv1.Deployment {
-	rootUser := int64(0)
 	serviceName := fmt.Sprintf("%s-worker", designate.ServiceName)
 
 	volumes, initVolumeMounts := designate.ProcessVolumes(designate.GetStandardVolumeMapping(instance))
@@ -68,7 +64,7 @@ func Deployment(
 			},
 		},
 	}
-	var projVolMode int32 = 0640
+	var projVolMode int32 = 0440
 	projectedVolume := corev1.Volume{
 		Name: "worker-projected-volumes",
 		VolumeSource: corev1.VolumeSource{
@@ -82,17 +78,19 @@ func Deployment(
 
 	volumeMounts := append(initVolumeMounts,
 		corev1.VolumeMount{
-			Name:      designate.MergedVolumeName(instance.Name),
-			MountPath: "/var/lib/kolla/config_files/config.json",
-			SubPath:   serviceName + "-config.json",
-			ReadOnly:  true,
-		},
-		corev1.VolumeMount{
 			Name:      "worker-projected-volumes",
 			MountPath: "/etc/designate/rndc-keys",
 			ReadOnly:  true,
 		},
 	)
+	volumeMounts = append(volumeMounts,
+		designate.GetConfVolumeMounts(designate.MergedVolumeName(instance.Name))...)
+	overwriteKeys := make([]string, 0, len(instance.Spec.DefaultConfigOverwrite))
+	for key := range instance.Spec.DefaultConfigOverwrite {
+		overwriteKeys = append(overwriteKeys, key)
+	}
+	volumeMounts = append(volumeMounts,
+		designate.GetConfigOverwriteVolumeMounts(designate.MergedDefaultsVolumeName(instance.Name), overwriteKeys, "/etc/designate")...)
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -106,7 +104,6 @@ func Deployment(
 		PeriodSeconds:       15,
 		InitialDelaySeconds: 5,
 	}
-	args := []string{"-c", ServiceCommand}
 	livenessProbe.Exec = &corev1.ExecAction{
 		Command: []string{
 			"/usr/bin/pgrep", "-r", "DRST", "-f", "designate.worker",
@@ -115,7 +112,6 @@ func Deployment(
 	startupProbe.Exec = livenessProbe.Exec
 
 	envVars := map[string]env.Setter{}
-	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
 	// Add the CA bundle
@@ -143,23 +139,23 @@ func Deployment(
 				Spec: corev1.PodSpec{
 					ServiceAccountName:           instance.Spec.ServiceAccount,
 					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              pod.RestrictivePodSecurityContext(users.DesignateUID, users.DesignateGID),
 					Volumes:                      volumes,
 					Containers: []corev1.Container{
 						{
 							Name: serviceName,
 							Command: []string{
-								"/bin/bash",
+								"/usr/bin/designate-worker",
+								"--config-file", "/etc/designate/designate.conf",
+								"--config-dir", "/etc/designate/designate.conf.d",
 							},
-							Args:  args,
-							Image: instance.Spec.ContainerImage,
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: &rootUser,
-							},
-							Env:           env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:  volumeMounts,
-							Resources:     instance.Spec.Resources,
-							StartupProbe:  startupProbe,
-							LivenessProbe: livenessProbe,
+							Image:           instance.Spec.ContainerImage,
+							SecurityContext: pod.RestrictiveSecurityContext(users.DesignateUID, users.DesignateGID),
+							Env:             env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:    volumeMounts,
+							Resources:       instance.Spec.Resources,
+							StartupProbe:    startupProbe,
+							LivenessProbe:   livenessProbe,
 						},
 					},
 				},

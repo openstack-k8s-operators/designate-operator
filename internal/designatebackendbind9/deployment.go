@@ -26,8 +26,8 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/backup"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
+	"github.com/openstack-k8s-operators/lib-common/modules/users"
 
-	// labels "github.com/openstack-k8s-operators/lib-common/modules/common/labels"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -56,8 +56,10 @@ func StatefulSet(
 	includeTSIG bool,
 ) (*appsv1.StatefulSet, error) {
 
-	// TODO(beagles): Dbl check that running as the default kolla/tcib user works okay here. Permissions on some of the
-	// directories require serious care.
+	// Root is required: named binds port 53 before self-dropping to the
+	// "named" user via -u. The init container also runs as root to chown
+	// runtime directories (/var/log/bind, /run/named, /var/named-persistent)
+	// so named can write to them after dropping privileges.
 
 	livenessProbe := &corev1.Probe{
 		// TODO might need tuning
@@ -89,7 +91,6 @@ func StatefulSet(
 	}
 
 	envVars := map[string]env.Setter{}
-	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
 	// Each pool gets its own TSIG secret, named after its own StatefulSet, since each pool is a
@@ -123,11 +124,26 @@ func StatefulSet(
 				Spec: corev1.PodSpec{
 					ServiceAccountName:           instance.Spec.ServiceAccount,
 					AutomountServiceAccountToken: ptr.To(false),
-					Volumes:                      serviceVolumes,
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: ptr.To(users.NamedGID),
+					},
+					Volumes: serviceVolumes,
 					Containers: []corev1.Container{
 						{
-							Name:           serviceName,
-							Image:          instance.Spec.ContainerImage,
+							Name:  serviceName,
+							Image: instance.Spec.ContainerImage,
+							Command: []string{
+								"/usr/sbin/named",
+							},
+							Args: []string{
+								"-g", "-d", "3",
+								"-u", "named",
+								"-c", "/etc/named.conf", "-f",
+							},
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser:    ptr.To[int64](0),
+								RunAsNonRoot: ptr.To(false),
+							},
 							Env:            env.MergeEnvs([]corev1.EnvVar{}, envVars),
 							VolumeMounts:   getServicePodVolumeMounts(instance.Name + PVCSuffix),
 							Resources:      instance.Spec.Resources,
@@ -206,9 +222,13 @@ func StatefulSet(
 	envVars["MAP_PREFIX"] = env.SetValue("bind_address_")
 	envVars["RNDC_PREFIX"] = env.SetValue(designate.DesignateRndcKey)
 	env := env.MergeEnvs([]corev1.EnvVar{}, envVars)
+	// The init container only merges config into emptyDir volumes, so it runs
+	// non-root as DesignateUID via SimpleInitContainer's restrictive
+	// SecurityContext. Pod-level FSGroup: NamedGID keeps the merged files
+	// accessible to the named user in the main container.
 	initContainerDetails := designate.InitContainerDetails{
 		ContainerImage: instance.Spec.ContainerImage,
-		VolumeMounts:   getInitVolumeMounts(includeTSIG),
+		VolumeMounts:   getInitVolumeMounts(includeTSIG, instance.Name+PVCSuffix),
 		EnvVars:        env,
 	}
 	predIPContainerDetails := designate.PredIPContainerDetails{

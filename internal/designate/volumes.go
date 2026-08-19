@@ -16,6 +16,9 @@ limitations under the License.
 package designate
 
 import (
+	"fmt"
+	"slices"
+
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -59,8 +62,8 @@ func ProcessVolumes(volumeDefs []VolumeMapping) ([]corev1.Volume, []corev1.Volum
 	mounts := make([]corev1.VolumeMount, len(volumeDefs))
 	modeMap := map[string]int32{
 		ScriptMount: 0755,
-		SecretMount: 0640,
-		ConfigMount: 0640,
+		SecretMount: 0440,
+		ConfigMount: 0440,
 		MergeMount:  0,
 	}
 	for i := range volumeDefs {
@@ -126,4 +129,70 @@ func ProcessVolumes(volumeDefs []VolumeMapping) ([]corev1.Volume, []corev1.Volum
 		mounts[i] = newMount
 	}
 	return volumes, mounts
+}
+
+// GetConfVolumeMounts returns the final-path SubPath mounts for the config
+// files the merge init container produces in the "merged" EmptyDir:
+// designate.conf, designate.conf.d/custom.conf, and /etc/my.cnf.
+func GetConfVolumeMounts(mergedVolumeName string) []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      mergedVolumeName,
+			MountPath: "/etc/designate/designate.conf",
+			SubPath:   "designate.conf",
+			ReadOnly:  true,
+		},
+		{
+			Name:      mergedVolumeName,
+			MountPath: "/etc/designate/designate.conf.d/custom.conf",
+			SubPath:   "custom.conf",
+			ReadOnly:  true,
+		},
+		{
+			Name:      mergedVolumeName,
+			MountPath: "/etc/my.cnf",
+			SubPath:   "my.cnf",
+			ReadOnly:  true,
+		},
+	}
+}
+
+// GetHttpdConfVolumeMounts returns the final-path SubPath mounts for
+// designate-api's httpd config. httpd.conf/ssl.conf ship alongside
+// designate.conf in the same config-data Secret, so the merge init
+// container copies them into the same "merged" EmptyDir as designate.conf.
+func GetHttpdConfVolumeMounts(mergedVolumeName string) []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      mergedVolumeName,
+			MountPath: "/etc/httpd/conf/httpd.conf",
+			SubPath:   "httpd.conf",
+			ReadOnly:  true,
+		},
+		{
+			Name:      mergedVolumeName,
+			MountPath: "/etc/httpd/conf.d/ssl.conf",
+			SubPath:   "ssl.conf",
+			ReadOnly:  true,
+		},
+	}
+}
+
+// GetConfigOverwriteVolumeMounts returns SubPath mounts that place each
+// DefaultConfigOverwrite key as an individual file under basePath, sourced
+// from the "config-overwrites" merged EmptyDir.
+func GetConfigOverwriteVolumeMounts(mergedDefaultsVolumeName string, overwriteKeys []string, basePath string) []corev1.VolumeMount {
+	mounts := make([]corev1.VolumeMount, 0, len(overwriteKeys))
+	sorted := make([]string, len(overwriteKeys))
+	copy(sorted, overwriteKeys)
+	slices.Sort(sorted)
+	for _, key := range sorted {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      mergedDefaultsVolumeName,
+			MountPath: fmt.Sprintf("%s/%s", basePath, key),
+			SubPath:   key,
+			ReadOnly:  true,
+		})
+	}
+	return mounts
 }

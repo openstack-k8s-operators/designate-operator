@@ -19,12 +19,15 @@ set -ex
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 . ${SCRIPTPATH}/common.sh --source-only
 
+# Clean any partial state from a previous init run (crash + restart)
+rm -rf /var/lib/config-data/merged/*
+
 # Merge all templates from config CM
 for dir in /var/lib/config-data/default; do
     merge_config_dir ${dir}
 done
 
-mkdir /var/lib/config-data/merged/named
+mkdir -p /var/lib/config-data/merged/named
 cp -f /var/lib/config-data/default/named/* /var/lib/config-data/merged/named/
 
 # Add TSIG configuration if it exists (for multipool non-default pools)

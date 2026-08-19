@@ -53,6 +53,7 @@ func PredictableIPContainer(init PredIPContainerDetails) corev1.Container {
 				Drop: []corev1.Capability{"ALL"},
 			},
 			RunAsUser:                ptr.To(int64(0)),
+			RunAsNonRoot:             ptr.To(false),
 			AllowPrivilegeEscalation: ptr.To(false),
 			SeccompProfile: &corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,

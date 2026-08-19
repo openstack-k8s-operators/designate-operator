@@ -30,6 +30,7 @@ function merge_config_dir {
         else
             echo copy ${conf} to /var/lib/config-data/merged/
             cp -f ${conf} /var/lib/config-data/merged/
+            chmod 0660 /var/lib/config-data/merged/${conf_base}
         fi
     done
 }

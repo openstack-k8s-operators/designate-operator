@@ -22,6 +22,8 @@ import (
 	common "github.com/openstack-k8s-operators/lib-common/modules/common"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/affinity"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/env"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/pod"
+	"github.com/openstack-k8s-operators/lib-common/modules/users"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,7 +39,6 @@ func StatefulSet(
 	annotations map[string]string,
 	topology *topologyv1.Topology,
 ) *appsv1.StatefulSet {
-	rootUser := int64(0)
 	serviceName := instance.Name
 
 	// Pods using predictable IPs and setipalias.py have both a different script path and an additonal predictable IP
@@ -56,12 +57,14 @@ func StatefulSet(
 
 	volumes, initVolumeMounts := designate.ProcessVolumes(volumeDefs)
 
-	volumeMounts := append(initVolumeMounts, corev1.VolumeMount{
-		Name:      designate.MergedVolumeName(instance.Name),
-		MountPath: "/var/lib/kolla/config_files/config.json",
-		SubPath:   serviceName + "-config.json",
-		ReadOnly:  true,
-	})
+	volumeMounts := append(initVolumeMounts,
+		designate.GetConfVolumeMounts(designate.MergedVolumeName(instance.Name))...)
+	overwriteKeys := make([]string, 0, len(instance.Spec.DefaultConfigOverwrite))
+	for key := range instance.Spec.DefaultConfigOverwrite {
+		overwriteKeys = append(overwriteKeys, key)
+	}
+	volumeMounts = append(volumeMounts,
+		designate.GetConfigOverwriteVolumeMounts(designate.MergedDefaultsVolumeName(instance.Name), overwriteKeys, "/etc/designate")...)
 
 	// Ideally we would use the connection probe but the mdns service does
 	// not listen on a cluster allocated IP
@@ -86,7 +89,6 @@ func StatefulSet(
 	startupProbe.Exec = livenessProbe.Exec
 
 	envVars := map[string]env.Setter{}
-	envVars["KOLLA_CONFIG_STRATEGY"] = env.SetValue("COPY_ALWAYS")
 	envVars["CONFIG_HASH"] = env.SetValue(configHash)
 
 	// Add the CA bundle
@@ -114,19 +116,23 @@ func StatefulSet(
 				Spec: corev1.PodSpec{
 					ServiceAccountName:           instance.Spec.ServiceAccount,
 					AutomountServiceAccountToken: ptr.To(false),
+					SecurityContext:              pod.RestrictivePodSecurityContext(users.DesignateUID, users.DesignateGID),
 					Volumes:                      volumes,
 					Containers: []corev1.Container{
 						{
 							Name:  serviceName,
 							Image: instance.Spec.ContainerImage,
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: &rootUser,
+							Command: []string{
+								"/usr/bin/designate-mdns",
+								"--config-file", "/etc/designate/designate.conf",
+								"--config-dir", "/etc/designate/designate.conf.d",
 							},
-							Env:           env.MergeEnvs([]corev1.EnvVar{}, envVars),
-							VolumeMounts:  volumeMounts,
-							Resources:     instance.Spec.Resources,
-							StartupProbe:  startupProbe,
-							LivenessProbe: livenessProbe,
+							SecurityContext: pod.RestrictiveSecurityContext(users.DesignateUID, users.DesignateGID),
+							Env:             env.MergeEnvs([]corev1.EnvVar{}, envVars),
+							VolumeMounts:    volumeMounts,
+							Resources:       instance.Spec.Resources,
+							StartupProbe:    startupProbe,
+							LivenessProbe:   livenessProbe,
 						},
 					},
 				},

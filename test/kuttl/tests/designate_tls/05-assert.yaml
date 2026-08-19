@@ -95,11 +95,10 @@ spec:
               topologyKey: kubernetes.io/hostname
             weight: 100
       containers:
-      - args:
-        - -c
-        - /usr/local/bin/kolla_set_configs && /usr/local/bin/kolla_start
-        command:
-        - /bin/bash
+      - command:
+        - /usr/sbin/httpd
+        args:
+        - -DFOREGROUND
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 3
@@ -144,27 +143,47 @@ spec:
             name: designate-api-merged-defaults
           - mountPath: /var/run/designate
             name: designate-api-run
-          - mountPath: /var/lib/kolla/config_files/config.json
+          - mountPath: /run/httpd
+            name: designate-api-run-httpd
+          - mountPath: /var/log/httpd
+            name: designate-api-var-log-httpd
+          - mountPath: /etc/designate/designate.conf
             name: designate-api-merged
             readOnly: true
-            subPath: designate-api-config.json
+            subPath: designate.conf
+          - mountPath: /etc/designate/designate.conf.d/custom.conf
+            name: designate-api-merged
+            readOnly: true
+            subPath: custom.conf
+          - mountPath: /etc/my.cnf
+            name: designate-api-merged
+            readOnly: true
+            subPath: my.cnf
+          - mountPath: /etc/httpd/conf/httpd.conf
+            name: designate-api-merged
+            readOnly: true
+            subPath: httpd.conf
+          - mountPath: /etc/httpd/conf.d/ssl.conf
+            name: designate-api-merged
+            readOnly: true
+            subPath: ssl.conf
           - mountPath: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
             name: combined-ca-bundle
             readOnly: true
             subPath: tls-ca-bundle.pem
-          - mountPath: /var/lib/config-data/tls/certs/internal.crt
+          - mountPath: /etc/pki/tls/certs/internal.crt
             name: internal-tls-certs
             readOnly: true
             subPath: tls.crt
-          - mountPath: /var/lib/config-data/tls/private/internal.key
+          - mountPath: /etc/pki/tls/private/internal.key
             name: internal-tls-certs
             readOnly: true
             subPath: tls.key
-          - mountPath: /var/lib/config-data/tls/certs/public.crt
+          - mountPath: /etc/pki/tls/certs/public.crt
             name: public-tls-certs
             readOnly: true
             subPath: tls.crt
-          - mountPath: /var/lib/config-data/tls/private/public.key
+          - mountPath: /etc/pki/tls/private/public.key
             name: public-tls-certs
             readOnly: true
             subPath: tls.key
@@ -199,6 +218,10 @@ spec:
           name: designate-api-merged-defaults
         - mountPath: /var/run/designate
           name: designate-api-run
+        - mountPath: /run/httpd
+          name: designate-api-run-httpd
+        - mountPath: /var/log/httpd
+          name: designate-api-var-log-httpd
       restartPolicy: Always
       serviceAccount: designate-designate
       serviceAccountName: designate-designate
@@ -210,25 +233,29 @@ spec:
       - name: designate-config-data
         secret:
           secretName: designate-config-data
-          defaultMode: 416
+          defaultMode: 288
       - name: designate-defaults
         secret:
           secretName: designate-defaults
-          defaultMode: 416
+          defaultMode: 288
       - name: designate-api-config-data
         secret:
           secretName: designate-api-config-data
-          defaultMode: 416
+          defaultMode: 288
       - emptyDir: {}
         name: designate-api-merged
       - name: designate-api-defaults
         secret:
           secretName: designate-api-defaults
-          defaultMode: 416
+          defaultMode: 288
       - emptyDir: {}
         name: designate-api-merged-defaults
       - emptyDir: {}
         name: designate-api-run
+      - emptyDir: {}
+        name: designate-api-run-httpd
+      - emptyDir: {}
+        name: designate-api-var-log-httpd
       - name: combined-ca-bundle
         secret:
           secretName: combined-ca-bundle
@@ -247,7 +274,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   annotations:
-    openshift.io/scc: anyuid
+    openshift.io/scc: nonroot-v2
   labels:
     service: designate
 ---
