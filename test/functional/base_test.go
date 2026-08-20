@@ -188,7 +188,8 @@ func GetDefaultDesignateSpec(bind9ReplicaCount, mdnsReplicaCount int, unboundRep
 	}
 	spec["designateBackendbind9"] = designatev1.DesignateBackendbind9Spec{
 		DesignateBackendbind9SpecBase: designatev1.DesignateBackendbind9SpecBase{
-			Replicas: ptr.To(int32(bind9ReplicaCount)), // #nosec G115
+			Replicas:       ptr.To(int32(bind9ReplicaCount)), // #nosec G115
+			StorageRequest: "1Gi",
 		},
 	}
 	spec["designateMdns"] = designatev1.DesignateMdnsSpec{

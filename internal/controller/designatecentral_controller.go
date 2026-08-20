@@ -72,8 +72,9 @@ func (r *DesignateCentralReconciler) GetScheme() *runtime.Scheme {
 // DesignateCentralReconciler reconciles a DesignateCentral object
 type DesignateCentralReconciler struct {
 	client.Client
-	Kclient kubernetes.Interface
-	Scheme  *runtime.Scheme
+	Kclient   kubernetes.Interface
+	Scheme    *runtime.Scheme
+	APIReader client.Reader
 }
 
 // GetLogger returns a logger object with a prefix of "controller.name" and additional controller context fields
@@ -539,6 +540,7 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
+
 	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, instance, configMapVars)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -611,12 +613,26 @@ func (r *DesignateCentralReconciler) reconcileNormal(ctx context.Context, instan
 		return ctrlResult, nil
 	}
 
+	expectedHash := instance.Annotations["openstack.org/input-secret-hash"]
+
 	deploy := depl.GetDeployment()
 	if deploy.Generation == deploy.Status.ObservedGeneration {
 		instance.Status.ReadyCount = deploy.Status.ReadyReplicas
 
+		ready := false
 		if deployment.IsReady(deploy) {
+			ready, err = deployment.IsReadyForInput(ctx, r.APIReader,
+				types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace},
+				inputHash)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		if ready {
 			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
+			if expectedHash != "" {
+				instance.Status.AppliedInputSecretHash = expectedHash
+			}
 		} else {
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.DeploymentReadyCondition,
