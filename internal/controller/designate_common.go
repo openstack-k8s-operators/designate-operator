@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	topologyv1 "github.com/openstack-k8s-operators/infra-operator/apis/topology/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
@@ -60,6 +61,9 @@ func ensureTopology(
 		defaultLabelSelector,
 	)
 	if err != nil {
+		if strings.Contains(err.Error(), "the object has been modified") {
+			return nil, err
+		}
 		conditionUpdater.Set(condition.FalseCondition(
 			condition.TopologyReadyCondition,
 			condition.ErrorReason,

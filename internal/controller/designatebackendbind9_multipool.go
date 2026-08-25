@@ -430,7 +430,7 @@ func (r *DesignateBackendbind9Reconciler) verifyPoolNetworkAttachments(
 		deploy.Status.ReadyReplicas,
 	)
 	if err != nil {
-		return err
+		helper.GetLogger().Info(fmt.Sprintf("Network attachment verification pending: %v", err))
 	}
 
 	// Merge network attachment status

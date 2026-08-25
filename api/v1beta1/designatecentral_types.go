@@ -89,6 +89,10 @@ type DesignateCentralStatus struct {
 	// NetworkAttachments status of the deployment pods
 	NetworkAttachments map[string][]string `json:"networkAttachments,omitempty"`
 
+	// AppliedInputSecretHash - hash of the input secret names last confirmed
+	// as fully rolled out to the workload pods.
+	AppliedInputSecretHash string `json:"appliedInputSecretHash,omitempty"`
+
 	// ObservedGeneration - the most recent generation observed for this
 	// service. If the observed generation is less than the spec generation,
 	// then the controller has not processed the latest changes injected by

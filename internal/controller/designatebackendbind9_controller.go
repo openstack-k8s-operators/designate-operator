@@ -23,6 +23,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -599,13 +600,15 @@ func (r *DesignateBackendbind9Reconciler) reconcileNormal(ctx context.Context, i
 		labels.GetLabelSelector(serviceLabels),
 	)
 	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			condition.TopologyReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			condition.TopologyReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, fmt.Errorf("waiting for Topology requirements: %w", err)
+		if !strings.Contains(err.Error(), "the object has been modified") {
+			instance.Status.Conditions.Set(condition.FalseCondition(
+				condition.TopologyReadyCondition,
+				condition.ErrorReason,
+				condition.SeverityWarning,
+				condition.TopologyReadyErrorMessage,
+				err.Error()))
+		}
+		return ctrl.Result{}, err
 	}
 
 	//
@@ -680,7 +683,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileSingleStatefulSet(
 		// verify if network attachment matches expectations
 		networkReady := false
 		networkAttachmentStatus := map[string][]string{}
-		if *(instance.Spec.Replicas) > 0 {
+		if *(instance.Spec.Replicas) > 0 && instance.Status.ReadyCount > 0 {
 			networkReady, networkAttachmentStatus, err = nad.VerifyNetworkStatusFromAnnotation(
 				ctx,
 				helper,
@@ -689,7 +692,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileSingleStatefulSet(
 				instance.Status.ReadyCount,
 			)
 			if err != nil {
-				return ctrl.Result{}, err
+				Log.Info(fmt.Sprintf("Network attachment verification pending: %v", err))
 			}
 		} else {
 			networkReady = true
@@ -699,14 +702,11 @@ func (r *DesignateBackendbind9Reconciler) reconcileSingleStatefulSet(
 		if networkReady {
 			instance.Status.Conditions.MarkTrue(condition.NetworkAttachmentsReadyCondition, condition.NetworkAttachmentsReadyMessage)
 		} else {
-			err := fmt.Errorf("%w: %s", designate.ErrNetworkAttachmentConfig, instance.Spec.NetworkAttachments)
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.NetworkAttachmentsReadyCondition,
-				condition.ErrorReason,
-				condition.SeverityWarning,
-				condition.NetworkAttachmentsReadyErrorMessage,
-				err.Error()))
-			return ctrl.Result{}, err
+				condition.RequestedReason,
+				condition.SeverityInfo,
+				condition.DeploymentReadyRunningMessage))
 		}
 
 		// Mark the Deployment as Ready only if the number of Replicas is equals
@@ -790,7 +790,11 @@ func (r *DesignateBackendbind9Reconciler) generateServiceConfigMaps(
 	customData[common.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
 
 	var nadInfo *designate.NADConfig
-	for _, netAtt := range instance.Spec.NetworkAttachments {
+	netAttachments := instance.Spec.NetworkAttachments
+	if len(netAttachments) == 0 && instance.Spec.ControlNetworkName != "" {
+		netAttachments = []string{instance.Spec.ControlNetworkName}
+	}
+	for _, netAtt := range netAttachments {
 		nad, err := nad.GetNADWithName(ctx, h, netAtt, instance.Namespace)
 		if err != nil {
 			if k8s_errors.IsNotFound(err) {
