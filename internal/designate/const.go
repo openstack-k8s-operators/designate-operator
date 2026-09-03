@@ -134,4 +134,15 @@ const (
 	// ExternalPoolServiceAnnotation is the annotation name for specifying the pool name the external
 	// service is intended for
 	ExternalPoolServiceAnnotation = "designate.openstack.org/external_pool"
+
+	// Tiered config file names
+
+	// DefaultsConfigFileName - Provided by designate controller
+	DefaultsConfigFileName = "00-config.conf"
+	// ServiceConfigFileName - Represents service config generated in the operator
+	ServiceConfigFileName = "01-config.conf"
+	// CustomConfigFileName - Config snippets inherited by the top-level CR
+	CustomConfigFileName = "02-config.conf"
+	// CustomServiceConfigFileName - Config snippets defined for the sub CR
+	CustomServiceConfigFileName = "03-config.conf"
 )

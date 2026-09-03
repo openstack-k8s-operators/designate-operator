@@ -60,7 +60,6 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
-	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 )
 
 // GetClient -
@@ -1189,20 +1188,10 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(designate.ServiceName), map[string]string{})
 
-	db, err := mariadbv1.GetDatabaseByNameAndAccount(ctx, h, designate.DatabaseName, instance.Spec.DatabaseAccount, instance.Namespace)
-	if err != nil {
-		return err
-	}
-	var tlsCfg *tls.Service
-	if instance.Spec.TLS.CaBundleSecretName != "" {
-		tlsCfg = &tls.Service{}
-	}
-
 	// customData hold any customization for the service.
 	// custom.conf is going to be merged into /etc/designate/designate.conf.d/custom.conf
 	customData := map[string]string{
-		common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig,
-		"my.cnf":                           db.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
+		designate.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig,
 	}
 
 	keystoneAPI, err := keystonev1.GetKeystoneAPI(ctx, h, instance.Namespace, map[string]string{})
@@ -1218,7 +1207,7 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 		return err
 	}
 
-	customData[common.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
+	customData[designate.CustomServiceConfigFileName] = instance.Spec.CustomServiceConfig
 
 	// Get region from KeystoneAPI, defaulting to "regionOne" if empty
 	region := keystoneAPI.GetRegion()
