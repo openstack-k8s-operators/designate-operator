@@ -9,7 +9,7 @@ require (
 	github.com/gophercloud/gophercloud/v2 v2.13.0
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/onsi/ginkgo/v2 v2.32.1
-	github.com/onsi/gomega v1.42.1
+	github.com/onsi/gomega v1.43.0
 	github.com/openshift/api v3.9.0+incompatible
 	github.com/openstack-k8s-operators/designate-operator/api v0.0.0-00010101000000-000000000000
 	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260904142804-c0b05689f0e8
