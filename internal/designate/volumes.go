@@ -133,19 +133,12 @@ func ProcessVolumes(volumeDefs []VolumeMapping) ([]corev1.Volume, []corev1.Volum
 
 // GetConfVolumeMounts returns the final-path SubPath mounts for the config
 // files the merge init container produces in the "merged" EmptyDir:
-// designate.conf, designate.conf.d/custom.conf, and /etc/my.cnf.
+// designate.conf.d/*, and /etc/my.cnf.
 func GetConfVolumeMounts(mergedVolumeName string) []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
 			Name:      mergedVolumeName,
-			MountPath: "/etc/designate/designate.conf",
-			SubPath:   "designate.conf",
-			ReadOnly:  true,
-		},
-		{
-			Name:      mergedVolumeName,
-			MountPath: "/etc/designate/designate.conf.d/custom.conf",
-			SubPath:   "custom.conf",
+			MountPath: "/etc/designate",
 			ReadOnly:  true,
 		},
 		{

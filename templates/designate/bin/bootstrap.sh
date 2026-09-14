@@ -16,5 +16,5 @@
 set -ex
 
 # designate-manage database upgrade head
-designate-manage database sync
+designate-manage --config-dir /etc/designate/designate.conf.d database sync
 exit 0
