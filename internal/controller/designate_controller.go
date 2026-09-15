@@ -867,12 +867,223 @@ func (r *DesignateReconciler) ensureDB(
 	// create service DB - end
 }
 
-func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *designatev1beta1.Designate, helper *helper.Helper) (ctrl.Result, error) {
+type designateSubresourceStatus struct {
+	name               string
+	generation         int64
+	observedGeneration int64
+	readyCount         int32
+	conditions         condition.Conditions
+}
+
+type designateSubresourceSpec struct {
+	readyCondition condition.Type
+	initMessage    string
+	errorMessage   string
+	setReadyCount  func(*designatev1beta1.DesignateStatus, int32)
+	reconcile      func(
+		context.Context,
+		*designatev1beta1.Designate,
+	) (designateSubresourceStatus, controllerutil.OperationResult, error)
+}
+
+// reconcileSubresource reconciles one child CR and mirrors its status only after
+// that exact child has observed its current generation. The parent must not use
+// a namespace-wide list here: another Designate instance may have a stale child.
+func (r *DesignateReconciler) reconcileSubresource(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+	spec designateSubresourceSpec,
+) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
 
-	Log.Info(fmt.Sprintf("Reconciling Service '%s'", instance.Name))
+	child, op, err := spec.reconcile(ctx, instance)
+	if err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			spec.readyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			"%s",
+			fmt.Sprintf(spec.errorMessage, err.Error())))
+		return ctrl.Result{}, err
+	}
 
-	// Service account, role, binding
+	if child.generation != child.observedGeneration {
+		instance.Status.Conditions.Set(condition.UnknownCondition(
+			spec.readyCondition,
+			condition.InitReason,
+			"%s",
+			spec.initMessage))
+		return ctrl.Result{}, nil
+	}
+
+	spec.setReadyCount(&instance.Status, child.readyCount)
+	if mirrored := child.conditions.Mirror(spec.readyCondition); mirrored != nil {
+		instance.Status.Conditions.Set(mirrored)
+	}
+	if op != controllerutil.OperationResultNone {
+		Log.Info(fmt.Sprintf("%s %s successfully reconciled - operation: %s", child.name, instance.Name, string(op)))
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *DesignateReconciler) reconcileChildren(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+) (ctrl.Result, error) {
+	children := []designateSubresourceSpec{
+		{
+			readyCondition: designatev1beta1.DesignateCentralReadyCondition,
+			initMessage:    designatev1beta1.DesignateCentralReadyInitMessage,
+			errorMessage:   designatev1beta1.DesignateCentralReadyErrorMessage,
+			setReadyCount: func(status *designatev1beta1.DesignateStatus, count int32) {
+				status.DesignateCentralReadyCount = count
+			},
+			reconcile: func(
+				ctx context.Context,
+				instance *designatev1beta1.Designate,
+			) (designateSubresourceStatus, controllerutil.OperationResult, error) {
+				child, op, err := r.centralDeploymentCreateOrUpdate(ctx, instance)
+				return designateSubresourceStatus{
+					name:               child.Name,
+					generation:         child.Generation,
+					observedGeneration: child.Status.ObservedGeneration,
+					readyCount:         child.Status.ReadyCount,
+					conditions:         child.Status.Conditions,
+				}, op, err
+			},
+		},
+		{
+			readyCondition: designatev1beta1.DesignateWorkerReadyCondition,
+			initMessage:    designatev1beta1.DesignateWorkerReadyInitMessage,
+			errorMessage:   designatev1beta1.DesignateWorkerReadyErrorMessage,
+			setReadyCount: func(status *designatev1beta1.DesignateStatus, count int32) {
+				status.DesignateWorkerReadyCount = count
+			},
+			reconcile: func(
+				ctx context.Context,
+				instance *designatev1beta1.Designate,
+			) (designateSubresourceStatus, controllerutil.OperationResult, error) {
+				child, op, err := r.workerDeploymentCreateOrUpdate(ctx, instance)
+				return designateSubresourceStatus{
+					name:               child.Name,
+					generation:         child.Generation,
+					observedGeneration: child.Status.ObservedGeneration,
+					readyCount:         child.Status.ReadyCount,
+					conditions:         child.Status.Conditions,
+				}, op, err
+			},
+		},
+		{
+			readyCondition: designatev1beta1.DesignateMdnsReadyCondition,
+			initMessage:    designatev1beta1.DesignateMdnsReadyInitMessage,
+			errorMessage:   designatev1beta1.DesignateMdnsReadyErrorMessage,
+			setReadyCount: func(status *designatev1beta1.DesignateStatus, count int32) {
+				status.DesignateMdnsReadyCount = count
+			},
+			reconcile: func(
+				ctx context.Context,
+				instance *designatev1beta1.Designate,
+			) (designateSubresourceStatus, controllerutil.OperationResult, error) {
+				child, op, err := r.mdnsStatefulSetCreateOrUpdate(ctx, instance)
+				return designateSubresourceStatus{
+					name:               child.Name,
+					generation:         child.Generation,
+					observedGeneration: child.Status.ObservedGeneration,
+					readyCount:         child.Status.ReadyCount,
+					conditions:         child.Status.Conditions,
+				}, op, err
+			},
+		},
+		{
+			readyCondition: designatev1beta1.DesignateProducerReadyCondition,
+			initMessage:    designatev1beta1.DesignateProducerReadyInitMessage,
+			errorMessage:   designatev1beta1.DesignateProducerReadyErrorMessage,
+			setReadyCount: func(status *designatev1beta1.DesignateStatus, count int32) {
+				status.DesignateProducerReadyCount = count
+			},
+			reconcile: func(
+				ctx context.Context,
+				instance *designatev1beta1.Designate,
+			) (designateSubresourceStatus, controllerutil.OperationResult, error) {
+				child, op, err := r.producerDeploymentCreateOrUpdate(ctx, instance)
+				return designateSubresourceStatus{
+					name:               child.Name,
+					generation:         child.Generation,
+					observedGeneration: child.Status.ObservedGeneration,
+					readyCount:         child.Status.ReadyCount,
+					conditions:         child.Status.Conditions,
+				}, op, err
+			},
+		},
+		{
+			readyCondition: designatev1beta1.DesignateBackendbind9ReadyCondition,
+			initMessage:    designatev1beta1.DesignateBackendbind9ReadyInitMessage,
+			errorMessage:   designatev1beta1.DesignateBackendbind9ReadyErrorMessage,
+			setReadyCount: func(status *designatev1beta1.DesignateStatus, count int32) {
+				status.DesignateBackendbind9ReadyCount = count
+			},
+			reconcile: func(
+				ctx context.Context,
+				instance *designatev1beta1.Designate,
+			) (designateSubresourceStatus, controllerutil.OperationResult, error) {
+				child, op, err := r.backendbind9StatefulSetCreateOrUpdate(ctx, instance)
+				return designateSubresourceStatus{
+					name:               child.Name,
+					generation:         child.Generation,
+					observedGeneration: child.Status.ObservedGeneration,
+					readyCount:         child.Status.ReadyCount,
+					conditions:         child.Status.Conditions,
+				}, op, err
+			},
+		},
+		{
+			readyCondition: designatev1beta1.DesignateUnboundReadyCondition,
+			initMessage:    designatev1beta1.DesignateUnboundReadyInitMessage,
+			errorMessage:   designatev1beta1.DesignateUnboundReadyErrorMessage,
+			setReadyCount: func(status *designatev1beta1.DesignateStatus, count int32) {
+				status.DesignateUnboundReadyCount = count
+			},
+			reconcile: func(
+				ctx context.Context,
+				instance *designatev1beta1.Designate,
+			) (designateSubresourceStatus, controllerutil.OperationResult, error) {
+				child, op, err := r.unboundStatefulSetCreateOrUpdate(ctx, instance)
+				return designateSubresourceStatus{
+					name:               child.Name,
+					generation:         child.Generation,
+					observedGeneration: child.Status.ObservedGeneration,
+					readyCount:         child.Status.ReadyCount,
+					conditions:         child.Status.Conditions,
+				}, op, err
+			},
+		},
+	}
+
+	for _, child := range children {
+		result, err := r.reconcileSubresource(ctx, instance, child)
+		if err != nil || result != (ctrl.Result{}) {
+			return result, err
+		}
+	}
+	return ctrl.Result{}, nil
+}
+
+type designateReconcileInputs struct {
+	serviceLabels      map[string]string
+	serviceAnnotations map[string]string
+}
+
+// reconcilePrerequisites prepares the shared inputs required by all child
+// services. It deliberately returns before any child deployment is reconciled
+// when an input is still being created or is not ready.
+func (r *DesignateReconciler) reconcilePrerequisites(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+	helper *helper.Helper,
+) (designateReconcileInputs, ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
 	rbacRules := []rbacv1.PolicyRule{
 		{
 			APIGroups:     []string{"security.openshift.io"},
@@ -882,15 +1093,9 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		},
 	}
 	rbacResult, err := common_rbac.ReconcileRbac(ctx, helper, instance, rbacRules)
-	if err != nil {
-		return rbacResult, err
-	} else if (rbacResult != ctrl.Result{}) {
-		return rbacResult, nil
+	if err != nil || rbacResult != (ctrl.Result{}) {
+		return designateReconcileInputs{}, rbacResult, err
 	}
-
-	//
-	// create RabbitMQ transportURL CR and get the actual URL from the associated secret that is created
-	//
 
 	transportURL, op, err := r.transportURLCreateOrUpdate(ctx, instance)
 	if err != nil {
@@ -900,15 +1105,13 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			condition.SeverityWarning,
 			condition.RabbitMqTransportURLReadyErrorMessage,
 			err.Error()))
-		return ctrl.Result{}, err
+		return designateReconcileInputs{}, ctrl.Result{}, err
 	}
-
 	if op != controllerutil.OperationResultNone {
 		Log.Info(fmt.Sprintf("TransportURL %s successfully reconciled - operation: %s", transportURL.Name, string(op)))
 	}
 
 	instance.Status.TransportURLSecret = transportURL.Status.SecretName
-
 	if instance.Status.TransportURLSecret == "" {
 		Log.Info(fmt.Sprintf("Waiting for TransportURL %s secret to be created", transportURL.Name))
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -916,18 +1119,12 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			condition.RequestedReason,
 			condition.SeverityInfo,
 			condition.InputReadyWaitingMessage))
-		return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+		return designateReconcileInputs{}, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
-
 	instance.Status.Conditions.MarkTrue(
 		condition.RabbitMqTransportURLReadyCondition,
 		condition.RabbitMqTransportURLReadyMessage)
 
-	// end transportURL
-
-	//
-	// create RabbitMQ notifications transportURL CR if NotificationsBus is configured
-	//
 	if instance.Spec.NotificationsBus != nil {
 		notificationsTransportURL, op, err := r.notificationsTransportURLCreateOrUpdate(ctx, instance)
 		if err != nil {
@@ -937,15 +1134,13 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 				condition.SeverityWarning,
 				condition.RabbitMqTransportURLReadyErrorMessage,
 				err.Error()))
-			return ctrl.Result{}, err
+			return designateReconcileInputs{}, ctrl.Result{}, err
 		}
-
 		if op != controllerutil.OperationResultNone {
 			Log.Info(fmt.Sprintf("Notifications TransportURL %s successfully reconciled - operation: %s", notificationsTransportURL.Name, string(op)))
 		}
 
 		instance.Status.NotificationsTransportURLSecret = notificationsTransportURL.Status.SecretName
-
 		if instance.Status.NotificationsTransportURLSecret == "" {
 			Log.Info(fmt.Sprintf("Waiting for Notifications TransportURL %s secret to be created", notificationsTransportURL.Name))
 			instance.Status.Conditions.Set(condition.FalseCondition(
@@ -953,101 +1148,88 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 				condition.RequestedReason,
 				condition.SeverityInfo,
 				condition.InputReadyWaitingMessage))
-			return ctrl.Result{RequeueAfter: time.Duration(10) * time.Second}, nil
+			return designateReconcileInputs{}, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-
 		instance.Status.Conditions.MarkTrue(
 			designatev1beta1.DesignateRabbitMqNotificationsTransportURLReadyCondition,
 			condition.RabbitMqTransportURLReadyMessage)
 	} else {
-		// NotificationsBus not configured, mark condition as True (optional feature)
 		instance.Status.Conditions.MarkTrue(
 			designatev1beta1.DesignateRabbitMqNotificationsTransportURLReadyCondition,
 			condition.ReadyMessage)
 		instance.Status.NotificationsTransportURLSecret = ""
 	}
-	// end notifications transportURL
-
 	instance.Status.Conditions.MarkTrue(condition.InputReadyCondition, condition.InputReadyMessage)
 
-	//
-	// TODO check when/if Init, Update, or Upgrade should/could be skipped
-	//
-
-	serviceLabels := map[string]string{
-		common.AppSelector: designate.ServiceName,
-	}
-
+	serviceLabels := map[string]string{common.AppSelector: designate.ServiceName}
 	serviceAnnotations := make(map[string]string)
-
-	// Handle service init
 	ctrlResult, err := r.reconcileInit(ctx, instance, helper, serviceLabels, serviceAnnotations)
-	if err != nil {
-		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
-		return ctrlResult, nil
+	if err != nil || ctrlResult != (ctrl.Result{}) {
+		return designateReconcileInputs{}, ctrlResult, err
 	}
-
-	// Handle service update
 	ctrlResult, err = r.reconcileUpdate(ctx, instance)
-	if err != nil {
-		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
-		return ctrlResult, nil
+	if err != nil || ctrlResult != (ctrl.Result{}) {
+		return designateReconcileInputs{}, ctrlResult, err
+	}
+	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
+	if err != nil || ctrlResult != (ctrl.Result{}) {
+		return designateReconcileInputs{}, ctrlResult, err
 	}
 
-	// Handle service upgrade
-	ctrlResult, err = r.reconcileUpgrade(ctx, instance)
-	if err != nil {
+	return designateReconcileInputs{serviceLabels, serviceAnnotations}, ctrlResult, nil
+}
+
+func (r *DesignateReconciler) reconcileAPI(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+) (ctrl.Result, error) {
+	return r.reconcileSubresource(ctx, instance, designateSubresourceSpec{
+		readyCondition: designatev1beta1.DesignateAPIReadyCondition,
+		initMessage:    designatev1beta1.DesignateAPIReadyInitMessage,
+		errorMessage:   designatev1beta1.DesignateAPIReadyErrorMessage,
+		setReadyCount: func(status *designatev1beta1.DesignateStatus, count int32) {
+			status.DesignateAPIReadyCount = count
+		},
+		reconcile: func(
+			ctx context.Context,
+			instance *designatev1beta1.Designate,
+		) (designateSubresourceStatus, controllerutil.OperationResult, error) {
+			child, op, err := r.apiDeploymentCreateOrUpdate(ctx, instance)
+			return designateSubresourceStatus{
+				name:               child.Name,
+				generation:         child.Generation,
+				observedGeneration: child.Status.ObservedGeneration,
+				readyCount:         child.Status.ReadyCount,
+				conditions:         child.Status.Conditions,
+			}, op, err
+		},
+	})
+}
+
+func (r *DesignateReconciler) reconcileNormal(
+	ctx context.Context,
+	instance *designatev1beta1.Designate,
+	helper *helper.Helper,
+) (ctrl.Result, error) {
+	Log := r.GetLogger(ctx)
+
+	Log.Info(fmt.Sprintf("Reconciling Service '%s'", instance.Name))
+
+	inputs, ctrlResult, err := r.reconcilePrerequisites(ctx, instance, helper)
+	if err != nil || ctrlResult != (ctrl.Result{}) {
 		return ctrlResult, err
-	} else if (ctrlResult != ctrl.Result{}) {
-		return ctrlResult, nil
 	}
+	serviceLabels := inputs.serviceLabels
+	serviceAnnotations := inputs.serviceAnnotations
 
 	//
 	// normal reconcile tasks
 	//
 	Log.Info("Reconcile tasks starting....")
 
-	// deploy designate-api
-	designateAPI, op, err := r.apiDeploymentCreateOrUpdate(ctx, instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateAPIReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateAPIReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	apiObsGen, err := r.checkDesignateAPIGeneration(instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateAPIReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateAPIReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, nil
-	}
-	if !apiObsGen {
-		instance.Status.Conditions.Set(condition.UnknownCondition(
-			designatev1beta1.DesignateAPIReadyCondition,
-			condition.InitReason,
-			designatev1beta1.DesignateAPIReadyInitMessage,
-		))
-	} else {
-		// Mirror DesignateAPI status' ReadyCount to this parent CR
-		instance.Status.DesignateAPIReadyCount = designateAPI.Status.ReadyCount
-		// Mirror DesignateAPI's condition status
-		c := designateAPI.Status.Conditions.Mirror(designatev1beta1.DesignateAPIReadyCondition)
-		if c != nil {
-			instance.Status.Conditions.Set(c)
-		}
-	}
-
-	if op != controllerutil.OperationResultNone && apiObsGen {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	// API is reconciled before the shared backend configuration it serves.
+	if ctrlResult, err := r.reconcileAPI(ctx, instance); err != nil || ctrlResult != (ctrl.Result{}) {
+		return ctrlResult, err
 	}
 	Log.Info("Deployment API task reconciled")
 
@@ -1397,251 +1579,13 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		}
 	}
 
-	// deploy designate-central
-	designateCentral, op, err := r.centralDeploymentCreateOrUpdate(ctx, instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateCentralReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateCentralReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	ctrObsGen, err := r.checkDesignateCentralGeneration(instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateCentralReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateCentralReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, nil
-	}
-	if !ctrObsGen {
-		instance.Status.Conditions.Set(condition.UnknownCondition(
-			designatev1beta1.DesignateCentralReadyCondition,
-			condition.InitReason,
-			designatev1beta1.DesignateCentralReadyInitMessage,
-		))
-	} else {
-		// Mirror DesignateCentral status' ReadyCount to this parent CR
-		instance.Status.DesignateCentralReadyCount = designateCentral.Status.ReadyCount
-		// Mirror DesignateCentral's condition status
-		c := designateCentral.Status.Conditions.Mirror(designatev1beta1.DesignateCentralReadyCondition)
-		if c != nil {
-			instance.Status.Conditions.Set(c)
-		}
-	}
-	if op != controllerutil.OperationResultNone && ctrObsGen {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
+	// Reconcile the remaining child services in dependency order.
+	ctrlResult, err = r.reconcileChildren(ctx, instance)
+	if err != nil || ctrlResult != (ctrl.Result{}) {
+		return ctrlResult, err
 	}
 
-	Log.Info("Deployment Central task reconciled")
-
-	// deploy designate-worker
-	designateWorker, op, err := r.workerDeploymentCreateOrUpdate(ctx, instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateWorkerReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateWorkerReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	workerObsGen, err := r.checkDesignateWorkerGeneration(instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateWorkerReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateWorkerReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, nil
-	}
-	if !workerObsGen {
-		instance.Status.Conditions.Set(condition.UnknownCondition(
-			designatev1beta1.DesignateWorkerReadyCondition,
-			condition.InitReason,
-			designatev1beta1.DesignateWorkerReadyInitMessage,
-		))
-	} else {
-		// Mirror DesignateWorker status' ReadyCount to this parent CR
-		instance.Status.DesignateWorkerReadyCount = designateWorker.Status.ReadyCount
-		// Mirror DesignateWorker's condition status
-		c := designateWorker.Status.Conditions.Mirror(designatev1beta1.DesignateWorkerReadyCondition)
-		if c != nil {
-			instance.Status.Conditions.Set(c)
-		}
-	}
-	if op != controllerutil.OperationResultNone && workerObsGen {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
-	}
-	Log.Info("Deployment Worker task reconciled")
-
-	// deploy designate-mdns
-	designateMdns, op, err := r.mdnsStatefulSetCreateOrUpdate(ctx, instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateMdnsReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateMdnsReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	mdnsObsGen, err := r.checkDesignateMdnsGeneration(instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateMdnsReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateMdnsReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, nil
-	}
-	if !mdnsObsGen {
-		instance.Status.Conditions.Set(condition.UnknownCondition(
-			designatev1beta1.DesignateMdnsReadyCondition,
-			condition.InitReason,
-			designatev1beta1.DesignateMdnsReadyInitMessage,
-		))
-	} else {
-		// Mirror DesignateMdns status' ReadyCount to this parent CR
-		instance.Status.DesignateMdnsReadyCount = designateMdns.Status.ReadyCount
-		// Mirror DesignateMdns's condition status
-		c := designateMdns.Status.Conditions.Mirror(designatev1beta1.DesignateMdnsReadyCondition)
-		if c != nil {
-			instance.Status.Conditions.Set(c)
-		}
-	}
-	if op != controllerutil.OperationResultNone && mdnsObsGen {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
-	}
-	Log.Info("Deployment Mdns task reconciled")
-
-	// deploy designate-producer
-	designateProducer, op, err := r.producerDeploymentCreateOrUpdate(ctx, instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateProducerReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateProducerReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	prodObsGen, err := r.checkDesignateProducerGeneration(instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateProducerReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateProducerReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, nil
-	}
-	if !prodObsGen {
-		instance.Status.Conditions.Set(condition.UnknownCondition(
-			designatev1beta1.DesignateProducerReadyCondition,
-			condition.InitReason,
-			designatev1beta1.DesignateProducerReadyInitMessage,
-		))
-	} else {
-		// Mirror DesignateProducer status' ReadyCount to this parent CR
-		instance.Status.DesignateProducerReadyCount = designateProducer.Status.ReadyCount
-		// Mirror DesignateProducer's condition status
-		c := designateProducer.Status.Conditions.Mirror(designatev1beta1.DesignateProducerReadyCondition)
-		if c != nil {
-			instance.Status.Conditions.Set(c)
-		}
-	}
-	if op != controllerutil.OperationResultNone && prodObsGen {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
-	}
-	Log.Info("Deployment Producer task reconciled")
-
-	// deploy designate-backendbind9
-	designateBackendbind9, op, err := r.backendbind9StatefulSetCreateOrUpdate(ctx, instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateBackendbind9ReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateBackendbind9ReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	bindObsGen, err := r.checkDesignateBindGeneration(instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateBackendbind9ReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateBackendbind9ReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, nil
-	}
-	if !bindObsGen {
-		instance.Status.Conditions.Set(condition.UnknownCondition(
-			designatev1beta1.DesignateBackendbind9ReadyCondition,
-			condition.InitReason,
-			designatev1beta1.DesignateBackendbind9ReadyInitMessage,
-		))
-	} else {
-		// Mirror DesignateBackendbind9 status' ReadyCount to this parent CR
-		instance.Status.DesignateBackendbind9ReadyCount = designateBackendbind9.Status.ReadyCount
-		// Mirror DesignateBackendbind9's condition status
-		c := designateBackendbind9.Status.Conditions.Mirror(designatev1beta1.DesignateBackendbind9ReadyCondition)
-		if c != nil {
-			instance.Status.Conditions.Set(c)
-		}
-	}
-	if op != controllerutil.OperationResultNone && bindObsGen {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
-	}
-	Log.Info("Deployment Backendbind9 task reconciled")
-
-	// deploy the unbound reconcilier if necessary
-	designateUnbound, op, err := r.unboundStatefulSetCreateOrUpdate(ctx, instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateUnboundReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateUnboundReadyErrorMessage,
-			err.Error()))
-		return ctrl.Result{}, err
-	}
-	unbObsGen, err := r.checkDesignateUnboundGeneration(instance)
-	if err != nil {
-		instance.Status.Conditions.Set(condition.FalseCondition(
-			designatev1beta1.DesignateUnboundReadyCondition,
-			condition.ErrorReason,
-			condition.SeverityWarning,
-			designatev1beta1.DesignateUnboundReadyErrorMessage,
-			err.Error()))
-		return ctrlResult, nil
-	}
-	if !unbObsGen {
-		instance.Status.Conditions.Set(condition.UnknownCondition(
-			designatev1beta1.DesignateUnboundReadyCondition,
-			condition.InitReason,
-			designatev1beta1.DesignateUnboundReadyInitMessage,
-		))
-	} else {
-		instance.Status.DesignateUnboundReadyCount = designateUnbound.Status.ReadyCount
-		// Mirror DesignateProducer's condition status
-		c := designateUnbound.Status.Conditions.Mirror(designatev1beta1.DesignateUnboundReadyCondition)
-		if c != nil {
-			instance.Status.Conditions.Set(c)
-		}
-	}
-	if op != controllerutil.OperationResultNone && unbObsGen {
-		Log.Info(fmt.Sprintf("Deployment %s successfully reconciled - operation: %s", instance.Name, string(op)))
-	}
-	Log.Info("Deployment Unbound task reconciled")
+	Log.Info("Child service tasks reconciled")
 
 	// remove finalizers from unused MariaDBAccount records
 	err = mariadbv1.DeleteUnusedMariaDBAccountFinalizers(ctx, helper, designate.DatabaseCRName, instance.Spec.DatabaseAccount, instance.Namespace)
@@ -1876,8 +1820,8 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	// all other files get placed into /etc/<service> to allow overwrite of e.g. policy.json
 	// TODO: make sure custom.conf can not be overwritten
 	customData := map[string]string{
-		common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig,
-		"my.cnf":                           designateDb.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
+		designate.CustomConfigFileName: instance.Spec.CustomServiceConfig,
+		"my.cnf":                       designateDb.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
 	}
 
 	databaseAccount := designateDb.GetAccount()
@@ -2152,28 +2096,29 @@ func (r *DesignateReconciler) apiDeploymentCreateOrUpdate(ctx context.Context, i
 			Namespace: instance.Namespace,
 		},
 	}
+	spec := instance.Spec.DesignateAPI
 
-	if instance.Spec.DesignateAPI.NodeSelector == nil {
-		instance.Spec.DesignateAPI.NodeSelector = instance.Spec.NodeSelector
+	if spec.NodeSelector == nil {
+		spec.NodeSelector = instance.Spec.NodeSelector
 	}
 
 	// If topology is not present in the underlying Service template,
 	// inherit from the top-level CR
-	if instance.Spec.DesignateAPI.TopologyRef == nil {
-		instance.Spec.DesignateAPI.TopologyRef = instance.Spec.TopologyRef
+	if spec.TopologyRef == nil {
+		spec.TopologyRef = instance.Spec.TopologyRef
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateAPI
+		deployment.Spec = spec
 		// Add in transfers from umbrella Designate (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &deployment.Spec.DesignateTemplate)
 		deployment.Spec.DatabaseHostname = instance.Status.DatabaseHostname
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
-		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS
+		deployment.Spec.TLS = spec.TLS
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
-		deployment.Spec.NodeSelector = instance.Spec.DesignateAPI.NodeSelector
-		deployment.Spec.TopologyRef = instance.Spec.DesignateAPI.TopologyRef
+		deployment.Spec.NodeSelector = spec.NodeSelector
+		deployment.Spec.TopologyRef = spec.TopologyRef
 		deployment.Spec.APITimeout = instance.Spec.APITimeout
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
@@ -2194,19 +2139,20 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 			Namespace: instance.Namespace,
 		},
 	}
+	spec := instance.Spec.DesignateCentral
 
-	if instance.Spec.DesignateCentral.NodeSelector == nil {
-		instance.Spec.DesignateCentral.NodeSelector = instance.Spec.NodeSelector
+	if spec.NodeSelector == nil {
+		spec.NodeSelector = instance.Spec.NodeSelector
 	}
 
 	// If topology is not present in the underlying Service template,
 	// inherit from the top-level CR
-	if instance.Spec.DesignateCentral.TopologyRef == nil {
-		instance.Spec.DesignateCentral.TopologyRef = instance.Spec.TopologyRef
+	if spec.TopologyRef == nil {
+		spec.TopologyRef = instance.Spec.TopologyRef
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateCentral
+		deployment.Spec = spec
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &deployment.Spec.DesignateTemplate)
@@ -2214,8 +2160,8 @@ func (r *DesignateReconciler) centralDeploymentCreateOrUpdate(ctx context.Contex
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		deployment.Spec.NodeSelector = instance.Spec.DesignateCentral.NodeSelector
-		deployment.Spec.TopologyRef = instance.Spec.DesignateCentral.TopologyRef
+		deployment.Spec.NodeSelector = spec.NodeSelector
+		deployment.Spec.TopologyRef = spec.TopologyRef
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
 		if err != nil {
@@ -2235,19 +2181,20 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 			Namespace: instance.Namespace,
 		},
 	}
+	spec := instance.Spec.DesignateWorker
 
-	if instance.Spec.DesignateWorker.NodeSelector == nil {
-		instance.Spec.DesignateWorker.NodeSelector = instance.Spec.NodeSelector
+	if spec.NodeSelector == nil {
+		spec.NodeSelector = instance.Spec.NodeSelector
 	}
 
 	// If topology is not present in the underlying Service template,
 	// inherit from the top-level CR
-	if instance.Spec.DesignateWorker.TopologyRef == nil {
-		instance.Spec.DesignateWorker.TopologyRef = instance.Spec.TopologyRef
+	if spec.TopologyRef == nil {
+		spec.TopologyRef = instance.Spec.TopologyRef
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateWorker
+		deployment.Spec = spec
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &deployment.Spec.DesignateTemplate)
@@ -2255,8 +2202,8 @@ func (r *DesignateReconciler) workerDeploymentCreateOrUpdate(ctx context.Context
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		deployment.Spec.NodeSelector = instance.Spec.DesignateWorker.NodeSelector
-		deployment.Spec.TopologyRef = instance.Spec.DesignateWorker.TopologyRef
+		deployment.Spec.NodeSelector = spec.NodeSelector
+		deployment.Spec.TopologyRef = spec.TopologyRef
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
 		if err != nil {
@@ -2276,28 +2223,29 @@ func (r *DesignateReconciler) mdnsStatefulSetCreateOrUpdate(ctx context.Context,
 			Namespace: instance.Namespace,
 		},
 	}
+	spec := instance.Spec.DesignateMdns
 
-	if instance.Spec.DesignateMdns.NodeSelector == nil {
-		instance.Spec.DesignateMdns.NodeSelector = instance.Spec.NodeSelector
+	if spec.NodeSelector == nil {
+		spec.NodeSelector = instance.Spec.NodeSelector
 	}
 
 	// If topology is not present in the underlying Service template,
 	// inherit from the top-level CR
-	if instance.Spec.DesignateMdns.TopologyRef == nil {
-		instance.Spec.DesignateMdns.TopologyRef = instance.Spec.TopologyRef
+	if spec.TopologyRef == nil {
+		spec.TopologyRef = instance.Spec.TopologyRef
 	}
 
-	if int(*instance.Spec.DesignateMdns.Replicas) < 1 {
+	if int(*spec.Replicas) < 1 {
 		var minReplicas int32 = 1
-		instance.Spec.DesignateMdns.Replicas = &minReplicas
+		spec.Replicas = &minReplicas
 	}
 
-	if len(instance.Spec.DesignateMdns.ControlNetworkName) == 0 {
-		instance.Spec.DesignateMdns.ControlNetworkName = getOrDefault(instance.Spec.DesignateNetworkAttachment, "designate")
+	if len(spec.ControlNetworkName) == 0 {
+		spec.ControlNetworkName = getOrDefault(instance.Spec.DesignateNetworkAttachment, "designate")
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
-		statefulSet.Spec = instance.Spec.DesignateMdns
+		statefulSet.Spec = spec
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &statefulSet.Spec.DesignateTemplate)
@@ -2305,9 +2253,9 @@ func (r *DesignateReconciler) mdnsStatefulSetCreateOrUpdate(ctx context.Context,
 		statefulSet.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
 		statefulSet.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		statefulSet.Spec.NodeSelector = instance.Spec.DesignateMdns.NodeSelector
-		statefulSet.Spec.TopologyRef = instance.Spec.DesignateMdns.TopologyRef
-		statefulSet.Spec.ControlNetworkName = instance.Spec.DesignateMdns.ControlNetworkName
+		statefulSet.Spec.NodeSelector = spec.NodeSelector
+		statefulSet.Spec.TopologyRef = spec.TopologyRef
+		statefulSet.Spec.ControlNetworkName = spec.ControlNetworkName
 
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
@@ -2327,19 +2275,20 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 			Namespace: instance.Namespace,
 		},
 	}
+	spec := instance.Spec.DesignateProducer
 
-	if instance.Spec.DesignateProducer.NodeSelector == nil {
-		instance.Spec.DesignateProducer.NodeSelector = instance.Spec.NodeSelector
+	if spec.NodeSelector == nil {
+		spec.NodeSelector = instance.Spec.NodeSelector
 	}
 
 	// If topology is not present in the underlying Service template,
 	// inherit from the top-level CR
-	if instance.Spec.DesignateProducer.TopologyRef == nil {
-		instance.Spec.DesignateProducer.TopologyRef = instance.Spec.TopologyRef
+	if spec.TopologyRef == nil {
+		spec.TopologyRef = instance.Spec.TopologyRef
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-		deployment.Spec = instance.Spec.DesignateProducer
+		deployment.Spec = spec
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		copyDesignateTemplateItems(&instance.Spec.DesignateSpecBase, &deployment.Spec.DesignateTemplate)
@@ -2347,8 +2296,8 @@ func (r *DesignateReconciler) producerDeploymentCreateOrUpdate(ctx context.Conte
 		deployment.Spec.TransportURLSecret = instance.Status.TransportURLSecret
 		deployment.Spec.ServiceAccount = instance.RbacResourceName()
 		deployment.Spec.TLS = instance.Spec.DesignateAPI.TLS.Ca
-		deployment.Spec.NodeSelector = instance.Spec.DesignateProducer.NodeSelector
-		deployment.Spec.TopologyRef = instance.Spec.DesignateProducer.TopologyRef
+		deployment.Spec.NodeSelector = spec.NodeSelector
+		deployment.Spec.TopologyRef = spec.TopologyRef
 
 		err := controllerutil.SetControllerReference(instance, deployment, r.Scheme)
 		if err != nil {
@@ -2368,37 +2317,38 @@ func (r *DesignateReconciler) backendbind9StatefulSetCreateOrUpdate(ctx context.
 			Namespace: instance.Namespace,
 		},
 	}
+	spec := instance.Spec.DesignateBackendbind9
 
-	if instance.Spec.DesignateBackendbind9.NodeSelector == nil {
-		instance.Spec.DesignateBackendbind9.NodeSelector = instance.Spec.NodeSelector
+	if spec.NodeSelector == nil {
+		spec.NodeSelector = instance.Spec.NodeSelector
 	}
 
 	// If topology is not present in the underlying Service template,
 	// inherit from the top-level CR
-	if instance.Spec.DesignateBackendbind9.TopologyRef == nil {
-		instance.Spec.DesignateBackendbind9.TopologyRef = instance.Spec.TopologyRef
+	if spec.TopologyRef == nil {
+		spec.TopologyRef = instance.Spec.TopologyRef
 	}
 
-	if len(instance.Spec.DesignateBackendbind9.ControlNetworkName) == 0 {
-		instance.Spec.DesignateBackendbind9.ControlNetworkName = getOrDefault(instance.Spec.DesignateNetworkAttachment, "designate")
+	if len(spec.ControlNetworkName) == 0 {
+		spec.ControlNetworkName = getOrDefault(instance.Spec.DesignateNetworkAttachment, "designate")
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
-		statefulSet.Spec = instance.Spec.DesignateBackendbind9
+		statefulSet.Spec = spec
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		statefulSet.Spec.ServiceUser = instance.Spec.ServiceUser
 		statefulSet.Spec.Secret = instance.Spec.Secret
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
-		statefulSet.Spec.NodeSelector = instance.Spec.DesignateBackendbind9.NodeSelector
-		statefulSet.Spec.TopologyRef = instance.Spec.DesignateBackendbind9.TopologyRef
-		statefulSet.Spec.ControlNetworkName = instance.Spec.DesignateBackendbind9.ControlNetworkName
+		statefulSet.Spec.NodeSelector = spec.NodeSelector
+		statefulSet.Spec.TopologyRef = spec.TopologyRef
+		statefulSet.Spec.ControlNetworkName = spec.ControlNetworkName
 
 		networkAttachment := "designate"
 		if instance.Spec.DesignateNetworkAttachment != "" {
 			networkAttachment = instance.Spec.DesignateNetworkAttachment
 		}
-		statefulSet.Spec.ControlNetworkName = getOrDefault(instance.Spec.DesignateBackendbind9.ControlNetworkName, networkAttachment)
+		statefulSet.Spec.ControlNetworkName = getOrDefault(spec.ControlNetworkName, networkAttachment)
 
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
@@ -2421,24 +2371,25 @@ func (r *DesignateReconciler) unboundStatefulSetCreateOrUpdate(
 			Namespace: instance.Namespace,
 		},
 	}
+	spec := instance.Spec.DesignateUnbound
 
-	if instance.Spec.DesignateUnbound.NodeSelector == nil {
-		instance.Spec.DesignateUnbound.NodeSelector = instance.Spec.NodeSelector
+	if spec.NodeSelector == nil {
+		spec.NodeSelector = instance.Spec.NodeSelector
 	}
 
 	// If topology is not present in the underlying Service template,
 	// inherit from the top-level CR
-	if instance.Spec.DesignateUnbound.TopologyRef == nil {
-		instance.Spec.DesignateUnbound.TopologyRef = instance.Spec.TopologyRef
+	if spec.TopologyRef == nil {
+		spec.TopologyRef = instance.Spec.TopologyRef
 	}
 
 	op, err := controllerutil.CreateOrUpdate(ctx, r.Client, statefulSet, func() error {
-		statefulSet.Spec = instance.Spec.DesignateUnbound
+		statefulSet.Spec = spec
 		// Add in transfers from umbrella Designate CR (this instance) spec
 		// TODO: Add logic to determine when to set/overwrite, etc
 		statefulSet.Spec.ServiceAccount = instance.RbacResourceName()
-		statefulSet.Spec.NodeSelector = instance.Spec.DesignateUnbound.NodeSelector
-		statefulSet.Spec.TopologyRef = instance.Spec.DesignateUnbound.TopologyRef
+		statefulSet.Spec.NodeSelector = spec.NodeSelector
+		statefulSet.Spec.TopologyRef = spec.TopologyRef
 
 		err := controllerutil.SetControllerReference(instance, statefulSet, r.Scheme)
 		if err != nil {
@@ -2449,151 +2400,4 @@ func (r *DesignateReconciler) unboundStatefulSetCreateOrUpdate(
 	})
 
 	return statefulSet, op, err
-}
-
-// checkDesignateAPIGeneration -
-func (r *DesignateReconciler) checkDesignateAPIGeneration(
-	instance *designatev1beta1.Designate,
-) (bool, error) {
-	Log := r.GetLogger(context.Background())
-	api := &designatev1beta1.DesignateAPIList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(instance.Namespace),
-	}
-	if err := r.List(context.Background(), api, listOpts...); err != nil {
-		Log.Error(err, "Unable to retrieve DesignateAPI %w")
-		return false, err
-	}
-	for _, item := range api.Items {
-		if item.Generation != item.Status.ObservedGeneration {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-// checkDesignateCentralGeneration -
-func (r *DesignateReconciler) checkDesignateCentralGeneration(
-	instance *designatev1beta1.Designate,
-) (bool, error) {
-	Log := r.GetLogger(context.Background())
-	central := &designatev1beta1.DesignateCentralList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(instance.Namespace),
-	}
-	if err := r.List(context.Background(), central, listOpts...); err != nil {
-		Log.Error(err, "Unable to retrieve DesignateCentral %w")
-		return false, err
-	}
-	for _, item := range central.Items {
-		if item.Generation != item.Status.ObservedGeneration {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-// checkDesignateWorkerGeneration -
-func (r *DesignateReconciler) checkDesignateWorkerGeneration(
-	instance *designatev1beta1.Designate,
-) (bool, error) {
-	Log := r.GetLogger(context.Background())
-	worker := &designatev1beta1.DesignateWorkerList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(instance.Namespace),
-	}
-	if err := r.List(context.Background(), worker, listOpts...); err != nil {
-		Log.Error(err, "Unable to retrieve DesignateWorker %w")
-		return false, err
-	}
-	for _, item := range worker.Items {
-		if item.Generation != item.Status.ObservedGeneration {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-// checkDesignateMdnsGeneration -
-func (r *DesignateReconciler) checkDesignateMdnsGeneration(
-	instance *designatev1beta1.Designate,
-) (bool, error) {
-	Log := r.GetLogger(context.Background())
-	mdns := &designatev1beta1.DesignateMdnsList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(instance.Namespace),
-	}
-	if err := r.List(context.Background(), mdns, listOpts...); err != nil {
-		Log.Error(err, "Unable to retrieve DesignateWorker %w")
-		return false, err
-	}
-	for _, item := range mdns.Items {
-		if item.Generation != item.Status.ObservedGeneration {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-// checkDesignateProducerGeneration -
-func (r *DesignateReconciler) checkDesignateProducerGeneration(
-	instance *designatev1beta1.Designate,
-) (bool, error) {
-	Log := r.GetLogger(context.Background())
-	prd := &designatev1beta1.DesignateProducerList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(instance.Namespace),
-	}
-	if err := r.List(context.Background(), prd, listOpts...); err != nil {
-		Log.Error(err, "Unable to retrieve DesignateProducer %w")
-		return false, err
-	}
-	for _, item := range prd.Items {
-		if item.Generation != item.Status.ObservedGeneration {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-// checkDesignateBindGeneration -
-func (r *DesignateReconciler) checkDesignateBindGeneration(
-	instance *designatev1beta1.Designate,
-) (bool, error) {
-	Log := r.GetLogger(context.Background())
-	prd := &designatev1beta1.DesignateBackendbind9List{}
-	listOpts := []client.ListOption{
-		client.InNamespace(instance.Namespace),
-	}
-	if err := r.List(context.Background(), prd, listOpts...); err != nil {
-		Log.Error(err, "Unable to retrieve DesignateBind %w")
-		return false, err
-	}
-	for _, item := range prd.Items {
-		if item.Generation != item.Status.ObservedGeneration {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-// checkDesignateUnboundGeneration -
-func (r *DesignateReconciler) checkDesignateUnboundGeneration(
-	instance *designatev1beta1.Designate,
-) (bool, error) {
-	Log := r.GetLogger(context.Background())
-	prd := &designatev1beta1.DesignateUnboundList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(instance.Namespace),
-	}
-	if err := r.List(context.Background(), prd, listOpts...); err != nil {
-		Log.Error(err, "Unable to retrieve DesignateUnbound %w")
-		return false, err
-	}
-	for _, item := range prd.Items {
-		if item.Generation != item.Status.ObservedGeneration {
-			return false, nil
-		}
-	}
-	return true, nil
 }

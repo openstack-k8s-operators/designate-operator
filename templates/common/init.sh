@@ -15,30 +15,56 @@
 # under the License.
 set -ex
 
-# This script merges operator-generated config secrets into the
-# ephemeral /var/lib/config-data/merged volume.
+MERGEPATH=/var/lib/config-data/merged
 
-# expect that the common.sh is in the same dir as the calling script
-SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
-. ${SCRIPTPATH}/common.sh --source-only
+# Unlike  merge_dir that used crudini, this assumes that different configs
+# are layered in tiers by using distinct filenames and oslo.config's configdir
+# functionality to "build up" the complete configuration.
+function copy_config_dir {
+    echo copying config dir $1
+    for conf in $(find $1 -type f); do
+        conf_base=$(basename $conf)
+        # Redirect the configdir files to designate.conf.d otherwise
+        # put in the root of the merged volume.
+        if [[ ${conf_base} =~ [0-9]{2}.config.conf ]]; then
+            echo copy ${conf} to ${MERGEPATH}/designate.conf.d
+            cp -f ${conf} ${MERGEPATH}/designate.conf.d/
+            chmod 0660 ${MERGEPATH}/designate.conf.d/${conf_base}
+        else
+            cp -f ${conf} ${MERGEPATH}/
+        fi
+    done
+}
 
-# Clean any partial state from a previous init run (crash + restart)
-rm -rf /var/lib/config-data/merged/* /var/lib/config-data/config-overwrites/*
+# Clear existing targets in case we are looping.
+rm -rf ${MERGEPATH}/* /var/lib/config-data/config-overwrites/*
 
-# Merge all templates from core config secret
-for dir in /var/lib/config-data/default; do
-    merge_config_dir ${dir}
+# Pickup packaged config. This allows us to setup a merged config that is
+# roughly a mirror of what we want it to look like if it is mounted at
+# /etc/designate in the pod. This is important for things like the API service
+# that has several additional httpd/webservice related files that are packaged.
+# Note that this depends on init container image being the service container
+# image for the main service container in the pod.
+# NOTE: files that appear in the configuration secrets can overwrite these
+# files copied here.
+for f in $(find /etc/designate -maxdepth 1 -type f); do
+    target=$(basename $f)
+    cp -f ${f} ${MERGEPATH}/${target}
+    chmod 0660 ${MERGEPATH}/${target}
 done
 
-#  Merge all templates from service specific config secret
+mkdir ${MERGEPATH}/designate.conf.d
+chmod 0775 ${MERGEPATH}/designate.conf.d
+
+# copy the main controller configs over
+copy_config_dir /var/lib/config-data/default
+
+# copy the service (sub-resource) controller configs over if present
+# (may be missing if this is a non-service pod like db-create job etc.
 if test -d /var/lib/config-data/service; then
-    for dir in /var/lib/config-data/service; do
-        merge_config_dir ${dir}
-    done
+    copy_config_dir /var/lib/config-data/service
 fi
 
-# Handle any default overrides that might be mounted.
-# First check that destinations exists!
 OVERWRITE_DEST=/var/lib/config-data/config-overwrites
 if test -d ${OVERWRITE_DEST}; then
     if test -d /var/lib/config-data/common-overwrites; then
@@ -47,9 +73,4 @@ if test -d ${OVERWRITE_DEST}; then
     if test -d /var/lib/config-data/overwrites; then
         cp -r /var/lib/config-data/overwrites ${OVERWRITE_DEST}
     fi
-fi
-
-# Provide an empty custom.conf if none was created.
-if ! test -e /var/lib/config-data/merged/custom.conf; then
-    echo "# Custom conf - see CustomServiceConfig" > /var/lib/config-data/merged/custom.conf
 fi

@@ -37,7 +37,6 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/secret"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/tls"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
-	mariadbv1 "github.com/openstack-k8s-operators/mariadb-operator/api/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -791,21 +790,11 @@ func (r *DesignateProducerReconciler) generateServiceConfigMaps(
 
 	cmLabels := labels.GetLabels(instance, labels.GetGroupLabel(instance.Name), map[string]string{})
 
-	db, err := mariadbv1.GetDatabaseByNameAndAccount(ctx, h, designate.DatabaseName, instance.Spec.DatabaseAccount, instance.Namespace)
-	if err != nil {
-		return err
-	}
-	var tlsCfg *tls.Service
-	if instance.Spec.TLS.CaBundleSecretName != "" {
-		tlsCfg = &tls.Service{}
-	}
-
 	// customData hold any customization for the service.
 	// custom.conf is going to be merged into /etc/designate/designate.conf.d/custom.conf
 	// TODO: make sure custom.conf can not be overwritten
 	customData := map[string]string{
-		common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig,
-		"my.cnf":                           db.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
+		designate.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig,
 	}
 
 	templateParameters := map[string]any{}
