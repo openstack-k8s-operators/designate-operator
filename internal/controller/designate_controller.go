@@ -1376,6 +1376,14 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 
 		oldHash := instance.Status.Hash[designatev1beta1.PoolUpdateHash]
 		if oldHash != poolsYamlHash {
+			// Rate-limit relaunching the pool-update job independent of what triggered this
+			// reconcile: this CR's watches (Jobs, Secrets, StatefulSets) fire far more often
+			// than our own RequeueAfter while the config hasn't converged, and without this
+			// guard every one of those reconciles would launch a brand-new Job.
+			if wait, ready := designate.RetryCooldownElapsed(instance.Status.Hash, "pool-update-last-attempt", designate.PoolRetryCooldown); !ready {
+				return ctrl.Result{RequeueAfter: wait}, nil
+			}
+
 			Log.Info(fmt.Sprintf("Old poolsYamlHash %s is different than new poolsYamlHash %s.\nLaunching pool update job", oldHash, poolsYamlHash))
 
 			jobDef := designate.PoolUpdateJob(instance, serviceLabels, serviceAnnotations)
@@ -1393,6 +1401,32 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 				return ctrl.Result{}, err
 			}
 			Log.Info("Pool update job completed successfully")
+
+			// A K8s Job exiting 0 only means the designate-manage script ran, not that
+			// every pool actually converged in Designate's own pool table. If we stamp
+			// poolsYamlHash regardless, a pool that silently failed to register (e.g. a
+			// newly-added pool) will never be retried: this hash gate would match on
+			// every future reconcile even though the pool never actually exists.
+			allPoolsRegistered := true
+			if multipoolConfig != nil {
+				poolNameToID, mapErr := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace, instance)
+				if mapErr != nil {
+					Log.Info(fmt.Sprintf("Could not verify pool registration after pool update job, will retry: %v", mapErr))
+					allPoolsRegistered = false
+				} else {
+					for _, pool := range multipoolConfig.Pools {
+						if _, ok := poolNameToID[pool.Name]; !ok {
+							Log.Info(fmt.Sprintf("Pool %s not yet registered in Designate after pool update job, will retry", pool.Name))
+							allPoolsRegistered = false
+							break
+						}
+					}
+				}
+			}
+
+			if !allPoolsRegistered {
+				return ctrl.Result{RequeueAfter: designate.PoolRetryCooldown}, nil
+			}
 			instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolsYamlHash
 		}
 	}
