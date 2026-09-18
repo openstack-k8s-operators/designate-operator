@@ -134,6 +134,17 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 	}
 
+	// If a pool in the config isn't registered in Designate yet (e.g. it was just added and the
+	// pool-list Job hasn't picked it up), ensurePerPoolTSIGKeys skips it and tsigKeys won't have
+	// an entry for it. In that case the canonical secret must NOT be stamped with poolConfigHash:
+	// doing so would make it match on the next reconcile and short-circuit before that pool's key
+	// is ever created (see the early-return check above), leaving it without a TSIG key forever.
+	allPoolsReady := len(tsigKeys) == len(multipoolConfig.Pools)
+	storedHash := poolConfigHash
+	if !allPoolsReady {
+		storedHash = ""
+	}
+
 	// Clean up TSIG keys/secrets for pools that were removed from the config
 	if cleanupErr := r.cleanupOrphanedPerPoolTSIGKeys(ctx, helper, instance, multipoolConfig); cleanupErr != nil {
 		Log.Error(cleanupErr, "Failed to cleanup orphaned per-pool TSIG keys (non-fatal)")
@@ -153,9 +164,14 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 		}
 		secretName := tsigSecretNameForPool(instance.Name, poolIdx)
 		tsigConfigContent := r.generateTSIGConfig(key, mdnsIPs)
-		if err := r.createOrUpdatePerPoolTSIGSecret(ctx, helper, instance, secretName, key, tsigConfigContent, poolConfigHash, tsigKeys); err != nil {
+		if err := r.createOrUpdatePerPoolTSIGSecret(ctx, helper, instance, secretName, key, tsigConfigContent, storedHash, tsigKeys); err != nil {
 			return ctrl.Result{}, err
 		}
+	}
+
+	if !allPoolsReady {
+		Log.Info("Not all pools have TSIG keys yet, will requeue in 30 seconds")
+		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 	}
 
 	Log.Info(fmt.Sprintf("Per-pool TSIG secrets reconciled (hash: %s, pools: %d)", poolConfigHash, len(tsigKeys)))
@@ -177,6 +193,11 @@ func tsigSecretNameForPool(instanceName string, poolIdx int) string {
 // createOrUpdatePerPoolTSIGSecret writes a single pool's TSIG config to its own Secret. The
 // canonical pool0-named secret additionally carries the full pool-name -> tsigkey-id map that
 // designate_controller.go reads to populate pools.yaml's tsigkey_id fields.
+//
+// storedHash is the "pool-config-hash" annotation value to persist. It is deliberately not
+// always the current poolConfigHash: when reconcilePerPoolTSIGSecrets couldn't create keys for
+// every configured pool yet, the caller passes an empty value so the next reconcile won't treat
+// the (incomplete) state as up to date.
 func (r *DesignateBackendbind9Reconciler) createOrUpdatePerPoolTSIGSecret(
 	ctx context.Context,
 	helper *helper.Helper,
@@ -184,7 +205,7 @@ func (r *DesignateBackendbind9Reconciler) createOrUpdatePerPoolTSIGSecret(
 	secretName string,
 	key *designate.TSIGKey,
 	tsigConfigContent string,
-	poolConfigHash string,
+	storedHash string,
 	allTsigKeys map[string]*designate.TSIGKey,
 ) error {
 	tsigSecret := &corev1.Secret{
@@ -218,7 +239,7 @@ func (r *DesignateBackendbind9Reconciler) createOrUpdatePerPoolTSIGSecret(
 		if tsigSecret.Annotations == nil {
 			tsigSecret.Annotations = make(map[string]string)
 		}
-		tsigSecret.Annotations["pool-config-hash"] = poolConfigHash
+		tsigSecret.Annotations["pool-config-hash"] = storedHash
 		tsigSecret.Annotations["tsig-mode"] = "per-pool"
 		tsigSecret.Annotations["tsigkey-id"] = key.ID
 		return controllerutil.SetControllerReference(instance, tsigSecret, r.Scheme)
