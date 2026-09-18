@@ -117,6 +117,17 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 		return ctrl.Result{}, err
 	}
 
+	// Rate-limit retrying ensurePerPoolTSIGKeys (which launches a pool-list Job) independent of
+	// what triggered this reconcile: this CR's watches fire far more often than our own
+	// RequeueAfter while the config hasn't converged, and without this guard every one of those
+	// reconciles would launch a brand-new Job.
+	if instance.Status.Hash == nil {
+		instance.Status.Hash = make(map[string]string)
+	}
+	if wait, ready := designate.RetryCooldownElapsed(instance.Status.Hash, "per-pool-tsig-last-attempt", designate.PoolRetryCooldown); !ready {
+		return ctrl.Result{RequeueAfter: wait}, nil
+	}
+
 	// Create per-pool TSIG keys in Designate
 	tsigKeys, err := r.ensurePerPoolTSIGKeys(ctx, helper, instance, multipoolConfig)
 	if err != nil {
