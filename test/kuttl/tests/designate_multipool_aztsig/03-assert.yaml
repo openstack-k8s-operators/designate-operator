@@ -62,6 +62,25 @@ commands:
         echo "✓ pool1 TSIG Secret retained"
       fi
 
+      echo "=== Verifying pool2's Designate-side TSIG key was deleted ==="
+      prev_pool2_id=$(cat "/tmp/kuttl-aztsig-${NAMESPACE}-pool2-id" 2>/dev/null || true)
+      if [ -z "$prev_pool2_id" ]; then
+        echo "ERROR: missing saved pool2 TSIG key ID from the pool-addition step"
+        ERRORS=$((ERRORS + 1))
+      else
+        client_pod=$(oc get pods -n openstack --field-selector=status.phase=Running -o name 2>/dev/null | grep -m1 openstackclient || true)
+        if [ -z "$client_pod" ]; then
+          echo "WARN: no openstackclient pod in namespace openstack; cannot verify remote TSIG key deletion"
+        elif ! oc exec -n openstack "$client_pod" -- openstack tsigkey list >/dev/null 2>&1; then
+          echo "WARN: openstackclient cannot query Designate TSIG keys; cannot verify remote TSIG key deletion"
+        elif oc exec -n openstack "$client_pod" -- openstack tsigkey show "$prev_pool2_id" >/dev/null 2>&1; then
+          echo "ERROR: Designate TSIG key $prev_pool2_id still exists after pool2 removal"
+          ERRORS=$((ERRORS + 1))
+        else
+          echo "✓ pool2 Designate TSIG key deleted"
+        fi
+      fi
+
       echo "=== Verifying canonical mapping dropped pool2 and kept default/pool1 keys stable ==="
       mapping=$(oc get secret designate-backendbind9-tsig -n $NAMESPACE -o json | jq -r '.data["tsigkey-ids.json"] | @base64d')
       default_id=$(echo "$mapping" | jq -r '.default // empty')

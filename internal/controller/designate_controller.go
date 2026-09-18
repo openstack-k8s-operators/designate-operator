@@ -1389,6 +1389,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	}
 
 	tsigKeysPending := false
+	var poolUpdateRetryAfter time.Duration
 	if len(nsRecords) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
 		Log.Info("NS records data found")
 		poolsYamlConfigMap := &corev1.ConfigMap{
@@ -1474,24 +1475,59 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 
 		oldHash := instance.Status.Hash[designatev1beta1.PoolUpdateHash]
 		if oldHash != poolsYamlHash {
-			Log.Info(fmt.Sprintf("Old poolsYamlHash %s is different than new poolsYamlHash %s.\nLaunching pool update job", oldHash, poolsYamlHash))
+			// Rate-limit relaunching the pool-update job independent of what triggered this
+			// reconcile: this CR's watches (Jobs, Secrets, StatefulSets) fire far more often
+			// than our own RequeueAfter while the config hasn't converged, and without this
+			// guard every one of those reconciles would launch a brand-new Job.
+			if wait, ready := designate.RetryCooldownElapsed(instance.Status.Hash, "pool-update-last-attempt", designate.PoolRetryCooldown); !ready {
+				poolUpdateRetryAfter = wait
+			} else {
+				Log.Info(fmt.Sprintf("Old poolsYamlHash %s is different than new poolsYamlHash %s.\nLaunching pool update job", oldHash, poolsYamlHash))
 
-			jobDef := designate.PoolUpdateJob(instance, serviceLabels, serviceAnnotations)
-			Log.Info("Initializing pool update job")
-			poolUpdatejob := job.NewJob(
-				jobDef,
-				designatev1beta1.PoolUpdateHash,
-				instance.Spec.PreserveJobs,
-				time.Duration(15)*time.Second,
-				oldHash,
-			)
+				jobDef := designate.PoolUpdateJob(instance, serviceLabels, serviceAnnotations)
+				Log.Info("Initializing pool update job")
+				poolUpdatejob := job.NewJob(
+					jobDef,
+					designatev1beta1.PoolUpdateHash,
+					instance.Spec.PreserveJobs,
+					time.Duration(15)*time.Second,
+					oldHash,
+				)
 
-			_, err = poolUpdatejob.DoJob(ctx, helper)
-			if err != nil {
-				return ctrl.Result{}, err
+				_, err = poolUpdatejob.DoJob(ctx, helper)
+				if err != nil {
+					return ctrl.Result{}, err
+				}
+				Log.Info("Pool update job completed successfully")
+
+				// A K8s Job exiting 0 only means the designate-manage script ran, not that
+				// every pool actually converged in Designate's own pool table. If we stamp
+				// poolsYamlHash regardless, a pool that silently failed to register (e.g. a
+				// newly-added pool) will never be retried: this hash gate would match on
+				// every future reconcile even though the pool never actually exists.
+				allPoolsRegistered := true
+				if multipoolConfig != nil {
+					poolNameToID, mapErr := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace, instance)
+					if mapErr != nil {
+						Log.Info(fmt.Sprintf("Could not verify pool registration after pool update job, will retry: %v", mapErr))
+						allPoolsRegistered = false
+					} else {
+						for _, pool := range multipoolConfig.Pools {
+							if _, ok := poolNameToID[pool.Name]; !ok {
+								Log.Info(fmt.Sprintf("Pool %s not yet registered in Designate after pool update job, will retry", pool.Name))
+								allPoolsRegistered = false
+								break
+							}
+						}
+					}
+				}
+
+				if !allPoolsRegistered {
+					poolUpdateRetryAfter = designate.PoolRetryCooldown
+				} else {
+					instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolsYamlHash
+				}
 			}
-			Log.Info("Pool update job completed successfully")
-			instance.Status.Hash[designatev1beta1.PoolUpdateHash] = poolsYamlHash
 		}
 	}
 
@@ -1759,8 +1795,13 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
-	if tsigKeysPending {
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	// Propagate service spec changes even while pool registration is pending:
+	// BIND scheduling corrections may be needed for registration and key rollout.
+	if tsigKeysPending && (poolUpdateRetryAfter == 0 || poolUpdateRetryAfter > 5*time.Second) {
+		poolUpdateRetryAfter = 5 * time.Second
+	}
+	if poolUpdateRetryAfter > 0 {
+		return ctrl.Result{RequeueAfter: poolUpdateRetryAfter}, nil
 	}
 	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil

@@ -64,6 +64,9 @@ func tsigTestHelper(t *testing.T, mode designatev1.DesignateAZMode) (*DesignateB
 		Name: "designate-backendbind9", Namespace: "test", UID: "backend-uid",
 		OwnerReferences: []metav1.OwnerReference{{APIVersion: designatev1.GroupVersion.String(), Kind: "Designate", Name: "designate"}},
 	}}
+	// Reconcile initializes Status.Hash before the TSIG helpers run; these tests
+	// call the helpers directly, so set it up the same way.
+	instance.Status.Hash = map[string]string{}
 	parent := &designatev1.Designate{ObjectMeta: metav1.ObjectMeta{Name: "designate", Namespace: instance.Namespace}, Spec: designatev1.DesignateSpec{DesignateSpecBase: designatev1.DesignateSpecBase{AZAwareMode: mode}}}
 	mdns := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "designate-mdns-ip-map", Namespace: instance.Namespace}, Data: map[string]string{"mdns_address_0": "192.0.2.1"}}
 	r := &DesignateBackendbind9Reconciler{Scheme: scheme}
@@ -337,10 +340,10 @@ server 10.0.0.2 {
 	t.Run("no mdns IPs yields key block only", func(t *testing.T) {
 		key := &designate.TSIGKey{Name: "default-tsig-key", Algorithm: "hmac-sha256", Secret: "c2VjcmV0"} // #nosec G101 -- fake TSIG secret for test purposes only, not a real credential
 		got := r.generateTSIGConfig(key, nil)
-		if !containsSubstring(got, `key "default-tsig-key" {`) {
+		if !strings.Contains(got, `key "default-tsig-key" {`) {
 			t.Errorf("generateTSIGConfig() missing key block, got: %q", got)
 		}
-		if containsSubstring(got, "server ") {
+		if strings.Contains(got, "server ") {
 			t.Errorf("generateTSIGConfig() should not contain server blocks, got: %q", got)
 		}
 	})
@@ -352,17 +355,6 @@ server 10.0.0.2 {
 			t.Errorf("generateTSIGConfig() with invalid key name = %q, want empty string", got)
 		}
 	})
-}
-
-func containsSubstring(s, substr string) bool {
-	return len(s) >= len(substr) && (func() bool {
-		for i := 0; i+len(substr) <= len(s); i++ {
-			if s[i:i+len(substr)] == substr {
-				return true
-			}
-		}
-		return false
-	})()
 }
 
 // Test_createOrUpdatePerPoolTSIGSecret_DefaultPool verifies that the default
