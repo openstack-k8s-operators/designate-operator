@@ -120,6 +120,15 @@ func Deployment(
 		volumeMounts = append(volumeMounts, instance.Spec.TLS.CreateVolumeMounts(nil)...)
 	}
 
+	workerSecurityContext := pod.RestrictiveSecurityContext(
+		users.DesignateUID,
+		users.DesignateGID,
+		corev1.Capability("SETUID"),
+		corev1.Capability("SETGID"),
+		corev1.Capability("DAC_OVERRIDE"),
+	)
+	workerSecurityContext.AllowPrivilegeEscalation = ptr.To(true)
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instance.Name,
@@ -150,7 +159,7 @@ func Deployment(
 								"--config-dir", "/etc/designate/designate.conf.d",
 							},
 							Image:           instance.Spec.ContainerImage,
-							SecurityContext: pod.RestrictiveSecurityContext(users.DesignateUID, users.DesignateGID),
+							SecurityContext: workerSecurityContext,
 							Env:             env.MergeEnvs([]corev1.EnvVar{}, envVars),
 							VolumeMounts:    volumeMounts,
 							Resources:       instance.Spec.Resources,
