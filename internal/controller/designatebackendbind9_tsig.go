@@ -134,6 +134,23 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 	}
 
+	// Keep retrying until every pool that requires a key has one. The default
+	// pool intentionally has no key when AZ-aware mode is disabled.
+	allPoolsReady := true
+	for _, pool := range multipoolConfig.Pools {
+		if pool.Name == designate.DefaultPoolName && !azAware {
+			continue
+		}
+		if tsigKeys[pool.Name] == nil {
+			allPoolsReady = false
+			break
+		}
+	}
+	storedHash := poolConfigHash
+	if !allPoolsReady {
+		storedHash = ""
+	}
+
 	// Clean up TSIG keys/secrets for pools that were removed from the config
 	if cleanupErr := r.cleanupOrphanedPerPoolTSIGKeys(ctx, helper, instance, multipoolConfig); cleanupErr != nil {
 		Log.Error(cleanupErr, "Failed to cleanup orphaned per-pool TSIG keys (non-fatal)")
@@ -155,12 +172,17 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 			tsigConfigContent = r.generateTSIGConfig(key, mdnsIPs)
 		}
 		secretName := tsigSecretNameForPool(instance.Name, poolIdx)
-		if err := r.createOrUpdatePerPoolTSIGSecret(ctx, helper, instance, secretName, key, tsigConfigContent, poolConfigHash, tsigKeys); err != nil {
+		if err := r.createOrUpdatePerPoolTSIGSecret(ctx, helper, instance, secretName, key, tsigConfigContent, storedHash, tsigKeys); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 	// Do not delete the legacy shared DB key here: pods from an older operator
 	// may still use it during rollout. It is never assigned to a pool again.
+
+	if !allPoolsReady {
+		Log.Info("Not all pools have TSIG keys yet, will requeue in 30 seconds")
+		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
+	}
 
 	Log.Info(fmt.Sprintf("Per-pool TSIG secrets reconciled (hash: %s, pools: %d)", poolConfigHash, len(tsigKeys)))
 	// Let the StatefulSet controller roll out the new key material before workers
@@ -258,6 +280,11 @@ func tsigSecretNameForPool(instanceName string, poolIdx int) string {
 // createOrUpdatePerPoolTSIGSecret writes a single pool's TSIG config to its own Secret. The
 // canonical pool0-named secret additionally carries the full pool-name -> tsigkey-id map that
 // designate_controller.go reads to populate pools.yaml's tsigkey_id fields.
+//
+// storedHash is the "pool-config-hash" annotation value to persist. It is deliberately not
+// always the current poolConfigHash: when reconcilePerPoolTSIGSecrets couldn't create keys for
+// every configured pool yet, the caller passes an empty value so the next reconcile won't treat
+// the (incomplete) state as up to date.
 func (r *DesignateBackendbind9Reconciler) createOrUpdatePerPoolTSIGSecret(
 	ctx context.Context,
 	helper *helper.Helper,
@@ -265,7 +292,7 @@ func (r *DesignateBackendbind9Reconciler) createOrUpdatePerPoolTSIGSecret(
 	secretName string,
 	key *designate.TSIGKey,
 	tsigConfigContent string,
-	poolConfigHash string,
+	storedHash string,
 	allTsigKeys map[string]*designate.TSIGKey,
 ) error {
 	tsigSecret := &corev1.Secret{
@@ -305,7 +332,7 @@ func (r *DesignateBackendbind9Reconciler) createOrUpdatePerPoolTSIGSecret(
 		if tsigSecret.Annotations == nil {
 			tsigSecret.Annotations = make(map[string]string)
 		}
-		tsigSecret.Annotations["pool-config-hash"] = poolConfigHash
+		tsigSecret.Annotations["pool-config-hash"] = storedHash
 		tsigSecret.Annotations["tsig-mode"] = "per-pool"
 		if secretName == tsigSecretNameForPool(instance.Name, 0) {
 			tsigSecret.Annotations["tsig-keys-ready"] = "false"
