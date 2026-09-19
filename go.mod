@@ -12,13 +12,13 @@ require (
 	github.com/onsi/gomega v1.43.0
 	github.com/openshift/api v3.9.0+incompatible
 	github.com/openstack-k8s-operators/designate-operator/api v0.0.0-00010101000000-000000000000
-	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260910123137-52663de4900c
-	github.com/openstack-k8s-operators/keystone-operator/api v0.6.1-0.20260905072629-36e05507b30a
+	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260917133014-aa9523bc1a12
+	github.com/openstack-k8s-operators/keystone-operator/api v0.6.1-0.20260915132739-c1207a97b9a2
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260911152322-92cbe8cb7d0a
 	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.6.1-0.20260911152322-92cbe8cb7d0a
 	github.com/openstack-k8s-operators/lib-common/modules/test v0.6.1-0.20260911152322-92cbe8cb7d0a
 	github.com/openstack-k8s-operators/lib-common/modules/users v0.0.0-20260911152322-92cbe8cb7d0a
-	github.com/openstack-k8s-operators/mariadb-operator/api v0.6.1-0.20260908120707-b40f88a1542c
+	github.com/openstack-k8s-operators/mariadb-operator/api v0.6.1-0.20260912115138-699cec3a24c6
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.33.13
 	k8s.io/apimachinery v0.33.13
