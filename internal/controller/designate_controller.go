@@ -1876,8 +1876,8 @@ func (r *DesignateReconciler) generateServiceConfigMaps(
 	// all other files get placed into /etc/<service> to allow overwrite of e.g. policy.json
 	// TODO: make sure custom.conf can not be overwritten
 	customData := map[string]string{
-		common.CustomServiceConfigFileName: instance.Spec.CustomServiceConfig,
-		"my.cnf":                           designateDb.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
+		designate.CustomConfigFileName: instance.Spec.CustomServiceConfig,
+		"my.cnf":                       designateDb.GetDatabaseClientConfig(tlsCfg), //(oschwart) for now just get the default my.cnf
 	}
 
 	databaseAccount := designateDb.GetAccount()

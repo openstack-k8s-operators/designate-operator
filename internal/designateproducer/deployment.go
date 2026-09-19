@@ -112,7 +112,6 @@ func Deployment(
 							Name: serviceName,
 							Command: []string{
 								"/usr/bin/designate-producer",
-								"--config-file", "/etc/designate/designate.conf",
 								"--config-dir", "/etc/designate/designate.conf.d",
 							},
 							Image:           instance.Spec.ContainerImage,
