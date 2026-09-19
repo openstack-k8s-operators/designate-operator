@@ -175,7 +175,7 @@ var _ = Describe("DesignateCentral controller", func() {
 					Namespace: designateCentralName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateCentralName.Name)})
 			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["custom.conf"])
+			conf := string(configData.Data[designate.CustomServiceConfigFileName])
 			Expect(conf).Should(
 				ContainSubstring("[DEFAULT]\ndebug=True\n"))
 		})

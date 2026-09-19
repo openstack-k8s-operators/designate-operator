@@ -171,7 +171,7 @@ var _ = Describe("DesignateProducer controller", func() {
 					Namespace: designateProducerName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateProducerName.Name)})
 			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["custom.conf"])
+			conf := string(configData.Data["03-config.conf"])
 			Expect(conf).Should(
 				ContainSubstring("[DEFAULT]\ndebug=True\n"))
 		})
