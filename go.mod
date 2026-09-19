@@ -13,7 +13,7 @@ require (
 	github.com/openshift/api v3.9.0+incompatible
 	github.com/openstack-k8s-operators/designate-operator/api v0.1.1-0.20240807132522-6c2eca7c6bbb
 	github.com/openstack-k8s-operators/infra-operator/apis v0.6.1-0.20260819062923-cd3a98825751
-	github.com/openstack-k8s-operators/keystone-operator/api v0.6.1-0.20260822073001-151656f3723d
+	github.com/openstack-k8s-operators/keystone-operator/api v0.6.1-0.20260913082219-f8eae4b7b167
 	github.com/openstack-k8s-operators/lib-common/modules/common v0.6.1-0.20260618132757-fe8e60d1d8a6
 	github.com/openstack-k8s-operators/lib-common/modules/openstack v0.6.1-0.20260618132757-fe8e60d1d8a6
 	github.com/openstack-k8s-operators/lib-common/modules/test v0.6.1-0.20260618132757-fe8e60d1d8a6
