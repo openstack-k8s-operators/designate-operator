@@ -74,8 +74,9 @@ func (r *DesignateWorkerReconciler) GetScheme() *runtime.Scheme {
 // DesignateWorkerReconciler reconciles a DesignateWorker object
 type DesignateWorkerReconciler struct {
 	client.Client
-	Kclient kubernetes.Interface
-	Scheme  *runtime.Scheme
+	Kclient   kubernetes.Interface
+	Scheme    *runtime.Scheme
+	APIReader client.Reader
 }
 
 // GetLogger returns a logger object with a prefix of "controller.name" and additional controller context fields
@@ -567,6 +568,7 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 	// create hash over all the different input resources to identify if any those changed
 	// and a restart/recreate is required.
 	//
+
 	inputHash, hashChanged, err := r.createHashOfInputHashes(ctx, helper, instance, configMapVars)
 	if err != nil {
 		instance.Status.Conditions.Set(condition.FalseCondition(
@@ -701,6 +703,8 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 		return ctrlResult, nil
 	}
 
+	expectedHash := instance.Annotations["openstack.org/input-secret-hash"]
+
 	deploy := depl.GetDeployment()
 	if deploy.Generation == deploy.Status.ObservedGeneration {
 		instance.Status.ReadyCount = deploy.Status.ReadyReplicas
@@ -738,14 +742,20 @@ func (r *DesignateWorkerReconciler) reconcileNormal(ctx context.Context, instanc
 			return ctrl.Result{}, err
 		}
 
-		// Mark the Deployment as Ready only if the number of Replicas is equals
-		// to the Deployed instances (ReadyCount), and the the Status.Replicas
-		// match Status.ReadyReplicas. If a deployment update is in progress,
-		// Replicas > ReadyReplicas.
-		// In addition, make sure the controller sees the last Generation
-		// by comparing it with the ObservedGeneration.
+		ready := false
 		if deployment.IsReady(deploy) {
+			ready, err = deployment.IsReadyForInput(ctx, r.APIReader,
+				types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace},
+				inputHash)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		if ready {
 			instance.Status.Conditions.MarkTrue(condition.DeploymentReadyCondition, condition.DeploymentReadyMessage)
+			if expectedHash != "" {
+				instance.Status.AppliedInputSecretHash = expectedHash
+			}
 		} else {
 			instance.Status.Conditions.Set(condition.FalseCondition(
 				condition.DeploymentReadyCondition,
