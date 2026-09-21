@@ -31,6 +31,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -181,7 +182,7 @@ func (r *DesignateReconciler) reconcileSinglePoolBindConfigMap(
 		singlePoolMap[fmt.Sprintf("rndc_key_%d", i)] = fmt.Sprintf("rndc-key-%d", i)
 	}
 
-	// Create/update the default pool ConfigMap
+	// Create/update the default pool ConfigMap only if data changed
 	bindConfigMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      designate.BindPredIPConfigMap,
@@ -189,17 +190,25 @@ func (r *DesignateReconciler) reconcileSinglePoolBindConfigMap(
 		},
 	}
 
-	_, err := controllerutil.CreateOrPatch(ctx, helper.GetClient(), bindConfigMap, func() error {
-		bindConfigMap.Labels = util.MergeStringMaps(bindConfigMap.Labels, bindLabels)
-		bindConfigMap.Data = singlePoolMap
-		return controllerutil.SetControllerReference(instance, bindConfigMap, helper.GetScheme())
-	})
+	existing := &corev1.ConfigMap{}
+	err := helper.GetClient().Get(ctx, types.NamespacedName{
+		Name: designate.BindPredIPConfigMap, Namespace: instance.Namespace,
+	}, existing)
+	needsUpdate := err != nil || !maps.Equal(existing.Data, singlePoolMap)
 
-	if err != nil {
-		Log.Error(err, "Unable to create/update default pool ConfigMap")
-		return ctrl.Result{}, err
+	if needsUpdate {
+		_, err = controllerutil.CreateOrPatch(ctx, helper.GetClient(), bindConfigMap, func() error {
+			bindConfigMap.Labels = util.MergeStringMaps(bindConfigMap.Labels, bindLabels)
+			bindConfigMap.Data = singlePoolMap
+			return controllerutil.SetControllerReference(instance, bindConfigMap, helper.GetScheme())
+		})
+
+		if err != nil {
+			Log.Error(err, "Unable to create/update default pool ConfigMap")
+			return ctrl.Result{}, err
+		}
+		Log.Info(fmt.Sprintf("Default pool ConfigMap reconciled successfully with %d bind instances", len(updatedBindMap)))
 	}
-	Log.Info(fmt.Sprintf("Default pool ConfigMap reconciled successfully with %d bind instances", len(updatedBindMap)))
 
 	// Clean up all numbered pool ConfigMaps (migration from multipool to single-pool)
 	// Unconditionally deletes ALL pool ConfigMaps since we're no longer in multipool mode
