@@ -124,7 +124,6 @@ func StatefulSet(
 							Image: instance.Spec.ContainerImage,
 							Command: []string{
 								"/usr/bin/designate-mdns",
-								"--config-file", "/etc/designate/designate.conf",
 								"--config-dir", "/etc/designate/designate.conf.d",
 							},
 							SecurityContext: pod.RestrictiveSecurityContext(users.DesignateUID, users.DesignateGID),
@@ -168,6 +167,7 @@ func StatefulSet(
 		VolumeMounts:   initVolumeMounts,
 		EnvVars:        podEnv,
 	}
+
 	predIPContainerDetails := designate.PredIPContainerDetails{
 		ContainerImage: instance.Spec.NetUtilsImage,
 		VolumeMounts:   initVolumeMounts,
