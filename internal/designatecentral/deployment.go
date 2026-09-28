@@ -113,7 +113,6 @@ func Deployment(
 							Image: instance.Spec.ContainerImage,
 							Command: []string{
 								"/usr/bin/designate-central",
-								"--config-file", "/etc/designate/designate.conf",
 								"--config-dir", "/etc/designate/designate.conf.d",
 							},
 							SecurityContext: pod.RestrictiveSecurityContext(users.DesignateUID, users.DesignateGID),

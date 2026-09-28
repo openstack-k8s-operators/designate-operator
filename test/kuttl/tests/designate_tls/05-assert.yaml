@@ -147,14 +147,9 @@ spec:
             name: designate-api-run-httpd
           - mountPath: /var/log/httpd
             name: designate-api-var-log-httpd
-          - mountPath: /etc/designate/designate.conf
+          - mountPath: /etc/designate
             name: designate-api-merged
             readOnly: true
-            subPath: designate.conf
-          - mountPath: /etc/designate/designate.conf.d/custom.conf
-            name: designate-api-merged
-            readOnly: true
-            subPath: custom.conf
           - mountPath: /etc/my.cnf
             name: designate-api-merged
             readOnly: true
@@ -324,7 +319,7 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 commands:
   - script: |
-      if ! oc get -n $NAMESPACE secret -o json designate-config-data | jq '.data["designate.conf"] | @base64d' | sed -e 's/\\n/\n/g' | grep ^backend_url.*redis.*ssl.true;
+      if ! oc get -n $NAMESPACE secret -o json designate-config-data | jq '.data["00-config.conf"] | @base64d' | sed -e 's/\\n/\n/g' | grep ^backend_url.*redis.*ssl.true;
       then
           echo "Configuration of backend_url failed"
           exit 1
