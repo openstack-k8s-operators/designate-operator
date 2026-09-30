@@ -24,7 +24,6 @@
       - ^hack/.*$
       - ^tests?/functional/.*$
       - ^tests?/kuttl/.*$
-      - ^zuul.d/jobs.yaml
     vars:
       cifmw_cls_pv_count: 14
       cifmw_test_operator_tempest_container: openstack-tempest-all
@@ -68,6 +67,10 @@
                     template:
                       designateAPI:
                         replicas: 1
+                        # The TSIG negative test expects an empty secret to be rejected.
+                        customServiceConfig: |
+                          [service:api]
+                          allow_empty_secrets_for_tsig=False
                       designateBackendbind9:
                         networkAttachments:
                           - designate
