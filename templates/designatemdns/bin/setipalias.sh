@@ -15,7 +15,7 @@
 # under the License.
 set -ex
 
-SVC_CFG_MERGED=/var/lib/config-data/merged/designate.conf
+SVC_CFG=/var/lib/config-data/merged/designate.conf.d/01-config.conf
 
 # format_listen_addr addr port
 #   Returns a host:port string suitable for Designate's listen config.
@@ -51,9 +51,9 @@ else
     echo "No POD_IP found"
 fi
 
-if [ -n "$LISTEN_VALUE" ]; then
-    echo "Setting listen value to ${LISTEN_VALUE}"
-    crudini --set "$SVC_CFG_MERGED" 'service:mdns' 'listen' "${LISTEN_VALUE}"
-else
-    echo "No value"
+if [ -z "$LISTEN_VALUE" ]; then
+    LISTEN_VALUE="0.0.0.0:5354"
 fi
+
+echo "Setting listen value to ${LISTEN_VALUE}"
+sed -i -e "s/MDNS_INIT_OVERRIDE_LISTEN/${LISTEN_VALUE}/" ${SVC_CFG}

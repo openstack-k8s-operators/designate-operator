@@ -102,7 +102,7 @@ func createOwnerSecrets(namespace string) {
 	DeferCleanup(k8sClient.Delete, ctx, th.CreateSecret(
 		name,
 		map[string][]byte{
-			"designate.conf": []byte("[DEFAULT]\ndebug=True"),
+			"00-config.conf": []byte("[DEFAULT]\ndebug=True"),
 		},
 	))
 	name.Name = "designate-defaults"

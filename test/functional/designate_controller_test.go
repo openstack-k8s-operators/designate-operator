@@ -491,7 +491,7 @@ var _ = Describe("Designate controller", func() {
 			)
 		})
 
-		It("should create the designate.conf file in a Secret", func() {
+		It("should create the 00-config.conf file in a Secret", func() {
 			instance := GetDesignate(designateName)
 
 			configData := th.GetSecret(
@@ -499,7 +499,7 @@ var _ = Describe("Designate controller", func() {
 					Namespace: designateName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["designate.conf"])
+			conf := string(configData.Data["00-config.conf"])
 
 			dbs := []struct {
 				Name            string
@@ -1587,13 +1587,13 @@ var _ = Describe("Designate controller", func() {
 			th.SimulateJobSuccess(designateDBSyncName)
 		})
 
-		It("should configure quorum queues settings in designate.conf", func() {
+		It("should configure quorum queues settings in 00-config.conf", func() {
 			configData := th.GetSecret(
 				types.NamespacedName{
 					Namespace: designateName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["designate.conf"])
+			conf := string(configData.Data["00-config.conf"])
 
 			Expect(conf).Should(ContainSubstring("rabbit_quorum_queue=true"))
 			Expect(conf).Should(ContainSubstring("rabbit_transient_quorum_queue=true"))
@@ -1625,7 +1625,7 @@ var _ = Describe("Designate controller", func() {
 					Namespace: designateName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["designate.conf"])
+			conf := string(configData.Data["00-config.conf"])
 
 			Expect(conf).ShouldNot(ContainSubstring("rabbit_quorum_queue=true"))
 			Expect(conf).ShouldNot(ContainSubstring("rabbit_transient_quorum_queue=true"))
@@ -1646,7 +1646,7 @@ var _ = Describe("Designate controller", func() {
 						Namespace: designateName.Namespace,
 						Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 				g.Expect(configData).ShouldNot(BeNil())
-				conf := string(configData.Data["designate.conf"])
+				conf := string(configData.Data["00-config.conf"])
 
 				g.Expect(conf).Should(ContainSubstring("rabbit_quorum_queue=true"))
 				g.Expect(conf).Should(ContainSubstring("rabbit_transient_quorum_queue=true"))
@@ -1775,26 +1775,26 @@ var _ = Describe("Designate controller", func() {
 			)
 		})
 
-		It("should configure notifications with driver=messagingv2 in designate.conf", func() {
+		It("should configure notifications with driver=messagingv2 in 00-config.conf", func() {
 			configData := th.GetSecret(
 				types.NamespacedName{
 					Namespace: designateName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["designate.conf"])
+			conf := string(configData.Data["00-config.conf"])
 
 			Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
 			Expect(conf).Should(ContainSubstring("driver=messagingv2"))
 		})
 
-		It("should configure separate transport_url for notifications in designate.conf", func() {
+		It("should configure separate transport_url for notifications in 00-config.conf", func() {
 			Eventually(func(g Gomega) {
 				configData := th.GetSecret(
 					types.NamespacedName{
 						Namespace: designateName.Namespace,
 						Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 				g.Expect(configData).ShouldNot(BeNil())
-				conf := string(configData.Data["designate.conf"])
+				conf := string(configData.Data["00-config.conf"])
 
 				// Should have notifications transport_url in oslo_messaging_notifications section
 				g.Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
@@ -1848,13 +1848,13 @@ var _ = Describe("Designate controller", func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should configure driver=messagingv2 but no separate transport_url in designate.conf", func() {
+		It("should configure driver=messagingv2 but no separate transport_url in 00-config.conf", func() {
 			configData := th.GetSecret(
 				types.NamespacedName{
 					Namespace: designateName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["designate.conf"])
+			conf := string(configData.Data["00-config.conf"])
 
 			// Should still have driver=messagingv2
 			Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
@@ -1922,7 +1922,7 @@ var _ = Describe("Designate controller", func() {
 						Namespace: designateName.Namespace,
 						Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 				g.Expect(configData).ShouldNot(BeNil())
-				conf := string(configData.Data["designate.conf"])
+				conf := string(configData.Data["00-config.conf"])
 				g.Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
 				g.Expect(conf).Should(MatchRegexp(`(?s)\[oslo_messaging_notifications\].*?transport_url=`))
 			}, timeout, interval).Should(Succeed())
@@ -1993,7 +1993,7 @@ var _ = Describe("Designate controller", func() {
 						Namespace: designateName.Namespace,
 						Name:      fmt.Sprintf("%s-config-data", designateName.Name)})
 				g.Expect(configData).ShouldNot(BeNil())
-				conf := string(configData.Data["designate.conf"])
+				conf := string(configData.Data["00-config.conf"])
 				// Should still have the section but no transport_url
 				g.Expect(conf).Should(ContainSubstring("[oslo_messaging_notifications]"))
 				g.Expect(conf).Should(ContainSubstring("driver=messagingv2"))

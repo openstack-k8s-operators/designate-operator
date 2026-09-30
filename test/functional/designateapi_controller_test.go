@@ -175,13 +175,13 @@ var _ = Describe("DesignateAPI controller", func() {
 			)
 		})
 
-		It("should create the designate.conf file in a Secret", func() {
+		It("should create the 01-config.conf file in a Secret", func() {
 			configData := th.GetSecret(
 				types.NamespacedName{
 					Namespace: designateAPIName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateAPIName.Name)})
 			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["designate.conf"])
+			conf := string(configData.Data["01-config.conf"])
 			instance := GetDesignateAPI(designateAPIName)
 
 			Expect(conf).Should(
@@ -224,7 +224,7 @@ var _ = Describe("DesignateAPI controller", func() {
 					Namespace: designateAPIName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateAPIName.Name)})
 			Expect(configData).ShouldNot(BeNil())
-			conf := string(configData.Data["custom.conf"])
+			conf := string(configData.Data[designate.CustomServiceConfigFileName])
 			Expect(conf).Should(
 				ContainSubstring("[DEFAULT]\ndebug=True\n"))
 		})
@@ -242,7 +242,7 @@ var _ = Describe("DesignateAPI controller", func() {
 						Name:      fmt.Sprintf("%s-config-data", designateAPIName.Name)})
 				g.Expect(confSecret).ShouldNot(BeNil())
 
-				conf := string(confSecret.Data["designate.conf"])
+				conf := string(confSecret.Data["01-config.conf"])
 				g.Expect(string(conf)).Should(
 					ContainSubstring("auth_url=%s", newInternalEndpoint))
 			}, timeout, interval).Should(Succeed())
@@ -343,7 +343,7 @@ var _ = Describe("DesignateAPI controller", func() {
 			Expect(k8sClient.Status().Update(ctx, fetched)).To(Succeed())
 		})
 
-		It("should render ApplicationCredential auth in designate.conf", func() {
+		It("should render ApplicationCredential auth in 01-config.conf", func() {
 			Eventually(func(g Gomega) {
 				cfgSecret := th.GetSecret(types.NamespacedName{
 					Namespace: namespace,
@@ -351,7 +351,7 @@ var _ = Describe("DesignateAPI controller", func() {
 				})
 				g.Expect(cfgSecret).NotTo(BeNil())
 
-				conf := string(cfgSecret.Data["designate.conf"])
+				conf := string(cfgSecret.Data["01-config.conf"])
 
 				g.Expect(conf).To(ContainSubstring(
 					"application_credential_id=test-ac-id"),
