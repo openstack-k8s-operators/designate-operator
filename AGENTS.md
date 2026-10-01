@@ -65,6 +65,7 @@ their purpose changes, update this table to match.
 | `config/samples/` | Example CRs (Kustomize overlays). Includes multipool config map. |
 | `test/functional/` | envtest-based Ginkgo/Gomega tests |
 | `test/kuttl/` | KUTTL integration tests |
+| `zuul.d/` | Zuul project and Tempest job definitions |
 | `hack/` | Helper scripts (CRD schema checker, local webhook runner) |
 | `demo/` | Demo resources and examples |
 

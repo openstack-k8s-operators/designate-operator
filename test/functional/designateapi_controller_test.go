@@ -181,6 +181,9 @@ var _ = Describe("DesignateAPI controller", func() {
 					Namespace: designateAPIName.Namespace,
 					Name:      fmt.Sprintf("%s-config-data", designateAPIName.Name)})
 			Expect(configData).ShouldNot(BeNil())
+			// The WSGI entrypoint requires this file even though oslo.config
+			// loads the service settings from designate.conf.d.
+			Expect(configData.Data).To(HaveKey("designate.conf"))
 			conf := string(configData.Data["01-config.conf"])
 			instance := GetDesignateAPI(designateAPIName)
 

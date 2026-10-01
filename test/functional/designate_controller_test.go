@@ -21,6 +21,7 @@ import (
 	"math/rand"
 	"net"
 	"regexp"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -397,6 +398,30 @@ var _ = Describe("Designate controller", func() {
 				condition.DBSyncReadyCondition,
 				corev1.ConditionFalse,
 			)
+		})
+	})
+
+	When("the DB sync job is running", func() {
+		BeforeEach(func() {
+			createAndSimulateKeystone(designateName)
+			createAndSimulateRedis(designateRedisName)
+			createAndSimulateDesignateSecrets(designateName)
+			createAndSimulateTransportURL(transportURLName, transportURLSecretName)
+			createAndSimulateDB(spec)
+			DeferCleanup(th.DeleteInstance, CreateDesignate(designateName, spec))
+		})
+
+		It("does not start services before the database migration completes", func() {
+			// Wait for the input hash to be persisted and the job to be created.
+			th.GetJob(designateDBSyncName)
+
+			Consistently(func(g Gomega) {
+				g.Expect(k8s_errors.IsNotFound(k8sClient.Get(ctx, designateCentralName, &designatev1.DesignateCentral{}))).To(BeTrue())
+				g.Expect(k8s_errors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: designateName.Namespace,
+					Name:      designateName.Name + "-mdns",
+				}, &designatev1.DesignateMdns{}))).To(BeTrue())
+			}, 2*time.Second, interval).Should(Succeed())
 		})
 	})
 
@@ -1376,6 +1401,15 @@ var _ = Describe("Designate controller", func() {
 			}, timeout, interval).Should(Succeed())
 		})
 		It("updates topology when the reference changes", func() {
+			// The initial topology must be applied before changing the reference;
+			// otherwise a child can add its old finalizer without recording it in
+			// status, leaving the test unable to observe its removal.
+			Eventually(func(g Gomega) {
+				g.Expect(GetDesignateAPI(designateAPIName).Status.LastAppliedTopology).To(Equal(topologyRef))
+				g.Expect(GetDesignateCentral(designateCentralName).Status.LastAppliedTopology).To(Equal(topologyRef))
+				g.Expect(GetDesignateProducer(designateProducerName).Status.LastAppliedTopology).To(Equal(topologyRef))
+			}, timeout, interval).Should(Succeed())
+
 			Eventually(func(g Gomega) {
 				designate := GetDesignate(designateName)
 				designate.Spec.TopologyRef.Name = topologyRefAlt.Name

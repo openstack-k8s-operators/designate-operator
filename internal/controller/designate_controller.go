@@ -758,7 +758,9 @@ func (r *DesignateReconciler) reconcileInit(
 			condition.InitReason,
 			condition.SeverityInfo,
 			condition.ServiceConfigReadyInitMessage)
-		return ctrl.Result{}, err
+		// Persist the new hash before continuing. An empty result would let
+		// reconcileNormal create service pods before the db sync job runs.
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 	// Create ConfigMaps and Secrets - end
 
