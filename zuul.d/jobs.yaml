@@ -1,9 +1,10 @@
 ---
+
 - job:
     name: designate-operator-tempest-multinode
     parent: podified-multinode-edpm-deployment-crc
     dependencies: ["openstack-k8s-operators-content-provider"]
-    irrelevant-files:
+    irrelevant-files: &irrelevant_files
       - .*/*.md
       - ^.github/.*$
       - .ci-operator.yaml
@@ -24,7 +25,7 @@
       - ^hack/.*$
       - ^tests?/functional/.*$
       - ^tests?/kuttl/.*$
-    vars:
+    vars: &cifmw_vars
       cifmw_cls_pv_count: 14
       cifmw_test_operator_tempest_container: openstack-tempest-all
       cifmw_run_test_role: test_operator
@@ -137,3 +138,29 @@
                         - hostname: ns2.example.org.
                           priority: 20
                       redisServiceName: designate-redis
+
+- job:
+    name: designate-s2i-content-provider
+    parent: s2i-openstack-container-content-provider
+    description: |
+      Build s2i designate service images for designate s2i
+      test jobs.
+    required-projects:
+      - name: openstack-k8s-operators/s2i-openstack-containers
+        override-checkout: main
+    vars:
+      s2_ci_images:
+        - designate/designate-api
+        - designate/designate-central
+        - designate/designate-worker
+        - designate/designate-backend-bind9
+        - designate/netutils
+        - designate/unbound
+
+- job:
+    name: designate-s2i-test
+    parent: s2i-test-base
+    description: |
+      Validate a designate deployment
+    irrelevant-files: *irrelevant_files
+    vars: *cifmw_vars
