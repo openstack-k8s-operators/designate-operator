@@ -1,0 +1,94 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+status:
+  designateBackendbind9ReadyCount: 2
+---
+# Verify that only 2 StatefulSets remain (default and pool1)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9
+  labels:
+    service: designate-backendbind9
+status:
+  readyReplicas: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool1
+  labels:
+    service: designate-backendbind9
+status:
+  readyReplicas: 1
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+commands:
+  - script: |
+      set -e
+      ERRORS=0
+
+      echo "=== Verifying pool2's StatefulSet was removed ==="
+      if oc get statefulset designate-backendbind9-pool2 -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: designate-backendbind9-pool2 StatefulSet should have been deleted after pool2 removal"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ pool2 StatefulSet deleted"
+      fi
+
+      echo "=== Verifying pool2's TSIG Secret was cleaned up on pool removal ==="
+      if oc get secret designate-backendbind9-pool2-tsig -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: designate-backendbind9-pool2-tsig should have been deleted after pool2 removal"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ pool2 TSIG Secret deleted"
+      fi
+
+      echo "=== Verifying pool0 and pool1 TSIG Secrets are retained ==="
+      if ! oc get secret designate-backendbind9-tsig -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: designate-backendbind9-tsig (pool0/canonical) should still exist"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ pool0 TSIG Secret retained"
+      fi
+      if ! oc get secret designate-backendbind9-pool1-tsig -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: designate-backendbind9-pool1-tsig should still exist"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ pool1 TSIG Secret retained"
+      fi
+
+      echo "=== Verifying canonical mapping dropped pool2 and kept default/pool1 keys stable ==="
+      mapping=$(oc get secret designate-backendbind9-tsig -n $NAMESPACE -o json | jq -r '.data["tsigkey-ids.json"] | @base64d')
+      default_id=$(echo "$mapping" | jq -r '.default // empty')
+      pool1_id=$(echo "$mapping" | jq -r '.pool1 // empty')
+      pool2_id=$(echo "$mapping" | jq -r '.pool2 // empty')
+
+      if [ -n "$pool2_id" ]; then
+        echo "ERROR: tsigkey-ids.json should no longer contain a pool2 entry, got: $mapping"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ tsigkey-ids.json no longer references pool2"
+      fi
+
+      prev_default_id=$(cat "/tmp/kuttl-aztsig-${NAMESPACE}-default-id")
+      prev_pool1_id=$(cat "/tmp/kuttl-aztsig-${NAMESPACE}-pool1-id")
+      if [ "$default_id" != "$prev_default_id" ] || [ "$pool1_id" != "$prev_pool1_id" ]; then
+        echo "ERROR: pool removal rotated surviving pools' TSIG keys. default: $prev_default_id -> $default_id, pool1: $prev_pool1_id -> $pool1_id"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ default and pool1 TSIG keys are unchanged after pool2 removal"
+      fi
+
+      rm -f "/tmp/kuttl-aztsig-${NAMESPACE}-default-id" "/tmp/kuttl-aztsig-${NAMESPACE}-pool1-id" "/tmp/kuttl-aztsig-${NAMESPACE}-pool2-id"
+
+      if [ "$ERRORS" -gt 0 ]; then
+        echo "FAILED: $ERRORS pool-removal TSIG checks failed"
+        exit 1
+      fi
+      echo "SUCCESS: pool2 TSIG key/Secret cleaned up on removal; surviving pools' keys untouched"
+      exit 0

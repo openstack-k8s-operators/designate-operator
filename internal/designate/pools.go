@@ -35,6 +35,15 @@ import (
 const (
 	// PoolListJobTimeout is the maximum time to wait for pool list job completion
 	PoolListJobTimeout = 60 * time.Second
+
+	// PoolRetryCooldown is the minimum time between retry attempts that launch a
+	// pool-list or pool-update Job, independent of the reconciler's own
+	// RequeueAfter. RequeueAfter only schedules the *next* reconcile; it doesn't
+	// stop watches on other resources (Secrets, Jobs, StatefulSets) from
+	// triggering earlier reconciles in the meantime. Without this cooldown, two
+	// controllers retrying against the same unconverged state can trigger each
+	// other's watches and launch a new Job on almost every reconcile.
+	PoolRetryCooldown = 30 * time.Second
 )
 
 var (
@@ -200,4 +209,24 @@ func getPodLogs(
 	}
 
 	return buf.String(), nil
+}
+
+// RetryCooldownElapsed checks whether at least `cooldown` has passed since the
+// RFC3339 timestamp stored under lastAttemptKey in statusHash. If the cooldown
+// has elapsed (or no prior attempt is recorded), it stamps the current time
+// into statusHash and returns ready=true, so the caller should proceed and the
+// caller's own status patch will persist the new timestamp. If not enough time
+// has passed, it returns ready=false and the remaining wait, so the caller
+// should return ctrl.Result{RequeueAfter: wait} without repeating the guarded
+// work (e.g. launching a pool-list/pool-update Job).
+func RetryCooldownElapsed(statusHash map[string]string, lastAttemptKey string, cooldown time.Duration) (wait time.Duration, ready bool) {
+	if last, ok := statusHash[lastAttemptKey]; ok {
+		if t, err := time.Parse(time.RFC3339, last); err == nil {
+			if elapsed := time.Since(t); elapsed < cooldown {
+				return cooldown - elapsed, false
+			}
+		}
+	}
+	statusHash[lastAttemptKey] = time.Now().UTC().Format(time.RFC3339)
+	return 0, true
 }
