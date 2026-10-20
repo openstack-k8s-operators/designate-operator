@@ -196,6 +196,9 @@ func (r *DesignateSpec) ValidateCreate(basePath *field.Path, namespace string) (
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
 		basePath.Child("designateAPI").Child("override").Child("service"),
 		r.DesignateAPI.Override.Service)...)
+	allErrs = append(allErrs, validateServicePortNames(
+		basePath.Child("designateAPI").Child("override").Child("service"),
+		r.DesignateAPI.Override.Service)...)
 
 	return allWarns, allErrs
 }
@@ -213,6 +216,9 @@ func (r *DesignateSpecCore) ValidateCreate(basePath *field.Path, namespace strin
 
 	// validate the service override key is valid
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
+		basePath.Child("designateAPI").Child("override").Child("service"),
+		r.DesignateAPI.Override.Service)...)
+	allErrs = append(allErrs, validateServicePortNames(
 		basePath.Child("designateAPI").Child("override").Child("service"),
 		r.DesignateAPI.Override.Service)...)
 
@@ -262,6 +268,9 @@ func (r *DesignateSpec) ValidateUpdate(old DesignateSpec, basePath *field.Path, 
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
 		basePath.Child("designateAPI").Child("override").Child("service"),
 		r.DesignateAPI.Override.Service)...)
+	allErrs = append(allErrs, validateServicePortNames(
+		basePath.Child("designateAPI").Child("override").Child("service"),
+		r.DesignateAPI.Override.Service)...)
 
 	return allWarns, allErrs
 }
@@ -280,8 +289,19 @@ func (r *DesignateSpecCore) ValidateUpdate(old DesignateSpecCore, basePath *fiel
 	allErrs = append(allErrs, service.ValidateRoutedOverrides(
 		basePath.Child("designateAPI").Child("override").Child("service"),
 		r.DesignateAPI.Override.Service)...)
+	allErrs = append(allErrs, validateServicePortNames(
+		basePath.Child("designateAPI").Child("override").Child("service"),
+		r.DesignateAPI.Override.Service)...)
 
 	return allWarns, allErrs
+}
+
+func validateServicePortNames(
+	basePath *field.Path,
+	overrides map[service.Endpoint]service.RoutedOverrideSpec,
+) field.ErrorList {
+	return common_webhook.ValidatePortNameOverrides(
+		basePath, overrides, common_webhook.DefaultServicePortNames())
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type

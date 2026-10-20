@@ -24,10 +24,12 @@ import (
 	. "github.com/onsi/gomega"    //revive:disable:dot-imports
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	//revive:disable-next-line:dot-imports
 	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
@@ -230,6 +232,78 @@ var _ = Describe("DesignateAPI controller", func() {
 			conf := string(configData.Data[designate.CustomServiceConfigFileName])
 			Expect(conf).Should(
 				ContainSubstring("[DEFAULT]\ndebug=True\n"))
+		})
+
+		It("uses endpointURL for vhost names, keeps bare port names and in-cluster DNS annotation", func() {
+			updateOverrides := func(publicURL, internalURL *string) {
+				api := GetDesignateAPI(designateAPIName)
+				api.Spec.Override.Service = map[service.Endpoint]service.RoutedOverrideSpec{
+					service.EndpointPublic: {
+						OverrideSpec: service.OverrideSpec{
+							Spec: &service.OverrideServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+						},
+						EndpointURL: publicURL,
+					},
+					service.EndpointInternal: {
+						OverrideSpec: service.OverrideSpec{
+							Spec: &service.OverrideServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+						},
+						EndpointURL: internalURL,
+					},
+				}
+				Expect(k8sClient.Update(ctx, api)).To(Succeed())
+			}
+			inClusterName := func(endpoint service.Endpoint) string {
+				return fmt.Sprintf("designate-%s.%s.svc", endpoint, namespace)
+			}
+			// Service object names are unchanged, port names are the bare endpoint
+			// string and the dnsmasq hostname annotation is the in-cluster name.
+			assertServices := func() {
+				Eventually(func(g Gomega) {
+					for _, endpoint := range []service.Endpoint{
+						service.EndpointInternal, service.EndpointPublic,
+					} {
+						name := fmt.Sprintf("designate-%s", endpoint)
+						svc := &corev1.Service{}
+						g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+							Namespace: namespace, Name: name,
+						}, svc)).To(Succeed())
+						g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeLoadBalancer))
+						g.Expect(svc.Spec.Ports).To(HaveLen(1))
+						g.Expect(svc.Spec.Ports[0].Name).To(Equal(string(endpoint)))
+						if len(svc.Status.LoadBalancer.Ingress) == 0 {
+							svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "192.0.2.1"}}
+							g.Expect(k8sClient.Status().Update(ctx, svc)).To(Succeed())
+						}
+						g.Expect(svc.Annotations).To(HaveKeyWithValue(
+							service.AnnotationHostnameKey, inClusterName(endpoint)))
+					}
+				}, timeout, interval).Should(Succeed())
+			}
+
+			updateOverrides(
+				ptr.To("https://public.designate.example.test:9001"),
+				ptr.To("https://internal.designate.example.test:9001"))
+			assertServices()
+
+			Eventually(func(g Gomega) {
+				configData := &corev1.Secret{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespace, Name: designateAPIName.Name + "-config-data",
+				}, configData)).To(Succeed())
+				httpdConf := string(configData.Data["httpd.conf"])
+				g.Expect(httpdConf).To(ContainSubstring("<VirtualHost *:9001>"))
+				for endpoint, customHost := range map[service.Endpoint]string{
+					service.EndpointPublic:   "public.designate.example.test",
+					service.EndpointInternal: "internal.designate.example.test",
+				} {
+					g.Expect(httpdConf).To(ContainSubstring("ServerName " + customHost))
+					g.Expect(httpdConf).To(ContainSubstring("ServerAlias " + inClusterName(endpoint)))
+				}
+			}, timeout, interval).Should(Succeed())
+
+			updateOverrides(nil, nil)
+			assertServices()
 		})
 
 		It("updates the KeystoneAuthURL if keystone internal endpoint changes", func() {

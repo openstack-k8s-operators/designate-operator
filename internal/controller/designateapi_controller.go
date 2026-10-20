@@ -604,7 +604,7 @@ func (r *DesignateAPIReconciler) reconcileInit(
 				Labels:    exportLabels,
 				Selector:  serviceLabels,
 				Port: service.GenericServicePort{
-					Name:     endpointName,
+					Name:     endpointTypeStr,
 					Port:     data.Port,
 					Protocol: corev1.ProtocolTCP,
 				},
@@ -1242,7 +1242,14 @@ func (r *DesignateAPIReconciler) generateServiceConfigMaps(
 	httpdVhostConfig := map[string]any{}
 	for _, endpt := range []service.Endpoint{service.EndpointInternal, service.EndpointPublic} {
 		endptConfig := map[string]any{}
-		endptConfig["ServerName"] = fmt.Sprintf("%s-%s.%s.svc", designate.ServiceName, endpt.String(), instance.Namespace)
+		defaultName := fmt.Sprintf("%s-%s.%s.svc", designate.ServiceName, endpt.String(), instance.Namespace)
+		serverName, serverAliases, err := service.GetVHostServerName(
+			instance.Spec.Override.Service[endpt], defaultName)
+		if err != nil {
+			return err
+		}
+		endptConfig["ServerName"] = serverName
+		endptConfig["ServerAliases"] = serverAliases
 		endptConfig["TLS"] = false // default TLS to false, and set it bellow to true if enabled
 		if instance.Spec.TLS.API.Enabled(endpt) {
 			endptConfig["TLS"] = true
