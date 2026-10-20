@@ -108,7 +108,7 @@ metadata:
   name: designate-internal
 spec:
   ports:
-    - name: designate-internal
+    - name: internal
   selector:
     service: designate
   type: ClusterIP
@@ -122,7 +122,7 @@ metadata:
   name: designate-public
 spec:
   ports:
-    - name: designate-public
+    - name: public
   selector:
     service: designate
   type: ClusterIP
