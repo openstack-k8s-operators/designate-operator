@@ -24,9 +24,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	designatev1beta1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/helper"
 	"github.com/openstack-k8s-operators/lib-common/modules/common/job"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,6 +72,11 @@ func ParsePoolListOutput(output string) ([]PoolInfo, error) {
 		line := scanner.Text()
 		matches := re.FindStringSubmatch(line)
 		if len(matches) == 3 {
+			// Dry-run output also includes pools that would be created, with
+			// id:'None'. Only registered pool UUIDs can scope a TSIG key.
+			if _, err := uuid.Parse(matches[1]); err != nil {
+				continue
+			}
 			pools = append(pools, PoolInfo{
 				ID:   matches[1],
 				Name: matches[2],
@@ -87,15 +95,18 @@ func ParsePoolListOutput(output string) ([]PoolInfo, error) {
 	return pools, nil
 }
 
-// GetPoolNameToIDMap retrieves all pools using designate-manage and returns a map of name->ID
+// GetPoolNameToIDMap retrieves pools using designate-manage and returns name->ID.
+// If required pools are absent, discard the completed discovery Job so the next
+// reconciliation observes pools registered after its cached snapshot.
 func GetPoolNameToIDMap(
 	ctx context.Context,
 	h *helper.Helper,
 	namespace string,
 	instance *designatev1beta1.Designate,
+	requiredPools ...string,
 ) (map[string]string, error) {
 	pools, err := ListPoolsFromJob(ctx, h, namespace, instance)
-	if err != nil {
+	if err != nil && (len(requiredPools) == 0 || !errors.Is(err, ErrNoPoolsFound)) {
 		return nil, err
 	}
 
@@ -104,6 +115,15 @@ func GetPoolNameToIDMap(
 		poolMap[pool.Name] = pool.ID
 	}
 
+	for _, name := range requiredPools {
+		if poolMap[name] == "" {
+			jobName := PoolListJob(instance, nil, nil).Name
+			if err := job.DeleteJob(ctx, h, jobName, namespace); err != nil {
+				return nil, fmt.Errorf("failed to refresh pool discovery: %w", err)
+			}
+			return nil, fmt.Errorf("%w: refreshing discovery for pool %s", ErrPoolListJobNotComplete, name)
+		}
+	}
 	return poolMap, nil
 }
 
@@ -139,11 +159,16 @@ func ListPoolsFromJob(
 		return nil, ErrPoolListJobNotComplete
 	}
 
-	// Get the pod created by the job to retrieve logs
+	// A deleted Job's pods can remain during background garbage collection.
+	// Read only pods from this Job UID, not an older Job with the same name.
+	currentJob, err := job.GetJobWithName(ctx, h, jobDef.Name, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pool discovery job: %w", err)
+	}
 	podList := &corev1.PodList{}
 	listOpts := []client.ListOption{
 		client.InNamespace(namespace),
-		client.MatchingLabels(map[string]string{"job-name": jobDef.Name}),
+		client.MatchingLabels(map[string]string{"job-name": jobDef.Name, batchv1.ControllerUidLabel: string(currentJob.UID)}),
 	}
 	err = h.GetClient().List(ctx, podList, listOpts...)
 	if err != nil {

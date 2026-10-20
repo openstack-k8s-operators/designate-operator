@@ -25,6 +25,8 @@ cp -f /var/lib/config-data/default/named.conf /var/lib/config-data/merged/named.
 # Add TSIG configuration if it exists (for multipool non-default pools)
 if [[ -f "/var/lib/tsig/tsigkeys.conf" ]]; then
     cp /var/lib/tsig/tsigkeys.conf /var/lib/config-data/merged/named/tsigkeys.conf
+    # The Secret's read-only mode is preserved by cp; edit only the merged copy.
+    chmod u+w /var/lib/config-data/merged/named.conf
     echo 'include "/etc/named/tsigkeys.conf";' >> /var/lib/config-data/merged/named.conf
     echo "Added TSIG configuration to named.conf"
 fi

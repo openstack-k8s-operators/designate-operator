@@ -71,14 +71,27 @@ metadata:
 data:
   rndc_key_0: rndc-key-1
 ---
-# Verify TSIG secret is created for non-default pools
+# The canonical Secret carries the key ID mapping; only non-default pools get keys.
 apiVersion: v1
 kind: Secret
 metadata:
   name: designate-backendbind9-tsig
+  annotations:
+    tsig-keys-ready: "true"
   labels:
     service: designate-backendbind9
     component: designate-backendbind9
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-backendbind9-pool1-tsig
+  labels:
+    service: designate-backendbind9
+    component: designate-backendbind9
+  annotations:
+    tsig-mode: per-pool
 type: Opaque
 ---
 # Verify pools.yaml ConfigMap uses multipool NS records
@@ -96,5 +109,18 @@ commands:
         echo "ERROR: Multipool mode should use ConfigMap NS records (ns1.example.org), not CR NS records"
         echo "Pools YAML content:"
         echo "$POOLS_YAML"
+        exit 1
+      fi
+  - script: |
+      # Each POOL-scoped key must authorize its own pool's mDNS transfers.
+      pool0_key=$(oc get secret designate-backendbind9-tsig -n $NAMESPACE -o jsonpath='{.metadata.annotations.tsigkey-id}')
+      pool1_key=$(oc get secret designate-backendbind9-pool1-tsig -n $NAMESPACE -o jsonpath='{.metadata.annotations.tsigkey-id}')
+      if [ -n "$pool0_key" ] || [ -z "$pool1_key" ]; then
+        echo "ERROR: Only non-default pools should have a TSIG key in shared mode"
+        exit 1
+      fi
+      default_config=$(oc get secret designate-backendbind9-tsig -n "$NAMESPACE" -o jsonpath='{.data.tsigkeys\.conf}')
+      if [ -n "$default_config" ]; then
+        echo "ERROR: Default pool Secret still contains TSIG key material"
         exit 1
       fi

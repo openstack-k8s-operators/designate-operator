@@ -504,7 +504,7 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		}
 
 		for _, cr := range designates.Items {
-			if o.GetName() == cr.Spec.ExternalBindsSecret {
+			if o.GetName() == cr.Spec.ExternalBindsSecret || o.GetName() == cr.Name+"-backendbind9"+designate.TsigSecretSuffix {
 				name := client.ObjectKey{
 					Namespace: o.GetNamespace(),
 					Name:      cr.Name,
@@ -1388,6 +1388,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
+	tsigKeysPending := false
 	if len(nsRecords) > 0 && instance.Status.DesignateCentralReadyCount > 0 {
 		Log.Info("NS records data found")
 		poolsYamlConfigMap := &corev1.ConfigMap{
@@ -1399,9 +1400,9 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 			Data: make(map[string]string),
 		}
 
-		// Read per-pool TSIG key ID mapping if AZ-aware mode is enabled
+		// Read per-pool TSIG key IDs in both shared and AZ-aware modes.
 		var tsigKeyIDs map[string]string
-		if instance.Spec.AZAwareMode == designatev1beta1.AZModeEnabled && multipoolConfig != nil {
+		if multipoolConfig != nil {
 			tsigSecretName := fmt.Sprintf("%s-backendbind9%s", instance.Name, designate.TsigSecretSuffix)
 			tsigSecret := &corev1.Secret{}
 			err := helper.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretName, Namespace: instance.GetNamespace()}, tsigSecret)
@@ -1409,13 +1410,43 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 				return ctrl.Result{}, fmt.Errorf("failed to get TSIG secret %s: %w", tsigSecretName, err)
 			}
 			if err == nil {
-				if data, exists := tsigSecret.Data[designate.TSIGKeyIDsDataKey]; exists {
+				if tsigSecret.Annotations["tsig-keys-ready"] == "false" {
+					// Reuse the applied identities until BIND has loaded the keys.
+					// Continue reconciling service specs and registering new pools:
+					// either can be needed for the pending rollout to finish.
+					tsigKeysPending = true
+					appliedPools := &corev1.ConfigMap{}
+					if err := helper.GetClient().Get(ctx, types.NamespacedName{Name: designate.PoolsYamlConfigMap, Namespace: instance.Namespace}, appliedPools); err != nil {
+						if !k8s_errors.IsNotFound(err) {
+							return ctrl.Result{}, err
+						}
+					} else {
+						var pools []designate.Pool
+						if err := yaml.Unmarshal([]byte(appliedPools.Data[designate.PoolsYamlContent]), &pools); err != nil {
+							return ctrl.Result{}, fmt.Errorf("invalid applied pools.yaml: %w", err)
+						}
+						tsigKeyIDs = make(map[string]string)
+						for _, pool := range pools {
+							for _, target := range pool.Targets {
+								if target.TSIGKeyID != "" {
+									tsigKeyIDs[pool.Name] = target.TSIGKeyID
+									break
+								}
+							}
+						}
+					}
+				} else if data, exists := tsigSecret.Data[designate.TSIGKeyIDsDataKey]; exists {
 					if jsonErr := json.Unmarshal(data, &tsigKeyIDs); jsonErr != nil {
-						Log.Info(fmt.Sprintf("Failed to parse TSIG key ID mapping from secret, pools.yaml will be generated without tsigkey_ids: %v", jsonErr))
+						return ctrl.Result{}, fmt.Errorf("invalid TSIG key ID mapping: %w", jsonErr)
 					}
 				}
 			}
 			// If secret doesn't exist yet, tsigKeyIDs stays nil — pools.yaml is generated without tsigkey_ids (first pass)
+		}
+
+		if instance.Spec.AZAwareMode != designatev1beta1.AZModeEnabled {
+			// Also strip a stale default binding during migration from AZ mode.
+			delete(tsigKeyIDs, designate.DefaultPoolName)
 		}
 
 		poolsYaml, poolsYamlHash, err := designate.GeneratePoolsYamlDataAndHash(updatedBindMap, mdnsConfigMap.Data, nsRecords, multipoolConfig, externalBindData, externalMasterServiceIPs, tsigKeyIDs)
@@ -1656,7 +1687,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 
 	// We reached the end of the Reconcile, update the Ready condition based on
 	// the sub conditions
-	if instance.Status.Conditions.AllSubConditionIsTrue() {
+	if !tsigKeysPending && instance.Status.Conditions.AllSubConditionIsTrue() {
 		instance.Status.Conditions.MarkTrue(
 			condition.ReadyCondition, condition.ReadyMessage)
 	}
@@ -1667,7 +1698,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 	// covers sub-CRs that don't participate in the input-hash correlation
 	// (unbound, backendbind9), so the finalizer is held until the whole
 	// deployment has stabilized on the new credentials.
-	guardReady := allServicesReady && instance.Status.Conditions.AllSubConditionIsTrue()
+	guardReady := !tsigKeysPending && allServicesReady && instance.Status.Conditions.AllSubConditionIsTrue()
 
 	// Finalize transport URL rotation
 	transportSecretName, err := object.FinalizeSecretRotation(
@@ -1728,6 +1759,9 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		return ctrl.Result{}, err
 	}
 
+	if tsigKeysPending {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 	Log.Info("Reconciled Service successfully")
 	return ctrl.Result{}, nil
 }

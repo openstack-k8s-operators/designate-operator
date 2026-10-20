@@ -28,7 +28,9 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2" //revive:disable:dot-imports
 	. "github.com/onsi/gomega"    //revive:disable:dot-imports
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -767,6 +769,101 @@ var _ = Describe("Designate controller", func() {
 			createAndSimulateMdns(designateMdnsName)
 			createAndSimulateNSRecordsConfigMap(designateNSRecordConfigMapName)
 			simulateCentralReadyCount(designateName, 1)
+		})
+
+		It("publishes non-default TSIG identities outside AZ mode and watches key mapping updates", func() {
+			multipool := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: designate.MultipoolConfigMapName, Namespace: namespace},
+				Data: map[string]string{"pools": `- name: default
+  bindReplicas: 1
+  nsRecords:
+    - hostname: ns1.example.org.
+      priority: 1
+- name: pool1
+  bindReplicas: 1
+  nsRecords:
+    - hostname: ns2.example.org.
+      priority: 1`},
+			}
+			Expect(k8sClient.Create(ctx, multipool)).To(Succeed())
+			DeferCleanup(k8sClient.Delete, ctx, multipool)
+			keyID := "11111111-1111-1111-1111-111111111111"
+			canonical := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: designateName.Name + "-backendbind9" + designate.TsigSecretSuffix, Namespace: namespace},
+				Data:       map[string][]byte{designate.TSIGKeyIDsDataKey: []byte(fmt.Sprintf(`{"default":"legacy-default-key","pool1":%q}`, keyID))},
+			}
+			Expect(k8sClient.Create(ctx, canonical)).To(Succeed())
+			DeferCleanup(k8sClient.Delete, ctx, canonical)
+			expectedPools := 2
+			pool2KeyID := ""
+			checkPools := func(g Gomega, expectedKey string) {
+				cm := th.GetConfigMap(types.NamespacedName{Name: designate.PoolsYamlConfigMap, Namespace: namespace})
+				var pools []designate.Pool
+				g.Expect(yaml.Unmarshal([]byte(cm.Data[designate.PoolsYamlContent]), &pools)).To(Succeed())
+				g.Expect(pools).To(HaveLen(expectedPools))
+				for _, pool := range pools {
+					expected := ""
+					switch pool.Name {
+					case "pool1":
+						expected = expectedKey
+					case "pool2":
+						expected = pool2KeyID
+					}
+					g.Expect(pool.Targets).NotTo(BeEmpty())
+					for _, target := range pool.Targets {
+						g.Expect(target.TSIGKeyID).To(Equal(expected))
+					}
+					for _, ns := range pool.Nameservers {
+						g.Expect(ns.TSIGKeyID).To(BeEmpty())
+					}
+				}
+			}
+			Eventually(func(g Gomega) { checkPools(g, keyID) }, timeout, interval).Should(Succeed())
+			// A canonical Secret event must trigger regeneration without a CR spec change.
+			newID := "22222222-2222-2222-2222-222222222222"
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(canonical), canonical)).To(Succeed())
+				canonical.Data[designate.TSIGKeyIDsDataKey] = []byte(fmt.Sprintf(`{"pool1":%q}`, newID))
+				canonical.Annotations = map[string]string{"tsig-keys-ready": "false"}
+				g.Expect(k8sClient.Update(ctx, canonical)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+			// A scheduling correction must reach BIND while key publication waits.
+			// Otherwise a rollout that cannot start would block its own recovery.
+			nodeSelector := map[string]string{"kubernetes.io/hostname": "recovered-bind-node"}
+			Eventually(func(g Gomega) {
+				instance := GetDesignate(designateName)
+				instance.Spec.DesignateBackendbind9.NodeSelector = &nodeSelector
+				g.Expect(k8sClient.Update(ctx, instance)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+			Eventually(func(g Gomega) {
+				backendName := types.NamespacedName{Name: designateName.Name + "-backendbind9", Namespace: namespace}
+				g.Expect(GetDesignateBackendbind9(backendName).Spec.NodeSelector).To(Equal(&nodeSelector))
+				checkPools(g, keyID)
+			}, timeout, interval).Should(Succeed())
+			// A pool added during rollout must still be registered so the backend
+			// can discover its UUID and create its key. Keep the applied identities.
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(multipool), multipool)).To(Succeed())
+				multipool.Data["pools"] += `
+- name: pool2
+  bindReplicas: 1
+  nsRecords:
+    - hostname: ns3.example.org.
+      priority: 1`
+				g.Expect(k8sClient.Update(ctx, multipool)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+			expectedPools = 3
+			Eventually(func(g Gomega) { checkPools(g, keyID) }, timeout, interval).Should(Succeed())
+			// Keep the last working IDs until BIND acknowledges the new key material.
+			Consistently(func(g Gomega) { checkPools(g, keyID) }, time.Second, interval).Should(Succeed())
+			pool2KeyID = "33333333-3333-3333-3333-333333333333"
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(canonical), canonical)).To(Succeed())
+				canonical.Data[designate.TSIGKeyIDsDataKey] = []byte(fmt.Sprintf(`{"pool1":%q,"pool2":%q}`, newID, pool2KeyID))
+				canonical.Annotations["tsig-keys-ready"] = "true"
+				g.Expect(k8sClient.Update(ctx, canonical)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+			Eventually(func(g Gomega) { checkPools(g, newID) }, timeout, interval).Should(Succeed())
 		})
 
 		It("should have created a valid pools.yaml configmap", func() {
