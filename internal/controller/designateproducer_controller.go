@@ -436,7 +436,7 @@ func (r *DesignateProducerReconciler) reconcileNormal(ctx context.Context, insta
 	// check for required OpenStack secret holding passwords for service/admin user and add hash to the vars map
 	//
 	ctrlResult, err := getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, instance.Spec.Secret, &configMapVars, "secret-")
-	if err != nil {
+	if err != nil || (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, err
 	}
 	// run check OpenStack secret - end
@@ -445,7 +445,7 @@ func (r *DesignateProducerReconciler) reconcileNormal(ctx context.Context, insta
 	// check for required TransportURL secret holding transport URL string
 	//
 	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, instance.Spec.TransportURLSecret, &configMapVars, "secret-")
-	if err != nil {
+	if err != nil || (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, err
 	}
 	// run check TransportURL secret - end
@@ -472,21 +472,21 @@ func (r *DesignateProducerReconciler) reconcileNormal(ctx context.Context, insta
 	//
 
 	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, designate.ScriptsVolumeName(designate.GetOwningDesignateName(instance)), &configMapVars, "")
-	if err != nil {
+	if err != nil || (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, err
 	}
 
 	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, designate.ConfigVolumeName(designate.GetOwningDesignateName(instance)), &configMapVars, "")
 	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
 	// when secret is not found
-	if err != nil {
+	if err != nil || (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, err
 	}
 
 	ctrlResult, err = getSecret(ctx, helper, instance.Namespace, &instance.Status.Conditions, designate.DefaultsVolumeName(designate.GetOwningDesignateName(instance)), &configMapVars, "")
 	// note r.getSecret adds Conditions with condition.InputReadyWaitingMessage
 	// when secret is not found
-	if err != nil {
+	if err != nil || (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, err
 	}
 

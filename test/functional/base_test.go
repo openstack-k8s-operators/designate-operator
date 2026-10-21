@@ -477,6 +477,7 @@ func GetDefaultDesignateProducerSpec() map[string]any {
 	return map[string]any{
 		"databaseHostname":           "hostname-for-designate-producer",
 		"secret":                     SecretName,
+		"transportURLSecret":         RabbitmqSecretName,
 		"designateNetworkAttachment": "designate-attachement",
 		"containerImage":             "repo/designate-producer-image",
 		"serviceAccount":             "designate",
