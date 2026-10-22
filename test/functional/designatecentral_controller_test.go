@@ -18,12 +18,14 @@ package functional_test
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2" //revive:disable:dot-imports
 	. "github.com/onsi/gomega"    //revive:disable:dot-imports
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
 	corev1 "k8s.io/api/core/v1"
+	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	// "sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,6 +45,7 @@ var _ = Describe("DesignateCentral controller", func() {
 	BeforeEach(func() {
 		name = fmt.Sprintf("designate-central-%s", uuid.New().String())
 		spec = GetDefaultDesignateCentralSpec()
+		spec["transportURLSecret"] = RabbitmqSecretName
 
 		transportURLSecretName = types.NamespacedName{
 			Namespace: namespace,
@@ -93,21 +96,45 @@ var _ = Describe("DesignateCentral controller", func() {
 		})
 	})
 
-	When("a proper secret is provided and TransportURL is created", func() {
-		BeforeEach(func() {
-			DeferCleanup(th.DeleteInstance, CreateDesignateCentral(designateCentralName, spec))
-			DeferCleanup(k8sClient.Delete, ctx, CreateDesignateSecret(namespace))
-			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(transportURLSecretName))
-		})
+	DescribeTable("waits for required Secrets before generating configuration", func(missingSecret string) {
+		DeferCleanup(k8sClient.Delete, ctx, CreateDesignateSecret(namespace))
+		DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(transportURLSecretName))
+		createOwnerSecrets(namespace)
 
-		It("should not create a secret", func() {
-			secret := types.NamespacedName{
-				Namespace: designateCentralName.Namespace,
-				Name:      fmt.Sprintf("%s-%s", designateCentralName.Name, "config-data"),
+		secret := th.GetSecret(types.NamespacedName{Namespace: namespace, Name: missingSecret})
+		Expect(k8sClient.Delete(ctx, &secret)).To(Succeed())
+		DeferCleanup(th.DeleteInstance, CreateDesignateCentral(designateCentralName, spec))
+
+		th.ExpectCondition(
+			designateCentralName,
+			ConditionGetterFunc(DesignateCentralConditionGetter),
+			condition.InputReadyCondition,
+			corev1.ConditionFalse,
+		)
+		Consistently(func(g Gomega) {
+			for _, suffix := range []string{"config-data", "defaults"} {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespace,
+					Name:      fmt.Sprintf("%s-%s", designateCentralName.Name, suffix),
+				}, &corev1.Secret{})
+				g.Expect(k8s_errors.IsNotFound(err)).To(BeTrue())
 			}
-			th.AssertSecretDoesNotExist(secret)
-		})
-	})
+		}, time.Second, interval).Should(Succeed())
+
+		th.CreateSecret(types.NamespacedName{Namespace: namespace, Name: missingSecret}, secret.Data)
+		th.ExpectCondition(
+			designateCentralName,
+			ConditionGetterFunc(DesignateCentralConditionGetter),
+			condition.ServiceConfigReadyCondition,
+			corev1.ConditionTrue,
+		)
+	},
+		Entry("missing service password", SecretName),
+		Entry("missing transport URL", RabbitmqSecretName),
+		Entry("missing parent scripts", "designate-scripts"),
+		Entry("missing parent configuration", "designate-config-data"),
+		Entry("missing parent defaults", "designate-defaults"),
+	)
 
 	// Notes: DesignateCentral's config file is basically hard coded and merged with the main config file
 	// in the designate controller.
@@ -122,6 +149,7 @@ var _ = Describe("DesignateCentral controller", func() {
 			keystonePublicEndpoint = fmt.Sprintf("http://keystone-for-%s-public", designateCentralName.Name)
 			SimulateKeystoneReady(keystoneName, keystonePublicEndpoint, keystoneInternalEndpoint)
 
+			createOwnerSecrets(namespace)
 			createAndSimulateRedis(designateRedisName)
 			DeferCleanup(k8sClient.Delete, ctx, CreateDesignateSecret(namespace))
 			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(transportURLSecretName))
