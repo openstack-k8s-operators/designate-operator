@@ -138,6 +138,8 @@ type PoolConfig struct {
 // MultipoolConfig defines the complete multipool configuration
 type MultipoolConfig struct {
 	Pools []PoolConfig
+	// AZAwareMode records the parent CR mode; it is not part of the ConfigMap YAML.
+	AZAwareMode designatev1.DesignateAZMode `yaml:"-"`
 }
 
 // GetMultipoolConfig reads and parses the multipool ConfigMap
@@ -171,7 +173,7 @@ func GetMultipoolConfig(ctx context.Context, k8sClient client.Client, namespace 
 		return pools[i].Name < pools[j].Name
 	})
 
-	config := &MultipoolConfig{Pools: pools}
+	config := &MultipoolConfig{Pools: pools, AZAwareMode: azAwareMode}
 
 	if err := validateMultipoolConfig(config, azAwareMode); err != nil {
 		return nil, fmt.Errorf("invalid multipool config: %w", err)
@@ -443,6 +445,11 @@ func generateMultiplePools(BindMap map[string]string, masterHosts []string, mult
 			globalIndex := bindIndex - int(poolConfig.BindReplicas) + int(i)
 			description := fmt.Sprintf("BIND9 Server for pool %s (%s)", poolConfig.Name, poolBindIPs[i])
 			targets[i], nameservers[i] = createTargetAndNameserver(poolBindIPs[i], globalIndex, masters, description, poolConfig.View, tsigKeyID)
+			if multipoolConfig.AZAwareMode != designatev1.AZModeEnabled {
+				// Legacy Designate accepts TSIG IDs on targets, but not nameservers.
+				// BIND's per-pool server configuration still signs AXFR requests.
+				nameservers[i].TSIGKeyID = ""
+			}
 		}
 
 		attributes := poolConfig.Attributes

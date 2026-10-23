@@ -85,6 +85,12 @@ var _ = Describe("DesignateProducer controller", func() {
 		})
 
 		It("should not create a secret", func() {
+			th.ExpectCondition(
+				designateProducerName,
+				ConditionGetterFunc(DesignateProducerConditionGetter),
+				condition.InputReadyCondition,
+				corev1.ConditionFalse,
+			)
 			secret := types.NamespacedName{
 				Namespace: designateProducerName.Namespace,
 				Name:      fmt.Sprintf("%s-%s", designateProducerName.Name, "config-data"),
@@ -101,6 +107,12 @@ var _ = Describe("DesignateProducer controller", func() {
 		})
 
 		It("should not create a secret", func() {
+			th.ExpectCondition(
+				designateProducerName,
+				ConditionGetterFunc(DesignateProducerConditionGetter),
+				condition.InputReadyCondition,
+				corev1.ConditionFalse,
+			)
 			secret := types.NamespacedName{
 				Namespace: designateProducerName.Namespace,
 				Name:      fmt.Sprintf("%s-%s", designateProducerName.Name, "config-data"),

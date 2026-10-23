@@ -84,12 +84,16 @@ commands:
         echo "✓ Pool2 ConfigMap deleted"
       fi
 
-      # 4. Verify TSIG secret still exists (shared by pool1, should NOT be deleted)
-      if ! oc get secret designate-backendbind9-tsig -n $NAMESPACE 2>/dev/null; then
-        echo "ERROR: TSIG secret was incorrectly deleted (pool1 still needs it)"
+      # 4. Verify pool2's TSIG secret is deleted and pool1's is retained
+      if oc get secret designate-backendbind9-pool2-tsig -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Pool2 TSIG secret still exists after pool removal"
+        ERRORS=$((ERRORS + 1))
+      fi
+      if ! oc get secret designate-backendbind9-pool1-tsig -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Pool1 TSIG secret was incorrectly deleted"
         ERRORS=$((ERRORS + 1))
       else
-        echo "✓ TSIG secret retained (still needed by pool1)"
+        echo "✓ Pool1 TSIG secret retained"
       fi
 
       if [ "$ERRORS" -gt 0 ]; then
@@ -101,5 +105,5 @@ commands:
       echo "  - StatefulSet: deleted"
       echo "  - Services: deleted"
       echo "  - ConfigMap: deleted"
-      echo "  - TSIG secret: retained (shared resource)"
+      echo "  - TSIG secrets: pool2 deleted, pool1 retained"
       exit 0

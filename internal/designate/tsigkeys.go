@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/gophercloud/gophercloud/v2"
+
 	"github.com/openstack-k8s-operators/lib-common/modules/openstack"
 )
 
@@ -36,10 +38,12 @@ func IsValidTSIGKeyName(name string) bool {
 
 // TSIGKey represents a TSIG (Transaction Signature) key for DNS authentication
 type TSIGKey struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Algorithm string `json:"algorithm"` // e.g., "hmac-sha256"
-	Secret    string `json:"secret"`    // Base64-encoded key
+	ID         string `json:"id"`
+	Scope      string `json:"scope"`
+	ResourceID string `json:"resource_id"`
+	Name       string `json:"name"`
+	Algorithm  string `json:"algorithm"` // e.g., "hmac-sha256"
+	Secret     string `json:"secret"`    // Base64-encoded key
 }
 
 // ListAllTSIGKeys retrieves all TSIG keys with full details including ID
@@ -143,6 +147,10 @@ func CreateTSIGKey(
 		return nil, fmt.Errorf("failed to get DNS client: %w", err)
 	}
 
+	return createTSIGKey(ctx, dnsClient, opts)
+}
+
+func createTSIGKey(ctx context.Context, dnsClient *gophercloud.ServiceClient, opts CreateTSIGKeyOpts) (*TSIGKey, error) {
 	url := dnsClient.ServiceURL("tsigkeys")
 
 	reqBody := map[string]interface{}{
@@ -159,7 +167,7 @@ func CreateTSIGKey(
 
 	var result map[string]interface{}
 
-	_, err = dnsClient.Post(ctx, url, reqBody, &result, nil)
+	_, err := dnsClient.Post(ctx, url, reqBody, &result, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TSIG key: %w", err)
 	}
@@ -170,11 +178,40 @@ func CreateTSIGKey(
 	secret, _ := result["secret"].(string)
 
 	tsigKey := &TSIGKey{
-		ID:        id,
-		Name:      name,
-		Algorithm: algorithm,
-		Secret:    secret,
+		ID:         id,
+		Name:       name,
+		Algorithm:  algorithm,
+		Secret:     secret,
+		Scope:      opts.Scope,
+		ResourceID: opts.ResourceID,
 	}
 
 	return tsigKey, nil
+}
+
+// EnsureTSIGKeyPool repairs a stale pool binding without replacing key material.
+// Retaining the key ID, name and secret keeps running BIND pods authenticated.
+func EnsureTSIGKeyPool(ctx context.Context, osclient *openstack.OpenStack, key *TSIGKey, poolID string) error {
+	if key.Scope == "POOL" && key.ResourceID == poolID {
+		return nil
+	}
+	dnsClient, err := GetDNSClient(osclient)
+	if err != nil {
+		return err
+	}
+	return ensureTSIGKeyPool(ctx, dnsClient, key, poolID)
+}
+
+func ensureTSIGKeyPool(ctx context.Context, dnsClient *gophercloud.ServiceClient, key *TSIGKey, poolID string) error {
+	if key.Scope == "POOL" && key.ResourceID == poolID {
+		return nil
+	}
+	body := map[string]string{"scope": "POOL", "resource_id": poolID}
+	_, err := dnsClient.Patch(ctx, dnsClient.ServiceURL("tsigkeys", key.ID), body, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
+	if err != nil {
+		return fmt.Errorf("failed to bind TSIG key %s to pool %s: %w", key.Name, poolID, err)
+	}
+	key.Scope = "POOL"
+	key.ResourceID = poolID
+	return nil
 }

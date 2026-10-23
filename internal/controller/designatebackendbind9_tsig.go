@@ -18,8 +18,8 @@ limitations under the License.
 // This file owns the controller-level TSIG lifecycle: creating/rotating the
 // Designate TSIG keys (via internal/designate/tsigkeys.go's Designate API
 // client) and reconciling the Kubernetes Secrets that carry the resulting
-// key material into BIND, in both the shared-key (non-AZ-aware) and
-// per-pool (AZ-aware) models. Everything else about multipool orchestration
+// key material into BIND using one key per registered pool.
+// Everything else about multipool orchestration
 // (Services, StatefulSets, migration between single-pool and multipool
 // modes) lives in designatebackendbind9_multipool.go.
 
@@ -38,6 +38,7 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,30 +53,21 @@ import (
 	"github.com/openstack-k8s-operators/lib-common/modules/common/util"
 )
 
-// reconcileTSIGSecrets manages TSIG secrets for multipool mode.
-// When AZAwareMode=Enabled: creates per-pool TSIG keys (one per pool including default).
-// Otherwise: uses the shared TSIG key model (one key for all non-default pools).
+// reconcileTSIGSecrets manages per-pool TSIG secrets for multipool mode.
+// Designate validates each POOL-scoped key against a registered pool and uses
+// that pool ID to authorize mDNS transfers, including in non-AZ deployments.
 func (r *DesignateBackendbind9Reconciler) reconcileTSIGSecrets(
 	ctx context.Context,
 	instance *designatev1beta1.DesignateBackendbind9,
 	helper *helper.Helper,
 	multipoolConfig *designate.MultipoolConfig,
 ) (ctrl.Result, error) {
-	// Determine AZ-aware mode from parent Designate CR
-	designateInstance, err := r.getDesignateCR(ctx, helper, instance)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get parent Designate CR for AZ mode check: %w", err)
-	}
-
-	if designateInstance.Spec.AZAwareMode == designatev1beta1.AZModeEnabled {
-		return r.reconcilePerPoolTSIGSecrets(ctx, instance, helper, multipoolConfig)
-	}
-
-	return r.reconcileSharedTSIGSecret(ctx, instance, helper, multipoolConfig)
+	return r.reconcilePerPoolTSIGSecrets(ctx, instance, helper, multipoolConfig)
 }
 
 // reconcilePerPoolTSIGSecrets creates per-pool TSIG keys and stores them in a Secret.
-// Every pool (including default) gets its own TSIG key with scope=POOL and resource_id=pool-UUID.
+// Non-default pools always need a POOL-scoped key with resource_id=pool-UUID.
+// The default pool only needs a key in AZ-aware mode.
 func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 	ctx context.Context,
 	instance *designatev1beta1.DesignateBackendbind9,
@@ -83,7 +75,12 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 	multipoolConfig *designate.MultipoolConfig,
 ) (ctrl.Result, error) {
 	Log := r.GetLogger(ctx)
-	Log.Info("Reconciling per-pool TSIG secrets (AZ-aware mode)")
+	Log.Info("Reconciling per-pool TSIG secrets")
+	designateInstance, err := r.getDesignateCR(ctx, helper, instance)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	azAware := designateInstance.Spec.AZAwareMode == designatev1beta1.AZModeEnabled
 
 	// The pool0-named secret is canonical: besides its own pool's tsigkeys.conf, it also carries
 	// the full pool-name -> tsigkey-id map that designate_controller.go reads for pools.yaml, so
@@ -101,7 +98,7 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 	}
 
 	// Check pool config hash to avoid unnecessary work
-	poolConfigHash, err := r.getPerPoolConfigHash(multipoolConfig, mdnsIPs)
+	poolConfigHash, err := r.getPerPoolConfigHash(multipoolConfig, mdnsIPs, azAware)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -109,9 +106,12 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 	existingSecret := &corev1.Secret{}
 	err = helper.GetClient().Get(ctx, types.NamespacedName{Name: canonicalSecretName, Namespace: instance.Namespace}, existingSecret)
 	if err == nil {
-		if existingHash, exists := existingSecret.Annotations["pool-config-hash"]; exists && existingHash == poolConfigHash {
-			Log.Info("Per-pool TSIG secrets are up to date (pool config unchanged)")
-			return ctrl.Result{}, nil
+		current, checkErr := r.perPoolTSIGSecretsCurrent(ctx, helper, instance, multipoolConfig, existingSecret, poolConfigHash, azAware)
+		if checkErr != nil {
+			return ctrl.Result{}, checkErr
+		}
+		if current {
+			return r.publishTSIGKeysWhenReady(ctx, helper, instance, multipoolConfig, existingSecret, azAware)
 		}
 	} else if !k8s_errors.IsNotFound(err) {
 		return ctrl.Result{}, err
@@ -129,7 +129,7 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 		return ctrl.Result{}, err
 	}
 
-	if len(tsigKeys) == 0 {
+	if len(tsigKeys) == 0 && (azAware || len(multipoolConfig.Pools) > 1) {
 		Log.Info("No pools registered in Designate yet, will requeue in 30 seconds")
 		return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 	}
@@ -145,21 +145,102 @@ func (r *DesignateBackendbind9Reconciler) reconcilePerPoolTSIGSecrets(
 	// Each pool is a separate BIND process (separate StatefulSet), so it only ever needs its own
 	// key — write one Secret per pool rather than merging every pool's key into one file (BIND's
 	// "server" clause only accepts a single key per remote address).
-	for poolIdx, pool := range multipoolConfig.Pools {
-		key, ok := tsigKeys[pool.Name]
-		if !ok {
-			// Pool not yet registered in Designate; ensurePerPoolTSIGKeys already logged this.
-			continue
+	// Publish the canonical mapping LAST. A failed write to any pool's Secret must
+	// not leave a matching hash that suppresses reconciliation on the next retry.
+	for poolIdx := len(multipoolConfig.Pools) - 1; poolIdx >= 0; poolIdx-- {
+		pool := multipoolConfig.Pools[poolIdx]
+		key := tsigKeys[pool.Name]
+		tsigConfigContent := ""
+		if key != nil {
+			tsigConfigContent = r.generateTSIGConfig(key, mdnsIPs)
 		}
 		secretName := tsigSecretNameForPool(instance.Name, poolIdx)
-		tsigConfigContent := r.generateTSIGConfig(key, mdnsIPs)
 		if err := r.createOrUpdatePerPoolTSIGSecret(ctx, helper, instance, secretName, key, tsigConfigContent, poolConfigHash, tsigKeys); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
+	// Do not delete the legacy shared DB key here: pods from an older operator
+	// may still use it during rollout. It is never assigned to a pool again.
 
 	Log.Info(fmt.Sprintf("Per-pool TSIG secrets reconciled (hash: %s, pools: %d)", poolConfigHash, len(tsigKeys)))
+	// Let the StatefulSet controller roll out the new key material before workers
+	// start signing SOA checks with the newly published IDs.
+	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+}
+
+// publishTSIGKeysWhenReady prevents workers from using new keys before BIND has
+// loaded them. The legacy DB key stays valid while old BIND pods are running.
+func (r *DesignateBackendbind9Reconciler) publishTSIGKeysWhenReady(
+	ctx context.Context, h *helper.Helper, instance *designatev1beta1.DesignateBackendbind9,
+	config *designate.MultipoolConfig, canonical *corev1.Secret, azAware bool,
+) (ctrl.Result, error) {
+	if canonical.Annotations["tsig-keys-ready"] == "true" {
+		return ctrl.Result{}, nil
+	}
+	for i, pool := range config.Pools {
+		if pool.Name == designate.DefaultPoolName && !azAware {
+			continue
+		}
+		secret := &corev1.Secret{}
+		if err := h.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretNameForPool(instance.Name, i), Namespace: instance.Namespace}, secret); err != nil {
+			return ctrl.Result{}, err
+		}
+		name := strings.TrimSuffix(secret.Name, designate.TsigSecretSuffix)
+		sts := &appsv1.StatefulSet{}
+		err := h.GetClient().Get(ctx, types.NamespacedName{Name: name, Namespace: instance.Namespace}, sts)
+		if k8s_errors.IsNotFound(err) {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if sts.Spec.Template.Annotations["tsig-secret-version"] != secret.ResourceVersion ||
+			sts.Status.ObservedGeneration != sts.Generation || sts.Status.ReadyReplicas != pool.BindReplicas ||
+			sts.Status.UpdatedReplicas != pool.BindReplicas || sts.Status.CurrentRevision != sts.Status.UpdateRevision {
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+	}
+	base := canonical.DeepCopy()
+	canonical.Annotations["tsig-keys-ready"] = "true"
+	if err := h.GetClient().Patch(ctx, canonical, client.MergeFrom(base)); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
+}
+
+// perPoolTSIGSecretsCurrent checks every Secret before trusting the canonical hash.
+// This also recovers from partial writes and deleted per-pool Secrets.
+func (r *DesignateBackendbind9Reconciler) perPoolTSIGSecretsCurrent(
+	ctx context.Context, h *helper.Helper, instance *designatev1beta1.DesignateBackendbind9,
+	config *designate.MultipoolConfig, canonical *corev1.Secret, hash string, azAware bool,
+) (bool, error) {
+	if canonical.Annotations["pool-config-hash"] != hash || canonical.Annotations["tsig-mode"] != "per-pool" {
+		return false, nil
+	}
+	var ids map[string]string
+	if err := json.Unmarshal(canonical.Data[designate.TSIGKeyIDsDataKey], &ids); err != nil {
+		return false, nil
+	}
+	if !azAware && (ids[designate.DefaultPoolName] != "" || len(canonical.Data["tsigkeys.conf"]) != 0 || canonical.Annotations["tsigkey-id"] != "") {
+		return false, nil
+	}
+	for i, pool := range config.Pools {
+		if pool.Name == designate.DefaultPoolName && !azAware {
+			continue
+		}
+		secret := &corev1.Secret{}
+		err := h.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretNameForPool(instance.Name, i), Namespace: instance.Namespace}, secret)
+		if k8s_errors.IsNotFound(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if ids[pool.Name] == "" || secret.Annotations["tsigkey-id"] != ids[pool.Name] || secret.Annotations["pool-config-hash"] != hash || len(secret.Data["tsigkeys.conf"]) == 0 {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // tsigSecretNameForPool computes the per-pool TSIG Secret name for a given pool index. Every
@@ -214,13 +295,25 @@ func (r *DesignateBackendbind9Reconciler) createOrUpdatePerPoolTSIGSecret(
 			}
 			stringData[designate.TSIGKeyIDsDataKey] = string(tsigKeyIDsJSON)
 		}
-		tsigSecret.StringData = stringData
+		// Write Data directly so removed values really disappear, including legacy
+		// shared key material on the canonical (default pool) Secret.
+		tsigSecret.Data = make(map[string][]byte, len(stringData))
+		for name, value := range stringData {
+			tsigSecret.Data[name] = []byte(value)
+		}
+		tsigSecret.StringData = nil
 		if tsigSecret.Annotations == nil {
 			tsigSecret.Annotations = make(map[string]string)
 		}
 		tsigSecret.Annotations["pool-config-hash"] = poolConfigHash
 		tsigSecret.Annotations["tsig-mode"] = "per-pool"
-		tsigSecret.Annotations["tsigkey-id"] = key.ID
+		if secretName == tsigSecretNameForPool(instance.Name, 0) {
+			tsigSecret.Annotations["tsig-keys-ready"] = "false"
+		}
+		delete(tsigSecret.Annotations, "tsigkey-id")
+		if key != nil {
+			tsigSecret.Annotations["tsigkey-id"] = key.ID
+		}
 		return controllerutil.SetControllerReference(instance, tsigSecret, r.Scheme)
 	})
 	if err != nil {
@@ -228,115 +321,6 @@ func (r *DesignateBackendbind9Reconciler) createOrUpdatePerPoolTSIGSecret(
 	}
 
 	return nil
-}
-
-// reconcileSharedTSIGSecret implements the original shared TSIG key model for non-AZ deployments.
-func (r *DesignateBackendbind9Reconciler) reconcileSharedTSIGSecret(
-	ctx context.Context,
-	instance *designatev1beta1.DesignateBackendbind9,
-	helper *helper.Helper,
-	multipoolConfig *designate.MultipoolConfig,
-) (ctrl.Result, error) {
-	Log := r.GetLogger(ctx)
-	Log.Info("Reconciling shared TSIG secret for multipool")
-
-	// Early exit: Check if there are any non-default pools that need TSIG
-	// Pool 0 (default) doesn't need TSIG, so only pools 1+ require it
-	hasNonDefaultPools := false
-	for poolIdx := range multipoolConfig.Pools {
-		if poolIdx > 0 {
-			hasNonDefaultPools = true
-			break
-		}
-	}
-
-	tsigSecretName := instance.Name + designate.TsigSecretSuffix
-
-	if !hasNonDefaultPools {
-		// No non-default pools - delete TSIG secret and key from Designate
-		tsigSecret := &corev1.Secret{}
-		err := helper.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretName, Namespace: instance.Namespace}, tsigSecret)
-		if err == nil {
-			Log.Info("No non-default pools, deleting TSIG secret and key from Designate")
-
-			// Delete TSIG key from Designate database
-			osclient, err := designate.GetOpenstackClient(ctx, instance.Namespace, helper)
-			if err != nil {
-				Log.Error(err, "Failed to get OpenStack client for TSIG key deletion")
-				// Continue with secret deletion even if we can't delete from Designate
-			} else {
-				err = designate.DeleteTSIGKeyByName(ctx, osclient, designate.SharedTSIGKeyName)
-				if err != nil {
-					Log.Error(err, "Failed to delete TSIG key from Designate")
-					// Continue with secret deletion even if Designate deletion fails
-				} else {
-					Log.Info(fmt.Sprintf("Deleted TSIG key %s from Designate", designate.SharedTSIGKeyName))
-				}
-			}
-
-			// Delete Kubernetes secret
-			err = helper.GetClient().Delete(ctx, tsigSecret)
-			if err != nil && !k8s_errors.IsNotFound(err) {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
-	}
-
-	// Check if we need to update the TSIG secret by comparing pool configuration hash
-	// This avoids expensive operations (fetching pool IDs, querying OpenStack) when nothing has changed
-	poolConfigHash, err := r.getPoolConfigHash(multipoolConfig)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Check if secret exists and has the same pool config hash
-	existingSecret := &corev1.Secret{}
-	err = helper.GetClient().Get(ctx, types.NamespacedName{Name: tsigSecretName, Namespace: instance.Namespace}, existingSecret)
-	if err == nil {
-		// Force re-write if per-pool artifacts are present (transition from per-pool to shared)
-		_, hasPerPoolAnnotation := existingSecret.Annotations["tsig-mode"]
-		_, hasPerPoolData := existingSecret.Data[designate.TSIGKeyIDsDataKey]
-		needsCleanup := hasPerPoolAnnotation || hasPerPoolData
-
-		if !needsCleanup {
-			if existingHash, exists := existingSecret.Annotations["pool-config-hash"]; exists && existingHash == poolConfigHash {
-				Log.Info("TSIG secret is up to date (pool config unchanged)")
-				return ctrl.Result{}, nil
-			}
-		} else {
-			Log.Info("Per-pool TSIG artifacts detected in shared mode, forcing secret re-write")
-		}
-	} else if !k8s_errors.IsNotFound(err) {
-		return ctrl.Result{}, err
-	}
-
-	// Pool config has changed or secret doesn't exist - regenerate TSIG config
-	Log.Info("Pool config changed or TSIG secret missing, regenerating")
-
-	mdnsIPs, err := r.getMdnsIPsForTSIG(ctx, helper, instance.Namespace)
-	if err != nil {
-		// Check if mdns ConfigMap doesn't exist yet (Designate controller hasn't created it)
-		if k8s_errors.IsNotFound(err) {
-			Log.Info("mdns-ip-map ConfigMap not found yet, will requeue in 30 seconds")
-			return ctrl.Result{RequeueAfter: time.Second * 30}, nil
-		}
-		return ctrl.Result{}, err
-	}
-
-	// Get or create shared TSIG key for all non-default pools
-	tsigKey, err := r.ensureSharedTSIGKey(ctx, helper, instance.Namespace)
-	if err != nil {
-		if errors.Is(err, designate.ErrKeystoneNotReady) {
-			Log.Info("Required services not ready for TSIG key retrieval, will requeue in 30 seconds")
-			return ctrl.Result{RequeueAfter: time.Second * 30}, nil
-		}
-		return ctrl.Result{}, err
-	}
-
-	tsigConfigContent := r.generateTSIGConfig(tsigKey, mdnsIPs)
-
-	return r.createOrUpdateTSIGSecretWithHash(ctx, helper, instance, tsigConfigContent, poolConfigHash)
 }
 
 // getMdnsIPsForTSIG retrieves mdns pod IPs from the mdns-ip-map ConfigMap
@@ -368,59 +352,7 @@ func (r *DesignateBackendbind9Reconciler) getMdnsIPsForTSIG(
 	return mdnsIPs, nil
 }
 
-// ensureSharedTSIGKey retrieves or creates a shared TSIG key for all non-default pools
-func (r *DesignateBackendbind9Reconciler) ensureSharedTSIGKey(
-	ctx context.Context,
-	helper *helper.Helper,
-	namespace string,
-) (*designate.TSIGKey, error) {
-	Log := r.GetLogger(ctx)
-
-	osclient, err := designate.GetOpenstackClient(ctx, namespace, helper)
-	if err != nil {
-		Log.Error(err, "Failed to get OpenStack client")
-		return nil, fmt.Errorf("failed to get OpenStack client: %w", err)
-	}
-
-	// Try to get existing TSIG key
-	tsigKey, err := designate.GetTSIGKeyByName(ctx, osclient, designate.SharedTSIGKeyName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query TSIG key: %w", err)
-	}
-
-	if tsigKey != nil {
-		Log.Info(fmt.Sprintf("Using existing shared TSIG key: %s", tsigKey.Name))
-		return tsigKey, nil
-	}
-
-	// Create key if it doesn't exist
-	Log.Info("Creating shared TSIG key for multipool")
-
-	// Generate random secret for TSIG key (base64-encoded 32-byte random string)
-	secret, err := generateTSIGSecret()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate TSIG secret: %w", err)
-	}
-
-	tsigKey, err = designate.CreateTSIGKey(ctx, osclient, designate.CreateTSIGKeyOpts{
-		Name:      designate.SharedTSIGKeyName,
-		Algorithm: "hmac-sha256",
-		Secret:    secret,
-		Scope:     "POOL",
-		// ResourceID is required by Designate API but only validated for UUID format,
-		// not checked against actual pools. Using dummy UUID since this key is shared
-		// across all non-default pools and not tied to any specific pool.
-		ResourceID: "00000000-0000-0000-0000-000000000000",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create TSIG key: %w", err)
-	}
-
-	Log.Info(fmt.Sprintf("Created shared TSIG key: %s", tsigKey.Name))
-	return tsigKey, nil
-}
-
-// ensurePerPoolTSIGKeys creates or retrieves a TSIG key for each pool (including default).
+// ensurePerPoolTSIGKeys creates or retrieves keys for pools that need signed transfers.
 // Returns a map of pool-name -> tsigkey-id (Designate UUID).
 func (r *DesignateBackendbind9Reconciler) ensurePerPoolTSIGKeys(
 	ctx context.Context,
@@ -430,18 +362,26 @@ func (r *DesignateBackendbind9Reconciler) ensurePerPoolTSIGKeys(
 ) (map[string]*designate.TSIGKey, error) {
 	Log := r.GetLogger(ctx)
 
+	designateInstance, err := r.getDesignateCR(ctx, helper, instance)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Designate CR: %w", err)
+	}
+	azAware := designateInstance.Spec.AZAwareMode == designatev1beta1.AZModeEnabled
+	if !azAware && len(multipoolConfig.Pools) == 1 && multipoolConfig.Pools[0].Name == designate.DefaultPoolName {
+		return map[string]*designate.TSIGKey{}, nil
+	}
 	osclient, err := designate.GetOpenstackClient(ctx, instance.Namespace, helper)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OpenStack client: %w", err)
 	}
 
-	// Get pool name -> UUID mapping
-	designateInstance, err := r.getDesignateCR(ctx, helper, instance)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Designate CR: %w", err)
+	var requiredPools []string
+	for _, pool := range multipoolConfig.Pools {
+		if pool.Name != designate.DefaultPoolName || azAware {
+			requiredPools = append(requiredPools, pool.Name)
+		}
 	}
-
-	poolNameToID, err := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace, designateInstance)
+	poolNameToID, err := designate.GetPoolNameToIDMap(ctx, helper, instance.Namespace, designateInstance, requiredPools...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pool name-to-ID mapping: %w", err)
 	}
@@ -460,16 +400,23 @@ func (r *DesignateBackendbind9Reconciler) ensurePerPoolTSIGKeys(
 	result := make(map[string]*designate.TSIGKey)
 
 	for _, pool := range multipoolConfig.Pools {
+		if pool.Name == designate.DefaultPoolName && !azAware {
+			continue
+		}
 		keyName := pool.Name + designate.PerPoolTSIGKeySuffix
 
 		poolUUID, exists := poolNameToID[pool.Name]
-		if !exists {
-			Log.Info(fmt.Sprintf("Pool %s not yet registered in Designate, skipping TSIG key creation", pool.Name))
-			continue
+		if !exists || poolUUID == "" {
+			return nil, fmt.Errorf("%w: pool %s is not registered yet", designate.ErrNoPoolsFound, pool.Name)
 		}
 
 		// Check if key already exists
 		if existing, ok := existingKeysByName[keyName]; ok {
+			// Repair a stale binding without rotating the name, ID, or secret used
+			// by running BIND pods.
+			if err := designate.EnsureTSIGKeyPool(ctx, osclient, existing, poolUUID); err != nil {
+				return nil, err
+			}
 			Log.Info(fmt.Sprintf("Using existing per-pool TSIG key for pool %s: %s (ID: %s)", pool.Name, keyName, existing.ID))
 			result[pool.Name] = existing
 			continue
@@ -624,71 +571,13 @@ func (r *DesignateBackendbind9Reconciler) computePoolConfigHash(prefix string, p
 	return hash, nil
 }
 
-// getPoolConfigHash generates a hash of non-default pools (for shared TSIG model).
-func (r *DesignateBackendbind9Reconciler) getPoolConfigHash(multipoolConfig *designate.MultipoolConfig) (string, error) {
-	var poolNames []string
-	for poolIdx, pool := range multipoolConfig.Pools {
-		if poolIdx > 0 { // Skip default pool (pool0)
-			poolNames = append(poolNames, pool.Name)
-		}
-	}
-	return r.computePoolConfigHash("", poolNames, nil)
-}
-
 // getPerPoolConfigHash generates a hash including ALL pools and mDNS IPs (for per-pool TSIG model).
-func (r *DesignateBackendbind9Reconciler) getPerPoolConfigHash(multipoolConfig *designate.MultipoolConfig, mdnsIPs []string) (string, error) {
+func (r *DesignateBackendbind9Reconciler) getPerPoolConfigHash(multipoolConfig *designate.MultipoolConfig, mdnsIPs []string, azAware bool) (string, error) {
 	var poolNames []string
 	for _, pool := range multipoolConfig.Pools {
 		poolNames = append(poolNames, pool.Name)
 	}
-	return r.computePoolConfigHash("per-pool:", poolNames, mdnsIPs)
-}
-
-// createOrUpdateTSIGSecretWithHash creates or updates the TSIG secret with pool config hash annotation
-func (r *DesignateBackendbind9Reconciler) createOrUpdateTSIGSecretWithHash(
-	ctx context.Context,
-	helper *helper.Helper,
-	instance *designatev1beta1.DesignateBackendbind9,
-	tsigConfigContent string,
-	poolConfigHash string,
-) (ctrl.Result, error) {
-	Log := r.GetLogger(ctx)
-
-	tsigSecretName := instance.Name + designate.TsigSecretSuffix
-
-	tsigSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      tsigSecretName,
-			Namespace: instance.Namespace,
-			Labels: map[string]string{
-				"service":   "designate-backendbind9",
-				"component": "designate-backendbind9",
-			},
-		},
-	}
-
-	_, err := controllerutil.CreateOrPatch(ctx, helper.GetClient(), tsigSecret, func() error {
-		tsigSecret.Type = corev1.SecretTypeOpaque
-		// Clear existing Data to remove any leftover keys (e.g. tsigkey-ids.json from per-pool mode)
-		tsigSecret.Data = nil
-		tsigSecret.StringData = map[string]string{
-			"tsigkeys.conf": tsigConfigContent,
-		}
-		if tsigSecret.Annotations == nil {
-			tsigSecret.Annotations = make(map[string]string)
-		}
-		tsigSecret.Annotations["pool-config-hash"] = poolConfigHash
-		delete(tsigSecret.Annotations, "tsig-mode")
-		return controllerutil.SetControllerReference(instance, tsigSecret, r.Scheme)
-	})
-
-	if err != nil {
-		Log.Error(err, "Failed to create/update TSIG secret")
-		return ctrl.Result{}, fmt.Errorf("failed to create/update TSIG secret: %w", err)
-	}
-
-	Log.Info(fmt.Sprintf("TSIG secret %s reconciled (hash: %s)", tsigSecretName, poolConfigHash))
-	return ctrl.Result{}, nil
+	return r.computePoolConfigHash(fmt.Sprintf("per-pool-v2:az=%t:", azAware), poolNames, mdnsIPs)
 }
 
 // generateTSIGSecret generates a random base64-encoded secret for TSIG keys

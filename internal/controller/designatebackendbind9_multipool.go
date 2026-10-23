@@ -767,12 +767,13 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolResources(
 		return ctrlResult, err
 	}
 
-	ctrlResult, err = r.reconcileMultipoolStatefulSets(ctx, instance, helper, multipoolConfig, inputHash, serviceLabels, serviceAnnotations, topology)
-	if err != nil || (ctrlResult != ctrl.Result{}) {
-		return ctrlResult, err
+	statefulSetResult, err := r.reconcileMultipoolStatefulSets(ctx, instance, helper, multipoolConfig, inputHash, serviceLabels, serviceAnnotations, topology)
+	if err != nil {
+		return statefulSetResult, err
 	}
 
-	// Create/update TSIG secrets for non-default pools
+	// Reconcile keys even while StatefulSets are pending: new BIND pods can be
+	// waiting for these Secrets to exist before their init containers can run.
 	ctrlResult, err = r.reconcileTSIGSecrets(ctx, instance, helper, multipoolConfig)
 	if err != nil || (ctrlResult != ctrl.Result{}) {
 		return ctrlResult, err
@@ -780,7 +781,7 @@ func (r *DesignateBackendbind9Reconciler) reconcileMultipoolResources(
 
 	// Note: Per-pool bind IP ConfigMaps are cleaned up by DesignateReconciler.reconcileBindConfigMaps()
 
-	return ctrl.Result{}, nil
+	return statefulSetResult, nil
 }
 
 // cleanupMultipoolServices deletes pool-specific services during migration to single-pool mode

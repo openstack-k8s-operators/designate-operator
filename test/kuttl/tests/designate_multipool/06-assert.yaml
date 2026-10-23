@@ -35,6 +35,10 @@ commands:
         echo "ERROR: TSIG secret should be deleted in single-pool mode"
         exit 1
       fi
+      if oc get secret designate-backendbind9-pool1-tsig -n $NAMESPACE 2>/dev/null; then
+        echo "ERROR: Pool1 TSIG secret should be deleted in single-pool mode"
+        exit 1
+      fi
       echo "SUCCESS: Migrated to single pool mode with all resources cleaned up"
   - script: |
       # Verify pools.yaml uses CR NS records (not multipool ConfigMap NS records)

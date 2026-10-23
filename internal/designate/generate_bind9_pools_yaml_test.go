@@ -17,6 +17,8 @@ limitations under the License.
 package designate
 
 import (
+	"gopkg.in/yaml.v3"
+	"path/filepath"
 	"strings"
 	"testing"
 	"text/template"
@@ -1086,6 +1088,7 @@ func TestGenerateMultiplePoolsWithTSIGKeyIDs(t *testing.T) {
 	masterHosts := []string{"192.168.1.20"}
 
 	multipoolConfig := &MultipoolConfig{
+		AZAwareMode: designatev1.AZModeEnabled,
 		Pools: []PoolConfig{
 			{
 				Name:         "default",
@@ -1291,5 +1294,52 @@ func TestTemplateRenderingWithPerPoolTSIGKeyIDs(t *testing.T) {
 	if strings.Count(output, "tsigkey_id:") < 4 {
 		t.Errorf("expected at least 4 tsigkey_id entries (nameserver+target for 2 pools), got %d in:\n%s",
 			strings.Count(output, "tsigkey_id:"), output)
+	}
+}
+
+func TestMultipoolTSIGYamlCompatibility(t *testing.T) {
+	t.Setenv("OPERATOR_TEMPLATES", filepath.Join("..", "..", "templates"))
+	for _, mode := range []designatev1.DesignateAZMode{"", designatev1.AZModeDisabled, designatev1.AZModeEnabled} {
+		t.Run(string(mode), func(t *testing.T) {
+			config := &MultipoolConfig{AZAwareMode: mode, Pools: []PoolConfig{
+				{Name: "default", BindReplicas: 1, NSRecords: []designatev1.DesignateNSRecord{{Hostname: "ns1.example.org.", Priority: 1}}},
+				{Name: "pool1", BindReplicas: 1, NSRecords: []designatev1.DesignateNSRecord{{Hostname: "ns2.example.org.", Priority: 1}}},
+			}}
+			ids := map[string]string{"pool1": "11111111-1111-1111-1111-111111111111"}
+			if mode == designatev1.AZModeEnabled {
+				ids[DefaultPoolName] = "22222222-2222-2222-2222-222222222222"
+			}
+			output, _, err := GeneratePoolsYamlDataAndHash(map[string]string{"bind_address_0": "192.0.2.1", "bind_address_1": "192.0.2.2"}, map[string]string{"mdns_address_0": "192.0.2.3"}, nil, config, nil, nil, ids)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var pools []Pool
+			if err := yaml.Unmarshal([]byte(output), &pools); err != nil {
+				t.Fatal(err)
+			}
+			for _, pool := range pools {
+				for _, target := range pool.Targets {
+					if target.TSIGKeyID != ids[pool.Name] {
+						t.Fatalf("pool %s lost its target TSIG identity", pool.Name)
+					}
+				}
+				for _, ns := range pool.Nameservers {
+					expected := ""
+					if mode == designatev1.AZModeEnabled {
+						expected = ids[pool.Name]
+					}
+					if ns.TSIGKeyID != expected {
+						t.Fatalf("pool %s has incompatible nameserver TSIG field: %q", pool.Name, ns.TSIGKeyID)
+					}
+				}
+			}
+			expectedFields := 1
+			if mode == designatev1.AZModeEnabled {
+				expectedFields = 4
+			}
+			if strings.Count(output, "tsigkey_id:") != expectedFields {
+				t.Fatalf("unexpected TSIG fields in rendered pools.yaml:\n%s", output)
+			}
+		})
 	}
 }

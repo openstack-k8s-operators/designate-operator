@@ -36,7 +36,7 @@ var _ = Describe("Designate multipool controller", func() {
 	})
 
 	When("multipool ConfigMap with two pools is created", func() {
-		It("should create a shared TSIG secret for non-default pools", func() {
+		It("should parse non-default pools requiring per-pool TSIG identities", func() {
 			multipoolConfig := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      multipoolConfigMapName.Name,
@@ -69,7 +69,7 @@ var _ = Describe("Designate multipool controller", func() {
 	})
 
 	When("multipool ConfigMap with only default pool is created", func() {
-		It("should not create TSIG secret for default-only configuration", func() {
+		It("should parse a default-only configuration without requiring a TSIG key", func() {
 			multipoolConfig := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      multipoolConfigMapName.Name,

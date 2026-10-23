@@ -33,3 +33,13 @@ metadata:
   name: designate
 status:
   designateBackendbind9ReadyCount: 3
+
+---
+# The added pool must receive its own TSIG key and Secret.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-backendbind9-pool2-tsig
+  annotations:
+    tsig-mode: per-pool
+type: Opaque
