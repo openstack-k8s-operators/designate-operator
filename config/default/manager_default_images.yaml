@@ -12,18 +12,15 @@ spec:
       - name: manager
         env:
         - name: RELATED_IMAGE_DESIGNATE_API_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-api:current-podified
+          value: quay.io/openstack-s2i-containers/openstack-designate-api:master-latest
+        # MDNS and Producer inherit this image, including its resolved bundle digest.
         - name: RELATED_IMAGE_DESIGNATE_CENTRAL_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-central:current-podified
-        - name: RELATED_IMAGE_DESIGNATE_MDNS_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-mdns:current-podified
-        - name: RELATED_IMAGE_DESIGNATE_PRODUCER_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-producer:current-podified
+          value: quay.io/openstack-s2i-containers/openstack-designate-central:master-latest
         - name: RELATED_IMAGE_DESIGNATE_WORKER_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-worker:current-podified
+          value: quay.io/openstack-s2i-containers/openstack-designate-worker:master-latest
         - name: RELATED_IMAGE_DESIGNATE_BACKENDBIND9_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-designate-backend-bind9:current-podified
+          value: quay.io/openstack-s2i-containers/openstack-designate-backend-bind9:master-latest
         - name: RELATED_IMAGE_DESIGNATE_UNBOUND_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-unbound:current-podified
+          value: quay.io/openstack-s2i-containers/openstack-unbound:master-latest
         - name: RELATED_IMAGE_NET_UTILS_IMAGE_URL_DEFAULT
-          value: quay.io/podified-antelope-centos9/openstack-netutils:current-podified
+          value: quay.io/openstack-s2i-containers/openstack-netutils:master-latest

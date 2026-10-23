@@ -398,7 +398,7 @@ var _ = Describe("Designate controller", func() {
 				designateName,
 				ConditionGetterFunc(DesignateConditionGetter),
 				condition.DBSyncReadyCondition,
-				corev1.ConditionFalse,
+				corev1.ConditionTrue,
 			)
 		})
 	})
