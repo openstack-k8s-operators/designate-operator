@@ -1,9 +1,30 @@
 ---
+
+- job:
+    name: designate-operator-kuttl
+    parent: cifmw-base-multinode-kuttl
+    attempts: 1
+    required-projects:
+      - github.com/openstack-k8s-operators/designate-operator
+    irrelevant-files:
+      - .*/*.md
+      - ^\..*$
+      - ^LICENSE$
+      - ^OWNERS$
+      - ^OWNERS_ALIASES$
+      - ^PROJECT$
+      - ^README.md$
+      - tests?\/functional
+      - ^renovate.json$
+    vars:
+      cifmw_kuttl_tests_operator_list:
+        - octavia
+
 - job:
     name: designate-operator-tempest-multinode
     parent: podified-multinode-edpm-deployment-crc
     dependencies: ["openstack-k8s-operators-content-provider"]
-    irrelevant-files:
+    irrelevant-files: &irrelevant_files
       - .*/*.md
       - ^.github/.*$
       - .ci-operator.yaml
@@ -24,8 +45,8 @@
       - ^hack/.*$
       - ^tests?/functional/.*$
       - ^tests?/kuttl/.*$
-    vars:
-      cifmw_cls_pv_count: 14
+    vars: &cifmw_vars
+      cifmw_cls_pv_count: 20
       cifmw_test_operator_tempest_container: openstack-tempest-all
       cifmw_run_test_role: test_operator
       cifmw_test_operator_tempest_network_attachments:
@@ -61,7 +82,7 @@
                     enabled: true
                     templates:
                       designate-redis:
-                        replicas: 1
+                        replicas: 3
                   designate:
                     enabled: true
                     template:
@@ -137,3 +158,30 @@
                         - hostname: ns2.example.org.
                           priority: 20
                       redisServiceName: designate-redis
+
+- job:
+    name: designate-s2i-content-provider
+    parent: s2i-openstack-container-content-provider
+    description: |
+      Build s2i designate service images for designate s2i
+      test jobs.
+    required-projects:
+      - name: openstack-k8s-operators/s2i-openstack-containers
+        override-checkout: main
+    vars:
+      s2i_ci_images:
+        - designate/designate-api
+        - designate/designate-central
+        - designate/designate-worker
+        - designate/designate-backend-bind9
+        - designate/netutils
+        - designate/unbound
+
+- job:
+    name: designate-s2i-test
+    parent: s2i-test-base
+    description: |
+      Validate a designate deployment
+    nodeset: centos-10-2x-centos-9-xxl-crc-cloud-ocp-4-22-1-3xl
+    irrelevant-files: *irrelevant_files
+    vars: *cifmw_vars
