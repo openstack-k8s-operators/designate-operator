@@ -96,7 +96,8 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 					Labels:      labels,
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: instance.Spec.ServiceAccount,
+					ServiceAccountName:           instance.Spec.ServiceAccount,
+					AutomountServiceAccountToken: ptr.To(false),
 					// Unbound doesn't use any config in common with the other
 					// designate services so just give it it's own config
 					// volume.
