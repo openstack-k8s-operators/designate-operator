@@ -24,10 +24,12 @@ import (
 	. "github.com/onsi/gomega"    //revive:disable:dot-imports
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/openstack-k8s-operators/lib-common/modules/common/condition"
+	"github.com/openstack-k8s-operators/lib-common/modules/common/service"
 	//revive:disable-next-line:dot-imports
 	"github.com/openstack-k8s-operators/designate-operator/internal/designate"
 	keystonev1 "github.com/openstack-k8s-operators/keystone-operator/api/v1beta1"
@@ -232,6 +234,107 @@ var _ = Describe("DesignateAPI controller", func() {
 				ContainSubstring("[DEFAULT]\ndebug=True\n"))
 		})
 
+		It("uses endpointURL for vhost names, keeps bare port names and registers only the internal in-cluster DNS annotation", func() {
+			updateOverrides := func(publicURL, internalURL *string) {
+				Eventually(func(g Gomega) {
+					api := GetDesignateAPI(designateAPIName)
+					api.Spec.Override.Service = map[service.Endpoint]service.RoutedOverrideSpec{
+						service.EndpointPublic: {
+							OverrideSpec: service.OverrideSpec{
+								Spec: &service.OverrideServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+							},
+							EndpointURL: publicURL,
+						},
+						service.EndpointInternal: {
+							OverrideSpec: service.OverrideSpec{
+								Spec: &service.OverrideServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+							},
+							EndpointURL: internalURL,
+						},
+					}
+					g.Expect(k8sClient.Update(ctx, api)).To(Succeed())
+				}, timeout, interval).Should(Succeed())
+			}
+			inClusterName := func(endpoint service.Endpoint) string {
+				return fmt.Sprintf("designate-%s.%s.svc", endpoint, namespace)
+			}
+			// Service object names are unchanged, port names are the bare endpoint
+			// string and only the internal Service gets the in-cluster dnsmasq hostname.
+			assertServices := func() {
+				Eventually(func(g Gomega) {
+					for _, endpoint := range []service.Endpoint{
+						service.EndpointInternal, service.EndpointPublic,
+					} {
+						name := fmt.Sprintf("designate-%s", endpoint)
+						svc := &corev1.Service{}
+						g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+							Namespace: namespace, Name: name,
+						}, svc)).To(Succeed())
+						g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeLoadBalancer))
+						g.Expect(svc.Spec.Ports).To(HaveLen(1))
+						g.Expect(svc.Spec.Ports[0].Name).To(Equal(string(endpoint)))
+						if len(svc.Status.LoadBalancer.Ingress) == 0 {
+							svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "192.0.2.1"}}
+							g.Expect(k8sClient.Status().Update(ctx, svc)).To(Succeed())
+						}
+						if endpoint == service.EndpointPublic {
+							// public DNS is user-managed, not registered in dnsmasq
+							g.Expect(svc.Annotations).NotTo(HaveKey(service.AnnotationHostnameKey))
+						} else {
+							g.Expect(svc.Annotations).To(HaveKeyWithValue(
+								service.AnnotationHostnameKey, inClusterName(endpoint)))
+						}
+					}
+				}, timeout, interval).Should(Succeed())
+			}
+
+			updateOverrides(
+				ptr.To("https://public.designate.example.test:9001"),
+				ptr.To("https://internal.designate.example.test:9001"))
+			assertServices()
+
+			Eventually(func(g Gomega) {
+				configData := &corev1.Secret{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespace, Name: designateAPIName.Name + "-config-data",
+				}, configData)).To(Succeed())
+				httpdConf := string(configData.Data["httpd.conf"])
+				g.Expect(httpdConf).To(ContainSubstring("<VirtualHost *:9001>"))
+				for endpoint, customHost := range map[service.Endpoint]string{
+					service.EndpointPublic:   "public.designate.example.test",
+					service.EndpointInternal: "internal.designate.example.test",
+				} {
+					g.Expect(httpdConf).To(ContainSubstring("ServerName " + customHost))
+					g.Expect(httpdConf).To(ContainSubstring("ServerAlias " + inClusterName(endpoint)))
+				}
+			}, timeout, interval).Should(Succeed())
+
+			updateOverrides(nil, nil)
+			assertServices()
+		})
+
+		It("keeps the default vhost ServerName when the public endpointURL is set without a LoadBalancer (Route)", func() {
+			Eventually(func(g Gomega) {
+				api := GetDesignateAPI(designateAPIName)
+				api.Spec.Override.Service = map[service.Endpoint]service.RoutedOverrideSpec{
+					service.EndpointPublic: {EndpointURL: ptr.To("https://route.designate.example.test:9001")},
+				}
+				g.Expect(k8sClient.Update(ctx, api)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				configData := &corev1.Secret{}
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
+					Namespace: namespace, Name: designateAPIName.Name + "-config-data",
+				}, configData)).To(Succeed())
+				httpdConf := string(configData.Data["httpd.conf"])
+				// the router sends no SNI, so the route host must not be a ServerName
+				g.Expect(httpdConf).NotTo(ContainSubstring("route.designate.example.test"))
+				g.Expect(httpdConf).To(ContainSubstring(
+					fmt.Sprintf("ServerName designate-public.%s.svc", namespace)))
+			}, timeout, interval).Should(Succeed())
+		})
+
 		It("updates the KeystoneAuthURL if keystone internal endpoint changes", func() {
 			newInternalEndpoint := "https://keystone-internal"
 
@@ -248,6 +351,84 @@ var _ = Describe("DesignateAPI controller", func() {
 				conf := string(confSecret.Data["01-config.conf"])
 				g.Expect(string(conf)).Should(
 					ContainSubstring("auth_url=%s", newInternalEndpoint))
+			}, timeout, interval).Should(Succeed())
+		})
+	})
+
+	When("internal and public endpoints are LoadBalancers that are then switched to ClusterIP", func() {
+		BeforeEach(func() {
+			keystoneAPIName := keystone.CreateKeystoneAPI(namespace)
+			DeferCleanup(keystone.DeleteKeystoneAPI, keystoneAPIName)
+			SimulateKeystoneReady(keystoneAPIName,
+				fmt.Sprintf("http://keystone-for-%s-public", designateAPIName.Name),
+				fmt.Sprintf("http://keystone-for-%s-internal", designateAPIName.Name))
+
+			DeferCleanup(k8sClient.Delete, ctx, CreateDesignateSecret(namespace))
+			DeferCleanup(k8sClient.Delete, ctx, CreateTransportURLSecret(transportURLSecretName))
+
+			spec["override"] = map[string]any{
+				"service": map[string]any{
+					"internal": map[string]any{"spec": map[string]any{"type": "LoadBalancer"}},
+					"public":   map[string]any{"spec": map[string]any{"type": "LoadBalancer"}},
+				},
+			}
+			DeferCleanup(th.DeleteInstance, CreateDesignateAPI(designateAPIName, spec))
+
+			mariaDBDatabaseName := mariadb.CreateMariaDBDatabase(namespace, designate.DatabaseCRName, mariadbv1.MariaDBDatabaseSpec{})
+			DeferCleanup(k8sClient.Delete, ctx, mariadb.GetMariaDBDatabase(mariaDBDatabaseName))
+
+			designateAPI := GetDesignateAPI(designateAPIName)
+			apiMariaDBAccount, apiMariaDBSecret := mariadb.CreateMariaDBAccountAndSecret(
+				types.NamespacedName{Namespace: namespace, Name: designateAPI.Spec.DatabaseAccount},
+				mariadbv1.MariaDBAccountSpec{})
+			DeferCleanup(k8sClient.Delete, ctx, apiMariaDBAccount)
+			DeferCleanup(k8sClient.Delete, ctx, apiMariaDBSecret)
+			th.SimulateLoadBalancerServiceIP(types.NamespacedName{Namespace: namespace, Name: "designate-internal"})
+			th.SimulateLoadBalancerServiceIP(types.NamespacedName{Namespace: namespace, Name: "designate-public"})
+		})
+
+		It("drops the dnsmasq hostname annotation", func() {
+			name := types.NamespacedName{Namespace: namespace, Name: "designate-internal"}
+			Eventually(func(g Gomega) {
+				g.Expect(th.GetService(name).Annotations).To(HaveKey(service.AnnotationHostnameKey))
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				instance := GetDesignateAPI(designateAPIName)
+				override := instance.Spec.Override.Service[service.EndpointInternal]
+				override.Spec = nil
+				instance.Spec.Override.Service[service.EndpointInternal] = override
+				g.Expect(k8sClient.Update(ctx, instance)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				svc := th.GetService(name)
+				g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+				g.Expect(svc.Annotations).NotTo(HaveKey(service.AnnotationHostnameKey))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("drops a stale dnsmasq hostname annotation when the public Service becomes ClusterIP", func() {
+			name := types.NamespacedName{Namespace: namespace, Name: "designate-public"}
+			// simulate a registration left on the public LoadBalancer by a previous release
+			Eventually(func(g Gomega) {
+				svc := th.GetService(name)
+				svc.Annotations[service.AnnotationHostnameKey] = "designate-public.stale.svc"
+				g.Expect(k8sClient.Update(ctx, svc)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				instance := GetDesignateAPI(designateAPIName)
+				override := instance.Spec.Override.Service[service.EndpointPublic]
+				override.Spec = nil
+				instance.Spec.Override.Service[service.EndpointPublic] = override
+				g.Expect(k8sClient.Update(ctx, instance)).To(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				svc := th.GetService(name)
+				g.Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+				g.Expect(svc.Annotations).NotTo(HaveKey(service.AnnotationHostnameKey))
 			}, timeout, interval).Should(Succeed())
 		})
 	})
