@@ -240,6 +240,45 @@ func TestGetNetworkParametersFromNAD(t *testing.T) {
 			expectedProviderEnd:   "2001:db8::11a",
 		},
 		{
+			name: "valid IPv4 overlay configuration",
+			nadConfig: `{
+				"name": "designate-overlay",
+				"type": "ovn-k8s-cni-overlay",
+				"topology": "layer2",
+				"subnets": "192.168.1.0/24",
+				"excludeSubnets": "192.168.1.128/25,192.168.1.64/26"
+			}`,
+			expectError:           false,
+			expectedCIDR:          "192.168.1.0/24",
+			expectedProviderStart: "192.168.1.133",
+			expectedProviderEnd:   "192.168.1.254",
+		},
+		{
+			name: "valid IPv6 overlay configuration",
+			nadConfig: `{
+				"name": "designate-overlay",
+				"type": "ovn-k8s-cni-overlay",
+				"topology": "layer2",
+				"subnets": "2001:db8::/64",
+				"excludeSubnets": "2001:db8::80/121,2001:db8::40/122"
+			}`,
+			expectError:           false,
+			expectedCIDR:          "2001:db8::/64",
+			expectedProviderStart: "2001:db8::85",
+			expectedProviderEnd:   "2001:db8::fe",
+		},
+		{
+			name: "overlay configuration without excluded subnet",
+			nadConfig: `{
+				"name": "designate-overlay",
+				"type": "ovn-k8s-cni-overlay",
+				"topology": "layer2",
+				"subnets": "192.168.1.0/24"
+			}`,
+			expectError:   true,
+			errorContains: "must exclude a range for predictable ips",
+		},
+		{
 			name: "insufficient IP space - range end too close to network boundary",
 			nadConfig: `{
 				"ipam": {
