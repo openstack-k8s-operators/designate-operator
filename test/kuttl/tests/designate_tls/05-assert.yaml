@@ -96,8 +96,11 @@ spec:
             weight: 100
       containers:
       - command:
-        - /usr/sbin/httpd
+        - /usr/bin/dumb-init
         args:
+        - --single-child
+        - --
+        - /usr/sbin/httpd
         - -DFOREGROUND
         imagePullPolicy: IfNotPresent
         livenessProbe:

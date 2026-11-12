@@ -1916,6 +1916,42 @@ var _ = Describe("Designate controller", func() {
 			th.SimulateJobSuccess(designateDBSyncName)
 		})
 
+		It("should wrap all service commands with dumb-init", func() {
+			for _, service := range []struct {
+				name        string
+				statefulSet bool
+				args        []string
+			}{
+				{"api", false, []string{"/usr/sbin/httpd", "-DFOREGROUND"}},
+				{"central", false, []string{"/usr/bin/designate-central", "--config-dir", "/etc/designate/designate.conf.d"}},
+				{"producer", false, []string{"/usr/bin/designate-producer", "--config-dir", "/etc/designate/designate.conf.d"}},
+				{"worker", false, []string{"/usr/bin/designate-worker", "--config-dir", "/etc/designate/designate.conf.d"}},
+				{"mdns", true, []string{"/usr/bin/designate-mdns", "--config-dir", "/etc/designate/designate.conf.d"}},
+				{"backendbind9", true, []string{"/usr/sbin/named", "-g", "-d", "3", "-u", "named", "-c", "/etc/named.conf", "-f"}},
+				{"unbound", true, []string{"/usr/sbin/unbound", "-d", "-d", "-p"}},
+			} {
+				resourceName := types.NamespacedName{Namespace: namespace, Name: designateName.Name + "-" + service.name}
+				if service.name == "api" {
+					resourceName.Name = "designate-api"
+				}
+				Eventually(func(g Gomega) {
+					var containers []corev1.Container
+					if service.statefulSet {
+						sts := &appsv1.StatefulSet{}
+						g.Expect(k8sClient.Get(ctx, resourceName, sts)).To(Succeed())
+						containers = sts.Spec.Template.Spec.Containers
+					} else {
+						deployment := &appsv1.Deployment{}
+						g.Expect(k8sClient.Get(ctx, resourceName, deployment)).To(Succeed())
+						containers = deployment.Spec.Template.Spec.Containers
+					}
+					g.Expect(containers).NotTo(BeEmpty())
+					g.Expect(containers[0].Command).To(Equal([]string{"/usr/bin/dumb-init"}))
+					g.Expect(containers[0].Args).To(Equal(append([]string{"--single-child", "--"}, service.args...)))
+				}, timeout, interval).Should(Succeed(), service.name)
+			}
+		})
+
 		It("should not create notifications TransportURL", func() {
 			Consistently(func(g Gomega) {
 				notificationsTransportURLName := types.NamespacedName{

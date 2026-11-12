@@ -154,6 +154,11 @@ func Deployment(
 						{
 							Name: serviceName,
 							Command: []string{
+								"/usr/bin/dumb-init",
+							},
+							Args: []string{
+								"--single-child",
+								"--",
 								"/usr/bin/designate-worker",
 								"--config-dir", "/etc/designate/designate.conf.d",
 							},
