@@ -785,14 +785,35 @@ var _ = Describe("Designate controller", func() {
     - hostname: ns2.example.org.
       priority: 1`},
 			}
-			Expect(k8sClient.Create(ctx, multipool)).To(Succeed())
+			// The CRD-based configuration may already have been translated into
+			// the default-only multipool ConfigMap. Replace its data instead of
+			// failing on AlreadyExists when installing this explicit config.
+			err := k8sClient.Create(ctx, multipool)
+			if k8s_errors.IsAlreadyExists(err) {
+				existing := &corev1.ConfigMap{}
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(multipool), existing)).To(Succeed())
+				existing.Data = multipool.Data
+				Expect(k8sClient.Update(ctx, existing)).To(Succeed())
+				multipool = existing
+			} else {
+				Expect(err).To(Succeed())
+			}
 			DeferCleanup(k8sClient.Delete, ctx, multipool)
 			keyID := "11111111-1111-1111-1111-111111111111"
 			canonical := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{Name: designateName.Name + "-backendbind9" + designate.TsigSecretSuffix, Namespace: namespace},
 				Data:       map[string][]byte{designate.TSIGKeyIDsDataKey: []byte(fmt.Sprintf(`{"default":"legacy-default-key","pool1":%q}`, keyID))},
 			}
-			Expect(k8sClient.Create(ctx, canonical)).To(Succeed())
+			err = k8sClient.Create(ctx, canonical)
+			if k8s_errors.IsAlreadyExists(err) {
+				existing := &corev1.Secret{}
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(canonical), existing)).To(Succeed())
+				existing.Data = canonical.Data
+				Expect(k8sClient.Update(ctx, existing)).To(Succeed())
+				canonical = existing
+			} else {
+				Expect(err).To(Succeed())
+			}
 			DeferCleanup(k8sClient.Delete, ctx, canonical)
 			expectedPools := 2
 			pool2KeyID := ""
@@ -919,7 +940,8 @@ var _ = Describe("Designate controller", func() {
 					// Check description format
 					serverNum := i
 					expectedDesc := fmt.Sprintf("BIND9 Server %d (%s)", serverNum, target.Options.Host)
-					Expect(target.Description).To(Equal(expectedDesc), "Target description format mismatch")
+					multipoolDesc := fmt.Sprintf("BIND9 Server for pool %s (%s)", pool.Name, target.Options.Host)
+					Expect(target.Description).To(Or(Equal(expectedDesc), Equal(multipoolDesc)), "Target description format mismatch")
 
 					// Check masters
 					Expect(target.Masters).To(HaveLen(mdnsReplicaCount), "Masters count should match mdnsReplicaCount")
@@ -1003,6 +1025,38 @@ var _ = Describe("Designate controller", func() {
 				g.Expect(secret).ToNot(BeNil())
 				g.Expect(secret.Data).To(BeEmpty())
 			}, timeout, interval).Should(Succeed())
+		})
+
+		It("reports an error and does not recreate the multipool ConfigMap after it is deleted", func() {
+			// The reconciler records the deployed pool list in status, which is
+			// how it knows the deployment is already running in multipool mode.
+			Eventually(func(g Gomega) {
+				instance := GetDesignate(designateName)
+				g.Expect(instance.Status.Hash[designate.MultipoolPoolsHashKey]).To(Equal(designate.DefaultPoolName))
+			}, timeout, interval).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				Name:      designate.MultipoolConfigMapName,
+				Namespace: namespace,
+			}})).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				conditions := DesignateConditionGetter(designateName)
+				g.Expect(conditions.IsFalse(condition.InputReadyCondition)).To(BeTrue())
+				inputCondition := conditions.Get(condition.InputReadyCondition)
+				g.Expect(inputCondition).NotTo(BeNil())
+				g.Expect(inputCondition.Message).To(ContainSubstring(designate.ErrMultipoolConfigMapMissing.Error()))
+			}, timeout, interval).Should(Succeed())
+
+			// The CR only holds the legacy pool fields, so it must not be used to
+			// rebuild a default-only ConfigMap for a multipool deployment.
+			Consistently(func(g Gomega) {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      designate.MultipoolConfigMapName,
+					Namespace: namespace,
+				}, &corev1.ConfigMap{})
+				g.Expect(k8s_errors.IsNotFound(err)).To(BeTrue())
+			}, time.Second, interval).Should(Succeed())
 		})
 	})
 

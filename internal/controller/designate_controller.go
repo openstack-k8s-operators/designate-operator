@@ -188,7 +188,7 @@ func (r *DesignateReconciler) validatePoolRemovals(
 	Log := r.GetLogger(ctx)
 
 	// Get the previous pool list from status.Hash
-	previousPoolsStr, exists := instance.Status.Hash["multipool-pools"]
+	previousPoolsStr, exists := instance.Status.Hash[designate.MultipoolPoolsHashKey]
 	if !exists {
 		// First time seeing multipool config, no removals to validate
 		return ctrl.Result{}, nil
@@ -442,6 +442,19 @@ func (r *DesignateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return r.reconcileDelete(ctx, instance, helper)
 	}
 
+	// Translate the legacy CRD-based pool configuration before any dependent
+	// resources are reconciled. This is a no-op when the multipool ConfigMap
+	// already exists.
+	if err := r.reconcileMultipoolConfigMap(ctx, instance, helper); err != nil {
+		instance.Status.Conditions.Set(condition.FalseCondition(
+			condition.InputReadyCondition,
+			condition.ErrorReason,
+			condition.SeverityWarning,
+			condition.InputReadyErrorMessage,
+			err.Error()))
+		return ctrl.Result{}, err
+	}
+
 	// Handle non-deleted clusters
 	return r.reconcileNormal(ctx, instance, helper)
 }
@@ -582,10 +595,12 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
-		// Watch for multipool ConfigMap changes to regenerate pools.yaml
+		// Watch multipool and NS records ConfigMap changes. The NS records
+		// ConfigMap is user/infra managed and has no owner reference, so an
+		// explicit watch is needed to translate the CR once records appear.
 		Watches(
 			&corev1.ConfigMap{},
-			handler.EnqueueRequestsFromMapFunc(r.findDesignatesForMultipoolConfigMap),
+			handler.EnqueueRequestsFromMapFunc(r.findDesignatesForConfigMap),
 		).
 		// Watch for Secrets of interest like TransportURL related or external binds.
 		Watches(
@@ -608,17 +623,18 @@ func (r *DesignateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 		Complete(r)
 }
 
-// findDesignatesForMultipoolConfigMap watches the multipool ConfigMap and triggers
-// reconciliation of all Designate CRs when it changes or is deleted
-func (r *DesignateReconciler) findDesignatesForMultipoolConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
+// findDesignatesForConfigMap watches the multipool and NS records ConfigMaps and
+// triggers reconciliation of all Designate CRs when they change or are deleted
+func (r *DesignateReconciler) findDesignatesForConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
 	Log := r.GetLogger(ctx)
 
-	// Only trigger on multipool ConfigMap
-	if obj.GetName() != designate.MultipoolConfigMapName {
+	switch obj.GetName() {
+	case designate.MultipoolConfigMapName, designate.NsRecordsConfigMap:
+	default:
 		return nil
 	}
 
-	Log.Info("Multipool ConfigMap changed/deleted, reconciling all Designate CRs to regenerate pools.yaml")
+	Log.Info(fmt.Sprintf("ConfigMap %s changed/deleted, reconciling all Designate CRs", obj.GetName()))
 
 	// get all Designate CRs in this namespace
 	designates := &designatev1beta1.DesignateList{}
@@ -1253,7 +1269,7 @@ func (r *DesignateReconciler) reconcileNormal(ctx context.Context, instance *des
 		}
 	}
 	newPoolList := strings.Join(currentPoolNames, ",")
-	instance.Status.Hash["multipool-pools"] = newPoolList
+	instance.Status.Hash[designate.MultipoolPoolsHashKey] = newPoolList
 
 	// Handle Mdns predictable IPs configmap
 	nad, err := nad.GetNADWithName(ctx, helper, instance.Spec.DesignateNetworkAttachment, instance.Namespace)

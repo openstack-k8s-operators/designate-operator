@@ -96,8 +96,14 @@ const (
 	// MultipoolConfigMapName is the name of the ConfigMap containing multipool configuration
 	MultipoolConfigMapName = "designate-multipool-config"
 
+	// MultipoolPoolsHashKey is the status hash key storing the deployed pool list
+	MultipoolPoolsHashKey = "multipool-pools"
+
 	// DefaultPoolName is the name of the default pool (pool0)
 	DefaultPoolName = "default"
+
+	// DefaultPoolDescription is the description used for the default BIND pool
+	DefaultPoolDescription = "Default BIND Pool"
 
 	// PoolStatefulSetSuffix is the suffix for numbered pool StatefulSets (pool1, pool2, etc.)
 	PoolStatefulSetSuffix = "-pool"

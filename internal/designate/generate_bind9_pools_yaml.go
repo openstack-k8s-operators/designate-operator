@@ -49,6 +49,9 @@ var (
 	ErrDefaultPoolMissing = errors.New("default pool must be present in multipool configuration")
 	// ErrMultipoolConfigKeyMissing is returned when multipool ConfigMap doesn't have pools key
 	ErrMultipoolConfigKeyMissing = errors.New("multipool ConfigMap missing pools key")
+	// ErrMultipoolConfigMapMissing is returned when a deployment already running
+	// in multipool mode loses its multipool ConfigMap
+	ErrMultipoolConfigMapMissing = errors.New("multipool ConfigMap is missing but the deployment is already in multipool mode")
 	// ErrPoolMissingNSRecords is returned when a pool doesn't define NS records in multipool mode
 	ErrPoolMissingNSRecords = errors.New("pool missing NS records in multipool mode")
 	// ErrPoolMissingView is returned when AZ mode is enabled and a pool doesn't have a view
@@ -254,6 +257,11 @@ func GeneratePoolsYamlDataAndHash(BindMap, MdnsMap map[string]string, nsRecords 
 		if err != nil {
 			return "", "", err
 		}
+		// External BIND9 targets are provided through the external binds Secret,
+		// keyed by pool name, and are not part of the multipool ConfigMap. Keep
+		// attaching them per pool so migrating single-pool deployments does not
+		// silently drop their external nameservers.
+		appendExternalTargets(pools, masterHosts, externalBinds, externalMasterServiceIPs)
 	}
 
 	poolBytes, err := yaml.Marshal(pools)
@@ -391,7 +399,7 @@ func generateDefaultPool(BindMap map[string]string, masterHosts []string, nsReco
 	defaultAttributes := make(map[string]string)
 	pool := Pool{
 		Name:        "default",
-		Description: "Default BIND Pool",
+		Description: DefaultPoolDescription,
 		Attributes:  defaultAttributes,
 		NSRecords:   nsRecords,
 		Nameservers: nameservers,
@@ -476,4 +484,34 @@ func generateMultiplePools(BindMap map[string]string, masterHosts []string, mult
 	}
 
 	return pools, nil
+}
+
+// appendExternalTargets adds the external BIND9 targets configured for each
+// pool, mirroring the single-pool generator. External masters use the pool's
+// external master Service IPs when available and fall back to the internal
+// mDNS masters otherwise.
+func appendExternalTargets(
+	pools []Pool,
+	masterHosts []string,
+	externalBinds map[string][]ExternalBind,
+	externalMasterServiceIPs map[string][]string,
+) {
+	for i := range pools {
+		poolExternalBinds := externalBinds[pools[i].Name]
+		if len(poolExternalBinds) == 0 {
+			continue
+		}
+
+		masters := createMasters(masterHosts)
+		if len(externalMasterServiceIPs[pools[i].Name]) > 0 {
+			masters = createMasters(externalMasterServiceIPs[pools[i].Name])
+		}
+
+		for j := range poolExternalBinds {
+			description := fmt.Sprintf("External BIND9 Server %d (%s)", j, poolExternalBinds[j].Name)
+			target, nameserver := createExternalTargetAndNameserver(poolExternalBinds[j], masters, description)
+			pools[i].Targets = append(pools[i].Targets, target)
+			pools[i].Nameservers = append(pools[i].Nameservers, nameserver)
+		}
+	}
 }
