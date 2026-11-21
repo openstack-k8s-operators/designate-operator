@@ -14,3 +14,6 @@ commands:
          echo "" > deploy/designate_nad.yaml
       fi
       oc kustomize deploy | oc apply -n $NAMESPACE -f -
+      # A preceding AZ-aware test may have failed before deleting this CR.
+      # Applying the sample does not reset fields absent from that sample.
+      oc patch designate designate -n $NAMESPACE --type=merge -p '{"spec":{"azAwareMode":"Disabled"}}'

@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	designatev1 "github.com/openstack-k8s-operators/designate-operator/api/v1beta1"
@@ -137,6 +138,8 @@ func TestSharedTSIGMigrationReconciliation(t *testing.T) {
 	if err := r.Create(ctx, pod); err != nil {
 		t.Fatal(err)
 	}
+	// Advance past the retry cooldown before consuming the completed discovery Job.
+	instance.Status.Hash["per-pool-tsig-last-attempt"] = time.Now().Add(-designate.PoolRetryCooldown).UTC().Format(time.RFC3339)
 	if result, err := r.reconcileTSIGSecrets(ctx, instance, h, config); err != nil || result.RequeueAfter == 0 {
 		t.Fatalf("migrate shared key: %+v, %v", result, err)
 	}

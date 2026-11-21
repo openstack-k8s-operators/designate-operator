@@ -1,0 +1,72 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+status:
+  designateBackendbind9ReadyCount: 3
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool2
+  labels:
+    service: designate-backendbind9
+status:
+  readyReplicas: 1
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-backendbind9-pool2-tsig
+  labels:
+    service: designate-backendbind9
+    component: designate-backendbind9
+  annotations:
+    tsig-mode: per-pool
+type: Opaque
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 1200
+commands:
+  - script: |
+      set -e
+      ERRORS=0
+
+      echo "=== Verifying canonical secret's mapping now includes the newly added pool2 ==="
+      mapping=$(oc get secret designate-backendbind9-tsig -n $NAMESPACE -o json | jq -r '.data["tsigkey-ids.json"] | @base64d')
+      default_id=$(echo "$mapping" | jq -r '.default // empty')
+      pool1_id=$(echo "$mapping" | jq -r '.pool1 // empty')
+      pool2_id=$(echo "$mapping" | jq -r '.pool2 // empty')
+
+      if [ -z "$pool2_id" ]; then
+        echo "ERROR: expected tsigkey-ids.json to gain a 'pool2' entry after pool addition, got: $mapping"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ tsigkey-ids.json now maps pool2 -> $pool2_id"
+      fi
+
+      echo "=== Verifying pool addition did not rotate existing pools' TSIG keys ==="
+      prev_default_id=$(cat "/tmp/kuttl-aztsig-${NAMESPACE}-default-id")
+      prev_pool1_id=$(cat "/tmp/kuttl-aztsig-${NAMESPACE}-pool1-id")
+      if [ "$default_id" != "$prev_default_id" ]; then
+        echo "ERROR: default pool's TSIG key was rotated on pool addition. Was: $prev_default_id, now: $default_id"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ default pool's TSIG key is unchanged ($default_id)"
+      fi
+      if [ "$pool1_id" != "$prev_pool1_id" ]; then
+        echo "ERROR: pool1's TSIG key was rotated on pool addition. Was: $prev_pool1_id, now: $pool1_id"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ pool1's TSIG key is unchanged ($pool1_id)"
+      fi
+
+      echo "$pool2_id" > "/tmp/kuttl-aztsig-${NAMESPACE}-pool2-id"
+
+      if [ "$ERRORS" -gt 0 ]; then
+        echo "FAILED: $ERRORS pool-addition TSIG checks failed"
+        exit 1
+      fi
+      echo "SUCCESS: pool addition created a new TSIG key/Secret for pool2 without disturbing existing pools' keys"
+      exit 0
