@@ -133,9 +133,12 @@ func StatefulSet(
 							Name:  serviceName,
 							Image: instance.Spec.ContainerImage,
 							Command: []string{
-								"/usr/sbin/named",
+								"/usr/bin/dumb-init",
 							},
 							Args: []string{
+								"--single-child",
+								"--",
+								"/usr/sbin/named",
 								"-g", "-d", "3",
 								"-u", "named",
 								"-c", "/etc/named.conf", "-f",

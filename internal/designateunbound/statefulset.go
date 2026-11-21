@@ -107,8 +107,11 @@ func StatefulSet(instance *designatev1beta1.DesignateUnbound,
 					Containers: []corev1.Container{{
 						Name:    serviceName,
 						Image:   instance.Spec.ContainerImage,
-						Command: []string{"/usr/sbin/unbound"},
+						Command: []string{"/usr/bin/dumb-init"},
 						Args: []string{
+							"--single-child",
+							"--",
+							"/usr/sbin/unbound",
 							"-d",
 							"-d",
 							"-p",
