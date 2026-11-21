@@ -1,0 +1,9 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      # Once a deployment has reconciled in multipool mode the ConfigMap is the
+      # source of truth, so deleting it must be reported instead of silently
+      # re-translating the CR into a default-only pool.
+      oc delete configmap designate-multipool-config -n $NAMESPACE
+      echo "Deleted multipool ConfigMap - the operator must report it missing"
