@@ -159,7 +159,7 @@
 
 - job:
     name: designate-s2i-test
-    parent: s2i-test-base
+    parent: s2i-test-base-2comp
     description: |
       Validate a designate deployment
     nodeset: centos-10-2x-centos-9-xxl-crc-cloud-ocp-4-22-1-3xl
