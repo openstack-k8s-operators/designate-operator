@@ -1,0 +1,153 @@
+apiVersion: designate.openstack.org/v1beta1
+kind: Designate
+metadata:
+  name: designate
+spec:
+  azAwareMode: Enabled
+status:
+  designateBackendbind9ReadyCount: 2
+---
+# Pool 0 (default) uses the base name (designate-backendbind9) for backwards compatibility
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9
+  labels:
+    service: designate-backendbind9
+status:
+  readyReplicas: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: designate-backendbind9-pool1
+  labels:
+    service: designate-backendbind9
+status:
+  readyReplicas: 1
+---
+# In AZ-aware mode, EVERY pool (including the default pool0) must get its
+# own TSIG key/Secret - unlike shared-TSIG mode, where pool0 never has one
+# (see test/kuttl/tests/designate_multipool/08-verify-volume-mounts.yaml).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-backendbind9-tsig
+  labels:
+    service: designate-backendbind9
+    component: designate-backendbind9
+  annotations:
+    tsig-mode: per-pool
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: designate-backendbind9-pool1-tsig
+  labels:
+    service: designate-backendbind9
+    component: designate-backendbind9
+  annotations:
+    tsig-mode: per-pool
+type: Opaque
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 1200
+commands:
+  - script: |
+      set -e
+      ERRORS=0
+
+      echo "=== Verifying pool0 (default) mounts its own TSIG secret in AZ-aware mode ==="
+      pool0_volumes=$(oc get statefulset designate-backendbind9 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[*].name}')
+      if ! echo "$pool0_volumes" | grep -q "designatebackendbind9-tsig"; then
+        echo "ERROR: pool0 should mount its own TSIG secret in AZ-aware mode"
+        ERRORS=$((ERRORS + 1))
+      else
+        pool0_tsig_secret=$(oc get statefulset designate-backendbind9 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[?(@.name=="designatebackendbind9-tsig")].secret.secretName}')
+        if [ "$pool0_tsig_secret" != "designate-backendbind9-tsig" ]; then
+          echo "ERROR: pool0 TSIG volume references wrong secret. Expected: designate-backendbind9-tsig, Got: $pool0_tsig_secret"
+          ERRORS=$((ERRORS + 1))
+        else
+          echo "✓ pool0 mounts its own TSIG secret (designate-backendbind9-tsig)"
+        fi
+      fi
+
+      echo "=== Verifying pool1 mounts its own TSIG secret ==="
+      pool1_tsig_secret=$(oc get statefulset designate-backendbind9-pool1 -n $NAMESPACE -o jsonpath='{.spec.template.spec.volumes[?(@.name=="designatebackendbind9-tsig")].secret.secretName}')
+      if [ "$pool1_tsig_secret" != "designate-backendbind9-pool1-tsig" ]; then
+        echo "ERROR: pool1 TSIG volume references wrong secret. Expected: designate-backendbind9-pool1-tsig, Got: $pool1_tsig_secret"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ pool1 mounts its own TSIG secret (designate-backendbind9-pool1-tsig)"
+      fi
+
+      echo "=== Verifying canonical (pool0) secret carries the full pool-name -> tsigkey-id mapping ==="
+      mapping=$(oc get secret designate-backendbind9-tsig -n $NAMESPACE -o json | jq -r '.data["tsigkey-ids.json"] | @base64d')
+      default_id=$(echo "$mapping" | jq -r '.default // empty')
+      pool1_id=$(echo "$mapping" | jq -r '.pool1 // empty')
+      if [ -z "$default_id" ] || [ -z "$pool1_id" ]; then
+        echo "ERROR: expected tsigkey-ids.json to contain both 'default' and 'pool1' entries, got: $mapping"
+        ERRORS=$((ERRORS + 1))
+      elif [ "$default_id" == "$pool1_id" ]; then
+        echo "ERROR: default and pool1 should have distinct TSIG key IDs, both got: $default_id"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ tsigkey-ids.json maps default -> $default_id, pool1 -> $pool1_id"
+      fi
+
+      echo "=== Verifying pool1's own secret does NOT carry the canonical mapping ==="
+      if oc get secret designate-backendbind9-pool1-tsig -n $NAMESPACE -o json | jq -e '.data["tsigkey-ids.json"]' >/dev/null 2>&1; then
+        echo "ERROR: only the canonical pool0 secret should carry tsigkey-ids.json"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ pool1 secret only carries its own tsigkeys.conf"
+      fi
+
+      echo "=== Verifying default and pool1 have distinct tsigkeys.conf content ==="
+      default_tsigconf=$(oc get secret designate-backendbind9-tsig -n $NAMESPACE -o json | jq -r '.data["tsigkeys.conf"] | @base64d')
+      pool1_tsigconf=$(oc get secret designate-backendbind9-pool1-tsig -n $NAMESPACE -o json | jq -r '.data["tsigkeys.conf"] | @base64d')
+      if [ -z "$default_tsigconf" ] || [ -z "$pool1_tsigconf" ]; then
+        echo "ERROR: expected both secrets to carry non-empty tsigkeys.conf content"
+        ERRORS=$((ERRORS + 1))
+      elif [ "$default_tsigconf" == "$pool1_tsigconf" ]; then
+        echo "ERROR: default and pool1 tsigkeys.conf content should differ (different keys), got identical content"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ default and pool1 tsigkeys.conf content differ as expected"
+      fi
+
+      echo "=== Verifying pools.yaml tsigkey_id fields match the Designate-issued key IDs ==="
+      pools_yaml=$(oc get configmap designate-pools-yaml-config-map -n $NAMESPACE -o jsonpath='{.data.pools-yaml-content}')
+      default_pool=$(echo "$pools_yaml" | yq eval '.[] | select(.name == "default")' -)
+      pool1_pool=$(echo "$pools_yaml" | yq eval '.[] | select(.name == "pool1")' -)
+      default_pool_tsig_ids=$(echo "$default_pool" | yq eval '(.nameservers[].tsigkey_id, .targets[].tsigkey_id)' - | grep -v '^null$' | sort -u)
+      pool1_tsig_ids=$(echo "$pool1_pool" | yq eval '(.nameservers[].tsigkey_id, .targets[].tsigkey_id)' - | grep -v '^null$' | sort -u)
+
+      if [ -z "$default_pool_tsig_ids" ] || [ "$default_pool_tsig_ids" != "$default_id" ]; then
+        echo "ERROR: default pool's tsigkey_id(s) in pools.yaml ($default_pool_tsig_ids) do not match the canonical secret's default key ($default_id)"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ default pool's tsigkey_id in pools.yaml matches the Secret ($default_id)"
+      fi
+
+      if [ -z "$pool1_tsig_ids" ] || [ "$pool1_tsig_ids" != "$pool1_id" ]; then
+        echo "ERROR: pool1's tsigkey_id(s) in pools.yaml ($pool1_tsig_ids) do not match the canonical secret's pool1 key ($pool1_id)"
+        ERRORS=$((ERRORS + 1))
+      else
+        echo "✓ pool1's tsigkey_id in pools.yaml matches the Secret ($pool1_id)"
+      fi
+
+      if [ "$ERRORS" -gt 0 ]; then
+        echo "FAILED: $ERRORS AZ-aware per-pool TSIG checks failed"
+        exit 1
+      fi
+
+      # Persist the issued key IDs so later steps can confirm pool addition/removal
+      # doesn't rotate keys for pools that were already present.
+      echo "$default_id" > "/tmp/kuttl-aztsig-${NAMESPACE}-default-id"
+      echo "$pool1_id" > "/tmp/kuttl-aztsig-${NAMESPACE}-pool1-id"
+
+      echo "SUCCESS: every pool (including default) has its own TSIG key/Secret, correctly wired into pools.yaml"
+      exit 0
