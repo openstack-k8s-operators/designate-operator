@@ -1343,3 +1343,68 @@ func TestMultipoolTSIGYamlCompatibility(t *testing.T) {
 		})
 	}
 }
+
+func TestAppendExternalTargetsPerPool(t *testing.T) {
+	bindMap := map[string]string{
+		"bind_address_0": "192.168.1.10",
+		"bind_address_1": "192.168.1.11",
+	}
+	masterHosts := []string{"192.168.1.20"}
+	multipoolConfig := &MultipoolConfig{
+		Pools: []PoolConfig{
+			{
+				Name:         DefaultPoolName,
+				BindReplicas: 1,
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns1.example.org.", Priority: 1},
+				},
+			},
+			{
+				Name:         "pool1",
+				BindReplicas: 1,
+				NSRecords: []designatev1.DesignateNSRecord{
+					{Hostname: "ns2.example.org.", Priority: 1},
+				},
+			},
+		},
+	}
+	externalBinds := map[string][]ExternalBind{
+		DefaultPoolName: {
+			{
+				Name:     "bind9-external",
+				Address:  "192.168.100.50",
+				Port:     DNSPort,
+				RndcHost: "192.168.100.50",
+				RndcPort: RNDCPort,
+				RndcFile: "default-rndc-0",
+			},
+		},
+	}
+	externalMasterServiceIPs := map[string][]string{
+		DefaultPoolName: {"192.168.100.10"},
+	}
+
+	pools, err := generateMultiplePools(bindMap, masterHosts, multipoolConfig, nil)
+	if err != nil {
+		t.Fatalf("generateMultiplePools() error = %v", err)
+	}
+	appendExternalTargets(pools, masterHosts, externalBinds, externalMasterServiceIPs)
+
+	if len(pools[0].Targets) != 2 {
+		t.Fatalf("expected one internal and one external target in default pool, got %d", len(pools[0].Targets))
+	}
+	externalTarget := pools[0].Targets[1]
+	if externalTarget.Description != "External BIND9 Server 0 (bind9-external)" {
+		t.Errorf("unexpected external target description %q", externalTarget.Description)
+	}
+	if externalTarget.Options.Host != "192.168.100.50" {
+		t.Errorf("unexpected external target host %q", externalTarget.Options.Host)
+	}
+	if len(externalTarget.Masters) != 1 || externalTarget.Masters[0].Host != "192.168.100.10" {
+		t.Errorf("expected external master service IP, got %+v", externalTarget.Masters)
+	}
+
+	if len(pools[1].Targets) != 1 {
+		t.Fatalf("expected no external targets in pool1, got %d", len(pools[1].Targets))
+	}
+}

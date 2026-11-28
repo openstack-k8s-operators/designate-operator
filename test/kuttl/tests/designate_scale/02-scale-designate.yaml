@@ -4,3 +4,6 @@ commands:
   - script: |
       SVC_REPLICA_COUNT=3
       for svc in API Backendbind9 Central Mdns Producer Unbound Worker; do oc patch designate -n $NAMESPACE designate --type='json' -p='[{"op": "replace", "path": "/spec/designate'"${svc}"'/replicas", "value":'"${SVC_REPLICA_COUNT}"'}]'; done
+      # The bind instances follow the pool definition once the deployment is
+      # in multipool mode.
+      ../../common/set-multipool-bind-replicas.sh ${SVC_REPLICA_COUNT}
