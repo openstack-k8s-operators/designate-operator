@@ -123,6 +123,11 @@ func StatefulSet(
 							Name:  serviceName,
 							Image: instance.Spec.ContainerImage,
 							Command: []string{
+								"/usr/bin/dumb-init",
+							},
+							Args: []string{
+								"--single-child",
+								"--",
 								"/usr/bin/designate-mdns",
 								"--config-dir", "/etc/designate/designate.conf.d",
 							},

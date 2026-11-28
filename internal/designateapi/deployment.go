@@ -149,9 +149,14 @@ func Deployment(
 						{
 							Name: serviceName,
 							Command: []string{
-								"/usr/sbin/httpd",
+								"/usr/bin/dumb-init",
 							},
-							Args:            []string{"-DFOREGROUND"},
+							Args: []string{
+								"--single-child",
+								"--",
+								"/usr/sbin/httpd",
+								"-DFOREGROUND",
+							},
 							Image:           instance.Spec.ContainerImage,
 							SecurityContext: pod.RestrictiveSecurityContext(users.DesignateUID, users.DesignateGID),
 							Env:             env.MergeEnvs([]corev1.EnvVar{}, envVars),
